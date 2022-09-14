@@ -1,0 +1,247 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Birunthan Mohanathas <birunthan@mohanathas.com>
+Date: Fri, 30 Nov 2018 12:44:12 +0200
+Subject: disable_color_correct_rendering.patch
+
+This adds a --disable-color-correct-rendering switch. In Electron 2.0,
+`--disable-features=ColorCorrectRendering` could be
+used to make the app use the display color space (e.g. P3 on Macs)
+instead of color correcting to sRGB. Because color correct rendering is
+always enabled on Chromium 62 and later and because
+`--force-color-profile` has no effect on macOS, apps that need e.g. P3
+colors are currently stuck on Electron 2.0.
+
+This restores the functionality removed in
+https://chromium-review.googlesource.com/698347 in the form of the
+`--disable-color-correct-rendering` switch.
+
+This can be removed once web content (including WebGL) learn how
+to deal with color spaces. That is being tracked at
+https://crbug.com/634542 and https://crbug.com/711107.
+
+diff --git a/cc/trees/layer_tree_host_impl.cc b/cc/trees/layer_tree_host_impl.cc
+index aca208728d0dae78e57bf4b7f0af46ed5ad73e68..2afef2fb0d3890bdada7d5785a4a48494d580cab 100644
+--- a/cc/trees/layer_tree_host_impl.cc
++++ b/cc/trees/layer_tree_host_impl.cc
+@@ -1852,6 +1852,10 @@ void LayerTreeHostImpl::SetIsLikelyToRequireADraw(
+ TargetColorParams LayerTreeHostImpl::GetTargetColorParams(
+     gfx::ContentColorUsage content_color_usage) const {
+   TargetColorParams params;
++  if (!settings_.enable_color_correct_rendering) {
++    params.color_space = gfx::ColorSpace();
++    return params;
++  }
+ 
+   // If we are likely to software composite the resource, we use sRGB because
+   // software compositing is unable to perform color conversion.
+diff --git a/cc/trees/layer_tree_settings.h b/cc/trees/layer_tree_settings.h
+index 8dfe968b6314f5f5f350b3df6819043668293fd6..2f3a8a335d130c3be58b87bccdb95bd66ae37091 100644
+--- a/cc/trees/layer_tree_settings.h
++++ b/cc/trees/layer_tree_settings.h
+@@ -93,6 +93,8 @@ class CC_EXPORT LayerTreeSettings {
+   bool use_rgba_4444 = false;
+   bool unpremultiply_and_dither_low_bit_depth_tiles = false;
+ 
++  bool enable_color_correct_rendering = true;
++
+   // If set to true, the compositor may selectively defer image decodes to the
+   // Image Decode Service and raster tiles without images until the decode is
+   // ready.
+diff --git a/components/viz/common/display/renderer_settings.h b/components/viz/common/display/renderer_settings.h
+index bc48a50a7664f12a454997db54d893cde9b04881..810a8ce52bf9ac74f47a710f8b332980754996f5 100644
+--- a/components/viz/common/display/renderer_settings.h
++++ b/components/viz/common/display/renderer_settings.h
+@@ -24,6 +24,7 @@ class VIZ_COMMON_EXPORT RendererSettings {
+   ~RendererSettings();
+ 
+   bool apply_simple_frame_rate_throttling = false;
++  bool enable_color_correct_rendering = true;
+   bool allow_antialiasing = true;
+   bool force_antialiasing = false;
+   bool force_blending_with_shaders = false;
+diff --git a/components/viz/host/renderer_settings_creation.cc b/components/viz/host/renderer_settings_creation.cc
+index 9d34ced366026eb7cdd00ce40a4eb1af56180d39..abf67f8246bfa37df08cd2216c388dd316fb6499 100644
+--- a/components/viz/host/renderer_settings_creation.cc
++++ b/components/viz/host/renderer_settings_creation.cc
+@@ -17,6 +17,7 @@
+ #include "components/viz/common/features.h"
+ #include "components/viz/common/switches.h"
+ #include "ui/base/ui_base_switches.h"
++#include "ui/gfx/switches.h"
+ 
+ #if defined(USE_OZONE)
+ #include "ui/ozone/public/ozone_platform.h"
+@@ -49,6 +50,8 @@ bool GetSwitchValueAsInt(const base::CommandLine* command_line,
+ RendererSettings CreateRendererSettings() {
+   RendererSettings renderer_settings;
+   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
++  renderer_settings.enable_color_correct_rendering =
++      !command_line->HasSwitch(switches::kDisableColorCorrectRendering);
+   renderer_settings.partial_swap_enabled =
+       !command_line->HasSwitch(switches::kUIDisablePartialSwap);
+ 
+diff --git a/content/browser/gpu/gpu_process_host.cc b/content/browser/gpu/gpu_process_host.cc
+index 954aa49ed7cd6e47e56ffdfcd3b6218964862245..1a85566c28e91967603946e8941462e9ea704c68 100644
+--- a/content/browser/gpu/gpu_process_host.cc
++++ b/content/browser/gpu/gpu_process_host.cc
+@@ -228,6 +228,7 @@ GpuTerminationStatus ConvertToGpuTerminationStatus(
+ 
+ // Command-line switches to propagate to the GPU process.
+ static const char* const kSwitchNames[] = {
++    switches::kDisableColorCorrectRendering,
+     sandbox::policy::switches::kDisableSeccompFilterSandbox,
+     sandbox::policy::switches::kGpuSandboxAllowSysVShm,
+     sandbox::policy::switches::kGpuSandboxFailuresFatal,
+diff --git a/content/browser/renderer_host/render_process_host_impl.cc b/content/browser/renderer_host/render_process_host_impl.cc
+index 73a50b19f8bf75119b6af7698cdf7d569c504e77..9fdc3d5235a95cfc9ef3b94ba9c19630efb04cde 100644
+--- a/content/browser/renderer_host/render_process_host_impl.cc
++++ b/content/browser/renderer_host/render_process_host_impl.cc
+@@ -199,6 +199,7 @@
+ #include "ui/accessibility/accessibility_switches.h"
+ #include "ui/base/ui_base_switches.h"
+ #include "ui/display/display_switches.h"
++#include "ui/gfx/switches.h"
+ #include "ui/gl/gl_switches.h"
+ #include "url/gurl.h"
+ #include "url/origin.h"
+@@ -3173,6 +3174,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
+   // Propagate the following switches to the renderer command line (along
+   // with any associated values) if present in the browser command line.
+   static const char* const kSwitchNames[] = {
++    switches::kDisableColorCorrectRendering,
+     switches::kDisableInProcessStackTraces,
+     sandbox::policy::switches::kDisableSeccompFilterSandbox,
+     sandbox::policy::switches::kNoSandbox,
+diff --git a/third_party/blink/renderer/platform/graphics/canvas_color_params.cc b/third_party/blink/renderer/platform/graphics/canvas_color_params.cc
+index 75d7af9a79d4e7f2cd39e45496ab5fff66407638..35b0bb908245330fbdc5205caa3299bf6fd8f7b4 100644
+--- a/third_party/blink/renderer/platform/graphics/canvas_color_params.cc
++++ b/third_party/blink/renderer/platform/graphics/canvas_color_params.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "third_party/blink/renderer/platform/graphics/canvas_color_params.h"
+ 
++#include "base/command_line.h"
+ #include "cc/paint/skia_paint_canvas.h"
+ #include "components/viz/common/resources/resource_format_utils.h"
+ #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
+@@ -12,6 +13,7 @@
+ #include "third_party/khronos/GLES3/gl3.h"
+ #include "third_party/skia/include/core/SkSurfaceProps.h"
+ #include "ui/gfx/color_space.h"
++#include "ui/gfx/switches.h"
+ 
+ namespace blink {
+ 
+@@ -19,6 +21,10 @@ namespace blink {
+ // Level 4 specification.
+ gfx::ColorSpace PredefinedColorSpaceToGfxColorSpace(
+     PredefinedColorSpace color_space) {
++  auto* cmd_line = base::CommandLine::ForCurrentProcess();
++  if (cmd_line->HasSwitch(switches::kDisableColorCorrectRendering)) {
++    return gfx::ColorSpace();
++  }
+   switch (color_space) {
+     case PredefinedColorSpace::kSRGB:
+       return gfx::ColorSpace::CreateSRGB();
+@@ -118,6 +124,11 @@ uint8_t CanvasColorParams::BytesPerPixel() const {
+ }
+ 
+ gfx::ColorSpace CanvasColorParams::GetStorageGfxColorSpace() const {
++  auto* cmd_line = base::CommandLine::ForCurrentProcess();
++  if (cmd_line->HasSwitch(switches::kDisableColorCorrectRendering)) {
++    return gfx::ColorSpace();
++  }
++
+   return PredefinedColorSpaceToGfxColorSpace(color_space_);
+ }
+ 
+diff --git a/third_party/blink/renderer/platform/widget/compositing/layer_tree_settings.cc b/third_party/blink/renderer/platform/widget/compositing/layer_tree_settings.cc
+index bd070fbfc7f3abcef7c0d89a608fc52c31cf3be3..8f16aaa064c2455d02c7d8e1ff09364fdedcd0fa 100644
+--- a/third_party/blink/renderer/platform/widget/compositing/layer_tree_settings.cc
++++ b/third_party/blink/renderer/platform/widget/compositing/layer_tree_settings.cc
+@@ -24,6 +24,7 @@
+ #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+ #include "ui/base/ui_base_features.h"
+ #include "ui/base/ui_base_switches.h"
++#include "ui/gfx/switches.h"
+ #include "ui/native_theme/native_theme_features.h"
+ #include "ui/native_theme/overlay_scrollbar_constants_aura.h"
+ 
+@@ -178,6 +179,9 @@ cc::LayerTreeSettings GenerateLayerTreeSettings(
+   settings.main_frame_before_activation_enabled =
+       cmd.HasSwitch(cc::switches::kEnableMainFrameBeforeActivation);
+ 
++  settings.enable_color_correct_rendering =
++      !cmd.HasSwitch(::switches::kDisableColorCorrectRendering);
++
+   // Checkerimaging is not supported for synchronous single-threaded mode, which
+   // is what the renderer uses if its not threaded.
+   settings.enable_checker_imaging =
+diff --git a/ui/gfx/mac/io_surface.cc b/ui/gfx/mac/io_surface.cc
+index e030f01e72d18ef08d04ffbc72a5abb9a7b485c5..25155263bede8a465eb3f3bc2960f173c8f14935 100644
+--- a/ui/gfx/mac/io_surface.cc
++++ b/ui/gfx/mac/io_surface.cc
+@@ -20,6 +20,7 @@
+ #include "ui/gfx/buffer_format_util.h"
+ #include "ui/gfx/color_space.h"
+ #include "ui/gfx/icc_profile.h"
++#include "ui/gfx/switches.h"
+ 
+ namespace gfx {
+ 
+@@ -142,6 +143,14 @@ void IOSurfaceMachPortTraits::Release(mach_port_t port) {
+ // Common method used by IOSurfaceSetColorSpace and IOSurfaceCanSetColorSpace.
+ bool IOSurfaceSetColorSpace(IOSurfaceRef io_surface,
+                             const ColorSpace& color_space) {
++  auto* cmd_line = base::CommandLine::ForCurrentProcess();
++  if (cmd_line->HasSwitch(switches::kDisableColorCorrectRendering)) {
++    base::ScopedCFTypeRef<CFDataRef> system_icc(
++        CGColorSpaceCopyICCData(base::mac::GetSystemColorSpace()));
++    IOSurfaceSetValue(io_surface, CFSTR("IOSurfaceColorSpace"), system_icc);
++    return true;
++  }
++
+   // Allow but ignore invalid color spaces.
+   if (!color_space.IsValid())
+     return true;
+@@ -311,6 +320,15 @@ IOSurfaceRef CreateIOSurface(const gfx::Size& size,
+     DCHECK_EQ(kIOReturnSuccess, r);
+   }
+ 
++  auto* cmd_line = base::CommandLine::ForCurrentProcess();
++  if (cmd_line->HasSwitch(switches::kDisableColorCorrectRendering)) {
++    CGColorSpaceRef color_space = base::mac::GetSystemColorSpace();
++    base::ScopedCFTypeRef<CFDataRef> color_space_icc(
++        CGColorSpaceCopyICCData(color_space));
++    IOSurfaceSetValue(surface, CFSTR("IOSurfaceColorSpace"), color_space_icc);
++    return surface;
++  }
++
+   // Ensure that all IOSurfaces start as sRGB.
+   IOSurfaceSetValue(surface, CFSTR("IOSurfaceColorSpace"), kCGColorSpaceSRGB);
+ 
+diff --git a/ui/gfx/switches.cc b/ui/gfx/switches.cc
+index 0e8044c6d87008c51fd165c6ef8bdc3687d6cc29..78015868927602b5225f252f0a9182f61b8431dc 100644
+--- a/ui/gfx/switches.cc
++++ b/ui/gfx/switches.cc
+@@ -11,6 +11,8 @@ namespace switches {
+ // only apply to LinearAnimation and its subclasses.
+ const char kAnimationDurationScale[] = "animation-duration-scale";
+ 
++const char kDisableColorCorrectRendering[] = "disable-color-correct-rendering";
++
+ // Force disables font subpixel positioning. This affects the character glyph
+ // sharpness, kerning, hinting and layout.
+ const char kDisableFontSubpixelPositioning[] =
+diff --git a/ui/gfx/switches.h b/ui/gfx/switches.h
+index e8e5d44e246364dd45594efb442c129676c14270..252096ee18ca33f4b98f68beb1f534e1c2ab805e 100644
+--- a/ui/gfx/switches.h
++++ b/ui/gfx/switches.h
+@@ -12,6 +12,7 @@
+ namespace switches {
+ 
+ GFX_SWITCHES_EXPORT extern const char kAnimationDurationScale[];
++GFX_SWITCHES_EXPORT extern const char kDisableColorCorrectRendering[];
+ GFX_SWITCHES_EXPORT extern const char kDisableFontSubpixelPositioning[];
+ GFX_SWITCHES_EXPORT extern const char kEnableNativeGpuMemoryBuffers[];
+ GFX_SWITCHES_EXPORT extern const char kForcePrefersReducedMotion[];

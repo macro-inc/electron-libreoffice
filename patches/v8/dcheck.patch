@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Ales Pergl <alpergl@microsoft.com>
+Date: Mon, 22 Oct 2018 10:47:12 -0700
+Subject: dcheck.patch
+
+https://github.com/auchenberg/volkswagen
+
+diff --git a/src/api/api.cc b/src/api/api.cc
+index f5eac55602eb03e5f15f2dcba2010d5530cf6087..cb801a3654c35664c6e9d34060471309c842345a 100644
+--- a/src/api/api.cc
++++ b/src/api/api.cc
+@@ -9115,7 +9115,7 @@ void Isolate::SetPromiseRejectCallback(PromiseRejectCallback callback) {
+ }
+ 
+ void Isolate::PerformMicrotaskCheckpoint() {
+-  DCHECK_NE(MicrotasksPolicy::kScoped, GetMicrotasksPolicy());
++  // DCHECK_NE(MicrotasksPolicy::kScoped, GetMicrotasksPolicy());
+   i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(this);
+   i_isolate->default_microtask_queue()->PerformCheckpoint(this);
+ }
+diff --git a/src/heap/heap.cc b/src/heap/heap.cc
+index f295e7f48d0cca2fc1f5cee443bedc86b57da6cd..62f5abd7c205d6252188f0071f0a2c7a6ce5553e 100644
+--- a/src/heap/heap.cc
++++ b/src/heap/heap.cc
+@@ -6220,9 +6220,9 @@ void Heap::TearDown() {
+ void Heap::AddGCPrologueCallback(v8::Isolate::GCCallbackWithData callback,
+                                  GCType gc_type, void* data) {
+   DCHECK_NOT_NULL(callback);
+-  DCHECK(gc_prologue_callbacks_.end() ==
+-         std::find(gc_prologue_callbacks_.begin(), gc_prologue_callbacks_.end(),
+-                   GCCallbackTuple(callback, gc_type, data)));
++  // DCHECK(gc_prologue_callbacks_.end() ==
++  //        std::find(gc_prologue_callbacks_.begin(), gc_prologue_callbacks_.end(),
++  //                  GCCallbackTuple(callback, gc_type, data)));
+   gc_prologue_callbacks_.emplace_back(callback, gc_type, data);
+ }
+ 
