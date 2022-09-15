@@ -21,6 +21,8 @@ vars = {
   # KEEP IN SYNC WITH utils.js FILE
   'yarn_version': '1.15.2',
 
+  'checkout_configuration': 'small',
+
   # To be able to build clean Chromium from sources.
   'apply_patches': True,
 

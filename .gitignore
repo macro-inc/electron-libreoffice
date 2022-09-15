@@ -1,0 +1,14 @@
+# gclient files
+/.cipd
+/.gclient_*
+/depot_tools
+/.git-cache
+/.cipd
+/_gclient_*
+
+# electron build tools
+/build-tools
+
+# ignore gsync'd source files
+/src/*
+!/src/electron
