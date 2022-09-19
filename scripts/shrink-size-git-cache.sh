@@ -18,6 +18,3 @@ do
     git gc --aggressive --prune=all
   fi
 done
-
-cd "$BASE_PATH/src"
-( find . -type d -name ".git" -not -path "./third_party/angle/*" -not -path "./third_party/dawn/*" ) | xargs rm -rf

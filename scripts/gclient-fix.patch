@@ -11,14 +11,3 @@ index 498e1c9..301e6e2 100644
      else:
        depth = None
      mirror.populate(verbose=options.verbose,
-@@ -1481,7 +1481,9 @@ class GitWrapper(SCMWrapper):
-         self._Run(['config', '--unset-all', 'remote.%s.fetch' % self.remote],
-                   options)
-         self._Run(['config', 'remote.%s.fetch' % self.remote,
--                   '+refs/heads/*:refs/remotes/%s/*' % self.remote], options)
-+                   '+refs/heads/main:refs/remotes/%s/main' % self.remote], options)
-+        self._Run(['config', '--add', 'remote.%s.fetch' % self.remote,
-+                   '+refs/heads/master:refs/remotes/%s/master' % self.remote], options)
-       except subprocess2.CalledProcessError as e:
-         # If exit code was 5, it means we attempted to unset a config that
-         # didn't exist. Ignore it.

@@ -7,11 +7,15 @@ BASE_PATH="$(dirname -- "$SCRIPT_DIR")"
 DEPOT_TOOLS_PATH="$BASE_PATH/depot_tools"
 BUILD_TOOLS_PATH="$BASE_PATH/build-tools"
 export PATH="$DEPOT_TOOLS_PATH:$SCRIPT_DIR:$PATH"
-export GIT_CACHE_PATH="$BASE_PATH/.git-cache"
 export CHROMIUM_BUILDTOOLS_PATH="$BASE_PATH/src/buildtools"
 export ELECTRON_OUT_DIR=Default
 export ELECTRON_ENABLE_STACK_DUMPING=1
 export ELECTRON_ALSO_LOG_TO_STDERR=1
+
+# cache git requests only if not in CI, where they are abandoned
+if [ -z "$CI" ]; then
+  export GIT_CACHE_PATH="$BASE_PATH/.git-cache"
+fi
 
 test ! -d "$DEPOT_TOOLS_PATH" && fetch-depot-tools.sh
 test ! -d "$BUILD_TOOLS_PATH" && fetch-electron-build-tools.sh
@@ -23,7 +27,7 @@ if "${IS_RELEASE:=false}" = "true"; then
   export GN_CONFIG=//electron/build/args/release.gn
   export STRIP_BINARIES=true
   export GENERATE_SYMBOLS=true
-  export CHECK_DIST_MANIFEST=1
+  # export CHECK_DIST_MANIFEST=1
 fi
 
 # The GH runners are x64 only, so we will need to cross compile
@@ -33,15 +37,16 @@ if "${FOR_APPLE_SILICON:=false}" = "true"; then
   export USE_PREBUILT_V8_CONTEXT_SNAPSHOT=1
   export npm_config_arch=arm64
   export GENERATE_CROSS_ARCH_SNAPSHOT=true
-  sed -i 's/"custom_vars": {}/"custom_vars": {"checkout_arm": True, "checkout_arm64": True}/g' .gclient
+  sed -i 's/"custom_vars": {}/"custom_vars": {"checkout_arm": True, "checkout_arm64": True}/g' "$BASE_PATH/.gclient"
 fi
 
 # probably doesn't need to be updated, really
 export DEPOT_TOOLS_UPDATE=0
 
 case "$(uname)" in
-  MINGW*)
+  MINGW*|MSYS*)
     OS="win"
+    GN_GOMA_FILE="$(cygpath -m "$GN_GOMA_FILE")"
     ;;
   Darwin*)
     OS="mac"
@@ -61,7 +66,7 @@ case "$1" in
   sync)
     cd "$BASE_PATH"
     if [ ! -d src/third_party/electron_node ]; then
-      ELECTRON_NODE_VERSION="$(sed -n "/node_version':/,/,/{ /:/! { s/.*'\(.*\)'.*/\\1/p  } }" src/electron/DEPS)"
+      ELECTRON_NODE_VERSION="$(python3 -c "import ast;o = open('src/electron/DEPS', 'r').read(); j = ast.literal_eval(ast.get_source_segment(o, ast.parse(o).body[1].value)); print(j['node_version'])")"
       git clone --depth=1 --single-branch --branch "$ELECTRON_NODE_VERSION" https://github.com/nodejs/node.git src/third_party/electron_node
     fi
     ELECTRON_USE_THREE_WAY_MERGE_FOR_PATCHES=1 gclient sync --no-history -v -v ${@:2}
@@ -69,12 +74,16 @@ case "$1" in
   build)
     # Mostly pulled from src/electron/.circleci/config/base.yml -- MIT LICENSE Copyright (c) Electron contributors Copyright (c) 2013-2020 GitHub Inc.
     # Use goma
-    export NUMBER_OF_NINJA_PROCESSES=200
+    export NUMBER_OF_NINJA_PROCESSES=${2:-200}
+    export GOMA_START_COMPILER_PROXY=true
     goma.sh start
 
     # Build electron
     cd "$BASE_PATH/src"
-    gn gen out/Default --args="import(\"$GN_CONFIG\") import(\"$GN_GOMA_FILE\") $GN_EXTRA_ARGS $GN_BUILDFLAG_ARGS"
+    if [ ! -f out/.gn_ran ]; then
+      gn gen out/Default --args="import(\"$GN_CONFIG\") import(\"$GN_GOMA_FILE\") $GN_EXTRA_ARGS $GN_BUILDFLAG_ARGS"
+      [ "$RUN_GN_ONCE" == "true" ] && touch out/.gn_ran
+    fi
     NINJA_SUMMARIZE_BUILD=1 autoninja -C out/Default electron -j $NUMBER_OF_NINJA_PROCESSES
     cp out/Default/.ninja_log out/electron_ninja_log
     node electron/script/check-symlinks.js

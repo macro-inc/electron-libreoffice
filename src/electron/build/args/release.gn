@@ -14,3 +14,6 @@ rtc_use_h264 = proprietary_codecs
 # who have an LGPL requirement to ship ffmpeg as a dynamically linked library,
 # we build ffmpeg as a shared library.
 is_component_ffmpeg = true
+
+# Reduce memory usage during linking so that build doesn't fail on GitHub Action Runners
+symbol_level = 1

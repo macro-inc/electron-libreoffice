@@ -1,0 +1,235 @@
+name: Build
+on:
+  workflow_call:
+    inputs:
+      runner_label:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      working_dir:
+        required: false
+        default: "/r/el"
+        type: string
+      for_apple_silicon:
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      EC2_RUNNER_AWS_ID:
+        required: true
+      EC2_RUNNER_AWS_SECRET:
+        required: true
+      instance_id:
+        required: true
+
+jobs:
+  start_runner:
+    name: Start EC2 Runner
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup AWS
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.EC2_RUNNER_AWS_ID }}
+          aws-secret-access-key: ${{ secrets.EC2_RUNNER_AWS_SECRET }}
+          aws-region: us-east-1
+      - name: Start
+        run: aws ec2 start-instances --instance-ids ${{ secrets.instance_id }}
+      - name: Wait
+        run: aws ec2 wait instance-status-ok --instance-ids ${{ secrets.instance_id }}
+  build:
+    needs: [start_runner]
+    continue-on-error: true # Required to stop the EC2 runner
+    name: Build
+    runs-on:
+      - self-hosted
+      - ${{ inputs.runner_label }}
+    outputs:
+      succeeded: ${{ steps.check.outputs.check }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      FOR_APPLE_SILICON: ${{ inputs.for_apple_silicon }}
+      IS_RELEASE: true
+      DEPOT_TOOLS_WIN_TOOLCHAIN: 0
+      GOMA_START_COMPILER_PROXY: true
+      GOMA_FALLBACK_ON_AUTH_FAILURE: true
+    steps:
+      - name: Windows - Speed up cache
+        if: ${{ runner.os == 'Windows' }}
+        shell: cmd
+        run: |
+          echo "Adding GNU tar to PATH"
+          echo C:\Program Files\Git\usr\bin>>"%GITHUB_PATH%"
+      - name: Windows - Create RAM disk
+        if: ${{ runner.os == 'Windows' }}
+        shell: cmd
+        run: |
+          imdisk.exe -a -o awe -s 128G -m R: -p "/fs:ntfs /q /y"
+          cd /d R:
+      - name: Linux - Create RAM disk
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          sudo umount /r || true
+          sudo rm -rf /r || true
+          sudo mkdir /r
+          sudo mount -t tmpfs -o size=128g tmpfs /r
+      - name: macOS - Select Xcode v13.3
+        if: ${{ runner.os == 'macOS' }}
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_13.3.1.app"
+      - name: Linux - Setup working dir
+        if: ${{ runner.os == 'Linux' }}
+        working-directory: /
+        run: |
+          UID_GID="$(id -u):$(id -g)"
+          sudo mkdir ${{ inputs.working_dir }}
+          sudo chown $UID_GID ${{ inputs.working_dir }}
+      - name: macOS - Setup working dir
+        working-directory: /Users/runner
+        if: ${{ runner.os == 'macOS' }}
+        run: |
+          mkdir ${{ inputs.working_dir }}
+      - name: Windows - Setup working dir
+        working-directory: C:\
+        if: ${{ runner.os == 'Windows' }}
+        run: |
+          mkdir ${{ inputs.working_dir }}
+      - name: Turn off line ending conversion in git
+        run: |
+          cd ${{ inputs.working_dir }}
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+      - name: Fix git on Windows
+        if: ${{ runner.os == 'Windows' }}
+        run: |
+          cd ${{ inputs.working_dir }}
+          git config --global core.symlinks false
+          git config --global core.longpaths true
+      - name: Checkout
+        run: |
+          git -c protocol.version=2 clone --depth=1 https://${{ github.token }}@github.com/${{ github.repository }} '${{ inputs.working_dir }}'
+          cd ${{ inputs.working_dir }}
+          git config --local gc.auto 0
+      - name: Generate deps hash
+        id: deps_hash
+        run: |
+          cd ${{ inputs.working_dir }}/src/electron
+          node script/generate-deps-hash.js
+          echo "::set-output name=deps_hash::$(cat .depshash)"
+      - name: Retrieve cache
+        id: cache-src
+        uses: actions/cache@v3
+        with:
+          path: src-cache.tzstd
+          key: src-${{ steps.deps_hash.outputs.deps_hash }}-2
+      - name: Extract src-cache.tzstd
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          export MSYS=winsymlinks:nativestrict # https://github.com/git-for-windows/git/pull/156, use proper links to prevent errors
+          tar --zstd -xf src-cache.tzstd --exclude='src/electron' --exclude='src/out' -P -C "${{ inputs.working_dir }}"
+      - name: macOS - Free up space
+        if: ${{ runner.os == 'macOS' }}
+        run: |
+          sudo mkdir -p $TMPDIR/del-target
+
+          tmpify() {
+            if [ -d "$1" ]; then
+              sudo mv "$1" $TMPDIR/del-target/$(echo $1|shasum -a 256|head -n1|cut -d " " -f1)
+            fi
+          }
+
+          tmpify /Library/Developer/CoreSimulator
+          tmpify ~/Library/Developer/CoreSimulator
+          tmpify $(xcode-select -p)/Platforms/AppleTVOS.platform
+          tmpify $(xcode-select -p)/Platforms/iPhoneOS.platform
+          tmpify $(xcode-select -p)/Platforms/WatchOS.platform
+          tmpify $(xcode-select -p)/Platforms/WatchSimulator.platform
+          tmpify $(xcode-select -p)/Platforms/AppleTVSimulator.platform
+          tmpify $(xcode-select -p)/Platforms/iPhoneSimulator.platform
+          tmpify $(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/metal/ios
+          tmpify $(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift
+          tmpify $(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0
+          tmpify ~/Library/Android/sdk
+          tmpify ~/.rubies
+          sudo rm -rf $TMPDIR/del-target
+      - name: Build
+        id: build
+        run: |
+          cd ${{ inputs.working_dir }}
+          (cd -- src/electron && node script/yarn install --frozen-lockfile)
+          # GitHub actions repeatedly kills GOMA, simply restart it and the build since GOMA_START_COMPILER_PROXY fails
+          set +e
+          set +o pipefail
+          attempts=1
+          finished=0
+          function goma_watch() {
+            while true
+            do
+              scripts/goma.sh check_restart
+              sleep 300
+            done
+          }
+
+          scripts/e setup
+          goma_watch &
+          GOMA_WATCH_PID=$!
+          export RUN_GN_ONCE=true
+          while [ $attempts -le 20 -a $finished -eq 0 ]
+          do
+            echo "Attempt: $attempts"
+            scripts/e build && finished=1
+            ((attempts++))
+          done
+          kill -9 $GOMA_WATCH_PID || true
+          scripts/goma.sh ensure_stop || true
+          [ $finished -eq 1 ] && echo "Finished successfully"
+      - name: Create release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: ${{ steps.build.outputs.target_uploads }}
+          allowUpdates: true
+          artifactErrorsFailBuild: true
+          name: ${{ needs.check_version.outputs.version }}
+          tag: ${{ needs.check_version.outputs.version }}
+          body: |
+            This is an automated release built from the `main` branch.
+            For changes, please review the commit log.
+      - name: Windows - Remove RAM disk
+        if: ${{ runner.os == 'Windows' && always() }}
+        run: |
+          rm -rf /r/el
+          sleep 10
+          sudo imdisk.exe -d -m 'R:'
+      - name: Linux - Remove RAM disk
+        if: ${{ runner.os == 'Linux' && always() }}
+        run: |
+          sudo umount /r || true
+          sudo rm -rf /r || true
+      - name: The job has succeeded
+        if: ${{ success() }}
+        id: check
+        run: |
+          echo "::set-output name=check::true"
+  stop_runner:
+    name: Stop EC2 Runner
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup AWS-CLI
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.EC2_RUNNER_AWS_ID }}
+          aws-secret-access-key: ${{ secrets.EC2_RUNNER_AWS_SECRET }}
+          aws-region: us-east-1
+      - name: Stop Runner
+        run: aws ec2 stop-instances --instance-ids ${{ secrets.instance_id }}
+      - name: Wait for Runner to be stopped
+        run: aws ec2 wait instance-stopped --instance-ids ${{ secrets.instance_id }}
+      - name: Fail the workflow if test failed
+        if: ${{ needs.build.outputs.succeeded != 'true' }}
+        run: |
+          false

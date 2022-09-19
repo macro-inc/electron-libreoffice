@@ -22,3 +22,4 @@ git apply "$SCRIPT_DIR/gclient-fix.patch"
 
 # Don't trust the system Python3
 ln -s vpython3 python3
+ln -s vpython3.bat python3.bat

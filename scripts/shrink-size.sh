@@ -18,3 +18,7 @@ rm -rf src/chrome/test/data/xr/webvr_info
 rm -rf src/android_webview
 rm -rf src/ios/chrome
 rm -rf src/third_party/android_rust_toolchain
+
+# Remove all .git that aren't strictly necessary
+cd "$BASE_PATH/src"
+( find . -type d -name ".git" -not -path "./third_party/angle/*" -not -path "./third_party/dawn/*" ) | xargs rm -rf
