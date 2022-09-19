@@ -9,6 +9,9 @@ BUILD_TOOLS_PATH="$BASE_PATH/build-tools"
 export PATH="$DEPOT_TOOLS_PATH:$SCRIPT_DIR:$PATH"
 export GIT_CACHE_PATH="$BASE_PATH/.git-cache"
 export CHROMIUM_BUILDTOOLS_PATH="$BASE_PATH/src/buildtools"
+export ELECTRON_OUT_DIR=Default
+export ELECTRON_ENABLE_STACK_DUMPING=1
+export ELECTRON_ALSO_LOG_TO_STDERR=1
 
 test ! -d "$DEPOT_TOOLS_PATH" && fetch-depot-tools.sh
 test ! -d "$BUILD_TOOLS_PATH" && fetch-electron-build-tools.sh
@@ -36,6 +39,24 @@ fi
 # probably doesn't need to be updated, really
 export DEPOT_TOOLS_UPDATE=0
 
+case "$(uname)" in
+  MINGW*)
+    OS="win"
+    ;;
+  Darwin*)
+    OS="mac"
+    ;;
+  Linux*|WSL*)
+    OS="linux"
+    ;;
+  *)
+    >&2 echo "unknown operating system: $(uname)"
+    exit 1
+    ;;
+esac
+
+echo "Running $1 for $OS"
+
 case "$1" in
   sync)
     cd "$BASE_PATH"
@@ -59,7 +80,7 @@ case "$1" in
     node electron/script/check-symlinks.js
 
     # Dist strip
-    if [ "$STRIP_BINARIES" == "true" ] && [ "`uname`" == "Linux" ]; then
+    if [ "$STRIP_BINARIES" == "true" ] && [ "$OS" == "linux" ]; then
       TARGET_CPU="${TARGET_ARCH:-x64}"
       electron/script/copy-debug-symbols.py --target-cpu="$TARGET_CPU" --out-dir=out/Default/debug --compress
       electron/script/strip-binaries.py --target-cpu="$TARGET_CPU"
@@ -91,14 +112,18 @@ case "$1" in
       fi
       cp "out/Default/$MKSNAPSHOT_PATH/mksnapshot" out/Default        
       cp "out/Default/$MKSNAPSHOT_PATH/v8_context_snapshot_generator" out/Default
-      if [ "`uname`" == "Linux" ]; then
+      if [ "$OS" == "linux" ]; then
         cp "out/Default/$MKSNAPSHOT_PATH/libffmpeg.so" out/Default
-      elif [ "`uname`" == "Darwin" ]; then
+      elif [ "$OS" == "mac" ]; then
         cp "out/Default/$MKSNAPSHOT_PATH/libffmpeg.dylib" out/Default
       fi
-      python electron/script/verify-mksnapshot.py --source-root "$PWD" --build-dir out/Default --create-snapshot-only
+      python3 electron/script/verify-mksnapshot.py --source-root "$PWD" --build-dir out/Default --create-snapshot-only
       mkdir cross-arch-snapshots
       cp out/Default-mksnapshot-test/*.bin cross-arch-snapshots
+    fi
+
+    if [ "$OS" == "win" ]; then
+      python3 electron/build/profile_toolchain.py --output-json=out/Default/windows_toolchain_profile.json
     fi
 
     # Generate Node.js headers
@@ -108,7 +133,7 @@ case "$1" in
     ninja -C out/Default electron:hunspell_dictionaries_zip -j $NUMBER_OF_NINJA_PROCESSES
 
     # libcxx
-    if [ "`uname`" == "Linux" ]; then
+    if [ "$OS" == "linux" ]; then
       ninja -C out/Default electron:libcxx_headers_zip -j $NUMBER_OF_NINJA_PROCESSES
       ninja -C out/Default electron:libcxxabi_headers_zip -j $NUMBER_OF_NINJA_PROCESSES
       ninja -C out/Default electron:libcxx_objects_zip -j $NUMBER_OF_NINJA_PROCESSES
@@ -122,7 +147,7 @@ case "$1" in
       export BUILD_PATH="$PWD/out/Default"
       ninja -C out/Default electron:licenses
       ninja -C out/Default electron:electron_version
-      DELETE_DSYMS_AFTER_ZIP=1 electron/script/zip-symbols.py -b $BUILD_PATH
+      DELETE_DSYMS_AFTER_ZIP=1 python3 electron/script/zip-symbols.py -b $BUILD_PATH
     fi
 
     # Build chromedriver
@@ -133,8 +158,8 @@ case "$1" in
       export CHROMEDRIVER_DIR="out/Default"
     fi
     ninja -C $CHROMEDRIVER_DIR electron:electron_chromedriver -j $NUMBER_OF_NINJA_PROCESSES
-    if [ "`uname`" == "Linux" ]; then
-      electron/script/strip-binaries.py --target-cpu="$TARGET_ARCH" --file $PWD/$CHROMEDRIVER_DIR/chromedriver
+    if [ "$OS" == "linux" ]; then
+      python3 electron/script/strip-binaries.py --target-cpu="$TARGET_ARCH" --file $PWD/$CHROMEDRIVER_DIR/chromedriver
     fi
     ninja -C $CHROMEDRIVER_DIR electron:electron_chromedriver_zip
     if [ "$TARGET_ARCH" == "arm" ] || [ "$TARGET_ARCH" == "arm64" ]; then
@@ -143,6 +168,11 @@ case "$1" in
 
     # Build typescript defs
     (cd -- electron && node script/yarn create-typescript-definitions)
+
+    # Prepare and mark files for upload in CI
+    if [ -n "$CI" ]; then
+      (cd -- electron && python3 script/release/uploaders/upload.py --verbose)
+    fi
 
     goma.sh stop
     ;;
