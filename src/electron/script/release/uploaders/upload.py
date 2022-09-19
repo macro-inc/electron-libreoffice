@@ -42,6 +42,7 @@ TOOLCHAIN_PROFILE_NAME = get_zip_name(PROJECT_NAME, ELECTRON_VERSION,
 CXX_OBJECTS_NAME = get_zip_name(PROJECT_NAME, ELECTRON_VERSION,
                                       'libcxx_objects')
 
+target_uploads = []
 
 def main():
   args = parse_args()
@@ -60,15 +61,7 @@ def main():
     return 1
 
   tag_exists = False
-  release = get_release(args.version)
-  if not release['draft']:
-    tag_exists = True
-
-  if not args.upload_to_storage:
-    assert release['exists'], \
-          'Release does not exist; cannot upload to GitHub!'
-    assert tag_exists == args.overwrite, \
-          'You have to pass --overwrite to overwrite a published release'
+  release = None
 
   # Upload Electron files.
   # Rename dist.zip to  get_zip_name('electron', version, suffix='')
@@ -80,13 +73,6 @@ def main():
     shutil.copy2(os.path.join(OUT_DIR, 'symbols.zip'), symbols_zip)
     upload_electron(release, symbols_zip, args)
   if PLATFORM == 'darwin':
-    if get_platform_key() == 'darwin' and get_target_arch() == 'x64':
-      api_path = os.path.join(ELECTRON_DIR, 'electron-api.json')
-      upload_electron(release, api_path, args)
-
-      ts_defs_path = os.path.join(ELECTRON_DIR, 'electron.d.ts')
-      upload_electron(release, ts_defs_path, args)
-
     dsym_zip = os.path.join(OUT_DIR, DSYM_NAME)
     shutil.copy2(os.path.join(OUT_DIR, 'dsym.zip'), dsym_zip)
     upload_electron(release, dsym_zip, args)
@@ -99,6 +85,13 @@ def main():
     shutil.copy2(os.path.join(OUT_DIR, 'pdb.zip'), pdb_zip)
     upload_electron(release, pdb_zip, args)
   elif PLATFORM == 'linux':
+    if get_target_arch() == 'x64':
+      api_path = os.path.join(ELECTRON_DIR, 'electron-api.json')
+      upload_electron(release, api_path, args)
+
+      ts_defs_path = os.path.join(ELECTRON_DIR, 'electron.d.ts')
+      upload_electron(release, ts_defs_path, args)
+
     debug_zip = os.path.join(OUT_DIR, DEBUG_NAME)
     shutil.copy2(os.path.join(OUT_DIR, 'debug.zip'), debug_zip)
     upload_electron(release, debug_zip, args)
@@ -119,11 +112,11 @@ def main():
       upload_electron(release, abi_headers_zip, args)
 
   # Upload free version of ffmpeg.
-  ffmpeg = get_zip_name('ffmpeg', ELECTRON_VERSION)
-  ffmpeg_zip = os.path.join(OUT_DIR, ffmpeg)
-  ffmpeg_build_path = os.path.join(SRC_DIR, 'out', 'ffmpeg', 'ffmpeg.zip')
-  shutil.copy2(ffmpeg_build_path, ffmpeg_zip)
-  upload_electron(release, ffmpeg_zip, args)
+  # ffmpeg = get_zip_name('ffmpeg', ELECTRON_VERSION)
+  # ffmpeg_zip = os.path.join(OUT_DIR, ffmpeg)
+  # ffmpeg_build_path = os.path.join(SRC_DIR, 'out', 'ffmpeg', 'ffmpeg.zip')
+  # shutil.copy2(ffmpeg_build_path, ffmpeg_zip)
+  # upload_electron(release, ffmpeg_zip, args)
 
   chromedriver = get_zip_name('chromedriver', ELECTRON_VERSION)
   chromedriver_zip = os.path.join(OUT_DIR, chromedriver)
@@ -146,12 +139,6 @@ def main():
       OUT_DIR, 'hunspell_dictionaries.zip')
     upload_electron(release, hunspell_dictionaries_zip, args)
 
-  if not tag_exists and not args.upload_to_storage:
-    # Upload symbols to symbol server.
-    run_python_upload_script('upload-symbols.py')
-    if PLATFORM == 'win32':
-      run_python_upload_script('upload-node-headers.py', '-v', args.version)
-
   if PLATFORM == 'win32':
     toolchain_profile_zip = os.path.join(OUT_DIR, TOOLCHAIN_PROFILE_NAME)
     with ZipFile(toolchain_profile_zip, 'w') as myzip:
@@ -159,6 +146,8 @@ def main():
         os.path.join(OUT_DIR, 'windows_toolchain_profile.json'),
         'toolchain_profile.json')
     upload_electron(release, toolchain_profile_zip, args)
+
+  print('::set-output name=target_uploads::' + ','.join(target_uploads))
 
   return 0
 
@@ -195,7 +184,7 @@ def get_electron_build_version():
     # In CI we just build as told.
     return ELECTRON_VERSION
   electron = get_electron_exec()
-  return subprocess.check_output([electron, '--version']).strip()
+  return subprocess.check_output([electron, '--version']).decode('utf-8').strip()
 
 
 class NonZipFileError(ValueError):
@@ -340,20 +329,8 @@ def upload_electron(release, file_path, args):
   except NonZipFileError:
     pass
 
-  # if upload_to_storage is set, skip github upload.
-  # todo (vertedinde): migrate this variable to upload_to_storage
-  if args.upload_to_storage:
-    key_prefix = 'release-builds/{0}_{1}'.format(args.version,
-                                                     args.upload_timestamp)
-    store_artifact(os.path.dirname(file_path), key_prefix, [file_path])
-    upload_sha256_checksum(args.version, file_path, key_prefix)
-    return
-
-  # Upload the file.
-  upload_io_to_github(release, filename, file_path, args.version)
-
-  # Upload the checksum file.
-  upload_sha256_checksum(args.version, file_path)
+  target_uploads.append(filename)
+  upload_sha256_checksum(file_path)
 
 
 def upload_io_to_github(release, filename, filepath, version):
@@ -365,10 +342,8 @@ def upload_io_to_github(release, filename, filepath, version):
           version])
 
 
-def upload_sha256_checksum(version, file_path, key_prefix=None):
+def upload_sha256_checksum( file_path):
   checksum_path = '{}.sha256sum'.format(file_path)
-  if key_prefix is None:
-    key_prefix = 'checksums-scratchpad/{0}'.format(version)
   sha256 = hashlib.sha256()
   with open(file_path, 'rb') as f:
     sha256.update(f.read())
@@ -376,7 +351,7 @@ def upload_sha256_checksum(version, file_path, key_prefix=None):
   filename = os.path.basename(file_path)
   with open(checksum_path, 'w') as checksum:
     checksum.write('{} *{}'.format(sha256.hexdigest(), filename))
-  store_artifact(os.path.dirname(checksum_path), key_prefix, [checksum_path])
+  target_uploads.append(filename)
 
 
 def get_release(version):

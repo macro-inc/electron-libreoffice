@@ -1,0 +1,10 @@
+name: Build and release for all platforms
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  check_version:
+    uses: ./.github/workflows/check-version-tag.yml
