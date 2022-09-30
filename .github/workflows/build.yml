@@ -193,8 +193,8 @@ jobs:
           artifacts: ${{ steps.build.outputs.target_uploads }}
           allowUpdates: true
           artifactErrorsFailBuild: true
-          name: ${{ needs.check_version.outputs.version }}
-          tag: ${{ needs.check_version.outputs.version }}
+          name: ${{ inputs.version }}
+          tag: ${{ inputs.version }}
           body: |
             This is an automated release built from the `main` branch.
             For changes, please review the commit log.
@@ -203,7 +203,7 @@ jobs:
         run: |
           rm -rf /r/el
           sleep 10
-          sudo imdisk.exe -d -m 'R:'
+          imdisk.exe -d -m 'R:' || true
       - name: Linux - Remove RAM disk
         if: ${{ runner.os == 'Linux' && always() }}
         run: |
