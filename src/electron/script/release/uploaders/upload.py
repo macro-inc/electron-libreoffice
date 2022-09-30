@@ -351,7 +351,7 @@ def upload_sha256_checksum( file_path):
   filename = os.path.basename(file_path)
   with open(checksum_path, 'w') as checksum:
     checksum.write('{} *{}'.format(sha256.hexdigest(), filename))
-  target_uploads.append(filename)
+  target_uploads.append(checksum_path)
 
 
 def get_release(version):

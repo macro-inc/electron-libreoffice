@@ -187,6 +187,10 @@ jobs:
           kill -9 $GOMA_WATCH_PID || true
           scripts/goma.sh ensure_stop || true
           [ $finished -eq 1 ] && echo "Finished successfully"
+      - name: Copy build artifacts
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          cp -rf ${{ inputs.working_dir }}/src/out/Default/* .
       - name: Create release
         uses: ncipollo/release-action@v1
         with:
