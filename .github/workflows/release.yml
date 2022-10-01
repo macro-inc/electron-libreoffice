@@ -83,7 +83,13 @@ jobs:
       - name: Linux - Free up space
         if: ${{ runner.os == 'Linux' && steps.cache-src.outputs.cache-hit != 'true' }}
         run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android
+          df --human-readable
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
+          sudo apt-get remove --yes '^dotnet-.*' '^llvm-.*' 'php.*' azure-cli google-cloud-sdk hhvm google-chrome-stable firefox powershell
+          sudo apt-get autoremove --yes
+          sudo apt clean
+          docker rmi $(docker image ls --all --quiet)
+          df --human-readable
       - name: macOS - Free up space
         if: ${{ runner.os == 'macOS' && steps.cache-src.outputs.cache-hit != 'true' }}
         run: |
