@@ -88,6 +88,11 @@ case "$1" in
     cp out/Default/.ninja_log out/electron_ninja_log
     node electron/script/check-symlinks.js
 
+    # Finish if not doing a full release
+    if "${IS_RELEASE}" != "true"; then
+      exit 0
+    fi
+
     # Dist strip
     if [ "$STRIP_BINARIES" == "true" ] && [ "$OS" == "linux" ]; then
       TARGET_CPU="${TARGET_ARCH:-x64}"

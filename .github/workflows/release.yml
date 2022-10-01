@@ -18,6 +18,9 @@ jobs:
     strategy:
       matrix:
         include:
+          - name: Linux x64
+            fetch_dir: /e-l
+            fetch_os: ubuntu-20.04
           - name: Windows x64
             fetch_dir: /c/el
             fetch_os: windows-2019
@@ -128,16 +131,14 @@ jobs:
     strategy:
       matrix:
         include:
-          - name: Windows x64
-            os: macro-windows
-            runner: WINDOWS_RUNNER_INSTANCE_ID
-            working_dir: /r/el
-          # - name: Linux x64
-          #   os: macro-linux
-          #   runner: LINUX_RUNNER_INSTANCE_ID
+          # - name: Windows x64
+          #   os: macro-windows
+          #   runner: WINDOWS_RUNNER_INSTANCE_ID
           #   working_dir: /r/el
-          #   fetch_dir: /el
-          #   fetch_os: ubuntu-20.04
+          - name: Linux x64
+            os: macro-linux
+            runner: LINUX_RUNNER_INSTANCE_ID
+            working_dir: /r/el
     name: ${{ matrix.name }}
     uses: ./.github/workflows/build.yml
     with:
