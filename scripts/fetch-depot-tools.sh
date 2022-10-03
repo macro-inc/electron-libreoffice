@@ -20,6 +20,8 @@ fi
 # By default, gclient's git usage isn't optimal, fix that
 git apply "$SCRIPT_DIR/gclient-fix.patch"
 
-# Don't trust the system Python3
+# Don't trust the system Python
 ln -s vpython3 python3
 ln -s vpython3.bat python3.bat
+ln -s vpython python
+ln -s vpython.bat python.bat
