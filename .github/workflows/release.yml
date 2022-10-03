@@ -15,122 +15,14 @@ jobs:
   fetch:
     needs: [check_version]
     if: ${{ needs.check_version.outputs.should_run != 'false' }}
-    strategy:
-      matrix:
-        include:
-          - name: Linux x64
-            fetch_dir: /e-l
-            fetch_os: ubuntu-20.04
-          - name: Windows x64
-            fetch_dir: /c/el
-            fetch_os: windows-2019
-    name: Fetch ${{ matrix.name }}
-    runs-on: ${{ matrix.fetch_os }}
-    env:
-      FOR_APPLE_SILICON: ${{ matrix.for_apple_silicon }}
-      IS_RELEASE: true
-      DEPOT_TOOLS_WIN_TOOLCHAIN: 0
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - name: Windows - Speed up cache
-        if: ${{ runner.os == 'Windows' }}
-        shell: cmd
-        run: |
-          echo "Adding GNU tar to PATH"
-          echo C:\Program Files\Git\usr\bin>>"%GITHUB_PATH%"
-      - name: Linux - Setup working dir
-        if: ${{ runner.os == 'Linux' }}
-        working-directory: /
-        run: |
-          UID_GID="$(id -u):$(id -g)"
-          sudo mkdir ${{ matrix.fetch_dir }}
-          sudo chown $UID_GID ${{ matrix.fetch_dir }}
-      - name: macOS - Setup working dir
-        working-directory: /Users/runner
-        if: ${{ runner.os == 'macOS' }}
-        run: |
-          mkdir ${{ matrix.fetch_dir }}
-      - name: Windows - Setup working dir
-        working-directory: C:\
-        if: ${{ runner.os == 'Windows' }}
-        run: |
-          mkdir ${{ matrix.fetch_dir }}
-      - name: Turn off line ending conversion in git
-        run: |
-          cd ${{ matrix.fetch_dir }}
-          git config --global core.autocrlf false
-          git config --global core.eol lf
-          git config --global core.longpaths true
-      - name: Checkout
-        run: |
-          git -c protocol.version=2 clone --depth=1 https://${{ github.token }}@github.com/${{ github.repository }} '${{ matrix.fetch_dir }}'
-          cd ${{ matrix.fetch_dir }}
-          git config --local gc.auto 0
-      - name: Generate deps hash
-        id: deps_hash
-        run: |
-          cd ${{ matrix.fetch_dir }}/src/electron
-          node script/generate-deps-hash.js
-          echo "::set-output name=deps_hash::$(cat .depshash)"
-      - name: Check cache
-        id: cache-src
-        uses: actions/cache@v3
-        with:
-          path: src-cache.tzstd
-          key: src-${{ steps.deps_hash.outputs.deps_hash }}-2
-      - name: Linux - Free up space
-        if: ${{ runner.os == 'Linux' && steps.cache-src.outputs.cache-hit != 'true' }}
-        run: |
-          df --human-readable
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /usr/local/share/boost "$AGENT_TOOLSDIRECTORY"
-          sudo apt-get remove --yes '^dotnet-.*' '^llvm-.*' 'php.*' azure-cli google-cloud-sdk hhvm google-chrome-stable firefox powershell
-          sudo apt-get autoremove --yes
-          sudo apt clean
-          docker rmi $(docker image ls --all --quiet)
-          df --human-readable
-      - name: macOS - Free up space
-        if: ${{ runner.os == 'macOS' && steps.cache-src.outputs.cache-hit != 'true' }}
-        run: |
-          sudo mkdir -p $TMPDIR/del-target
-
-          tmpify() {
-            if [ -d "$1" ]; then
-              sudo mv "$1" $TMPDIR/del-target/$(echo $1|shasum -a 256|head -n1|cut -d " " -f1)
-            fi
-          }
-
-          tmpify /Library/Developer/CoreSimulator
-          tmpify ~/Library/Developer/CoreSimulator
-          tmpify $(xcode-select -p)/Platforms/AppleTVOS.platform
-          tmpify $(xcode-select -p)/Platforms/iPhoneOS.platform
-          tmpify $(xcode-select -p)/Platforms/WatchOS.platform
-          tmpify $(xcode-select -p)/Platforms/WatchSimulator.platform
-          tmpify $(xcode-select -p)/Platforms/AppleTVSimulator.platform
-          tmpify $(xcode-select -p)/Platforms/iPhoneSimulator.platform
-          tmpify $(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/metal/ios
-          tmpify $(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift
-          tmpify $(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0
-          tmpify ~/Library/Android/sdk
-          tmpify ~/.rubies
-          sudo rm -rf $TMPDIR/del-target
-      - name: Sync dependencies
-        if: ${{ steps.cache-src.outputs.cache-hit != 'true' }}
-        run: |
-          cd ${{ matrix.fetch_dir }}
-          echo "cache_dir = None" >> .gclient
-          scripts/e sync
-      - name: Shrink src for cache
-        if: ${{ steps.cache-src.outputs.cache-hit != 'true' }}
-        run: |
-          cd ${{ matrix.fetch_dir }}
-          scripts/shrink-size.sh
-      - name: Prepare src-cache.tzstd
-        if: ${{ steps.cache-src.outputs.cache-hit != 'true' }}
-        run: |
-          cd "$GITHUB_WORKSPACE/"
-          tar --zstd -cf src-cache.tzstd --exclude='src/electron' --exclude='src/out' -P -C "${{ matrix.fetch_dir }}" src .gclient_entries .gclient_previous_sync_commits
+    name: Fetch
+    uses: ./.github/workflows/fetch.yml
+    with:
+      runner_label: macro-linux
+    secrets:
+      EC2_RUNNER_AWS_ID: ${{ secrets.EC2_RUNNER_AWS_ID }}
+      EC2_RUNNER_AWS_SECRET: ${{ secrets.EC2_RUNNER_AWS_SECRET }}
+      instance_id: ${{ secrets.LINUX_RUNNER_INSTANCE_ID }}
   build_release:
     needs: [check_version, fetch]
     if: ${{ needs.check_version.outputs.should_run != 'false' }}

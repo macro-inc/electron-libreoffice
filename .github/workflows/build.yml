@@ -118,19 +118,41 @@ jobs:
         id: deps_hash
         run: |
           cd ${{ inputs.working_dir }}/src/electron
-          node script/generate-deps-hash.js
-          echo "::set-output name=deps_hash::$(cat .depshash)"
-      - name: Retrieve cache
-        id: cache-src
+          echo "::set-output name=deps_hash::$(sha256sum DEPS | cut -f 1 -d' ')"
+      - name: Retrieve cache (base)
+        id: cache-src-base
         uses: actions/cache@v3
         with:
-          path: src-cache.tzstd
-          key: src-${{ steps.deps_hash.outputs.deps_hash }}-2
-      - name: Extract src-cache.tzstd
-        run: |
-          cd "$GITHUB_WORKSPACE"
-          export MSYS=winsymlinks:nativestrict # https://github.com/git-for-windows/git/pull/156, use proper links to prevent errors
-          tar --zstd -xf src-cache.tzstd --exclude='src/electron' --exclude='src/out' -P -C "${{ inputs.working_dir }}"
+          path: |
+            base.tzstd
+            dawn-angle.tzstd
+            thirdparty.tzstd
+          key: src-${{ steps.deps_hash.outputs.deps_hash }}-base
+      - name: Retrieve cache (linux)
+        if: ${{ runner.os == 'Linux' }}
+        id: cache-src-linux
+        uses: actions/cache@v3
+        with:
+          path: |
+            linux.tzstd
+          key: src-${{ steps.deps_hash.outputs.deps_hash }}-linux
+      - name: Retrieve cache (windows)
+        if: ${{ runner.os == 'Windows' }}
+        id: cache-src-windows
+        uses: actions/cache@v3
+        with:
+          path: |
+            windows.tzstd
+          key: src-${{ steps.deps_hash.outputs.deps_hash }}-windows
+      - name: Retrieve cache (mac)
+        if: ${{ runner.os == 'macOS' }}
+        id: cache-src-mac
+        uses: actions/cache@v3
+        with:
+          path: |
+            mac.tzstd
+            mac-arm.tzstd
+          key: src-${{ steps.deps_hash.outputs.deps_hash }}-mac
       - name: macOS - Free up space
         if: ${{ runner.os == 'macOS' }}
         run: |
@@ -156,10 +178,24 @@ jobs:
           tmpify ~/Library/Android/sdk
           tmpify ~/.rubies
           sudo rm -rf $TMPDIR/del-target
+      - name: Extract cache
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          export MSYS=winsymlinks:nativestrict # https://github.com/git-for-windows/git/pull/156, use proper links to prevent errors
+          for file in *.tzstd; do
+            tar --zstd -xf "$file" -C "${{ inputs.working_dir }}"
+          done
+      - name: Install node.js v16
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
+          sudo apt-get install -y nodejs
       - name: Build
         id: build
         run: |
           cd ${{ inputs.working_dir }}
+          # Run the post-sync hooks
+          gclient runhooks
           (cd -- src/electron && node script/yarn install --frozen-lockfile)
           # GitHub actions repeatedly kills GOMA, simply restart it and the build since GOMA_START_COMPILER_PROXY fails
           set +e

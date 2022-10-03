@@ -69,7 +69,7 @@ case "$1" in
       ELECTRON_NODE_VERSION="$(python3 -c "import ast;o = open('src/electron/DEPS', 'r').read(); j = ast.literal_eval(ast.get_source_segment(o, ast.parse(o).body[1].value)); print(j['node_version'])")"
       git clone --depth=1 --single-branch --branch "$ELECTRON_NODE_VERSION" https://github.com/nodejs/node.git src/third_party/electron_node
     fi
-    ELECTRON_USE_THREE_WAY_MERGE_FOR_PATCHES=1 gclient sync --no-history -v -v ${@:2}
+    ELECTRON_USE_THREE_WAY_MERGE_FOR_PATCHES=1 gclient sync --no-history --with_branch_heads --with_tags -v -v ${@:2}
     ;;
   build)
     # Mostly pulled from src/electron/.circleci/config/base.yml -- MIT LICENSE Copyright (c) Electron contributors Copyright (c) 2013-2020 GitHub Inc.

@@ -1,0 +1,6 @@
+.git
+src/third_party/dawn
+src/third_party/angle
+src/third_party/android_rust_toolchain
+src/third_party/electron-node
+src/third_party/jdk

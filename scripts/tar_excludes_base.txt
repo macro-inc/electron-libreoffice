@@ -1,0 +1,9 @@
+.git
+src/electron
+src/out
+src/buildtools
+src/tools
+src/third_party
+src/chrome/test/data/xr/webvr_info
+src/android_webview
+src/ios/chrome
