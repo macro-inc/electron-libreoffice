@@ -195,7 +195,7 @@ jobs:
         run: |
           cd ${{ inputs.working_dir }}
           # Run the post-sync hooks
-          gclient runhooks
+          scripts/e d gclient runhooks
           (cd -- src/electron && node script/yarn install --frozen-lockfile)
           # GitHub actions repeatedly kills GOMA, simply restart it and the build since GOMA_START_COMPILER_PROXY fails
           set +e
