@@ -118,7 +118,8 @@ jobs:
         id: deps_hash
         run: |
           cd ${{ inputs.working_dir }}/src/electron
-          echo "::set-output name=deps_hash::$(sha256sum DEPS | cut -f 1 -d' ')"
+          node script/generate-deps-hash.js
+          echo "::set-output name=deps_hash::$(cat .depshash-platformless)"
       - name: Retrieve cache (base)
         id: cache-src-base
         uses: actions/cache@v3
@@ -127,6 +128,7 @@ jobs:
             base.tzstd
             dawn-angle.tzstd
             thirdparty.tzstd
+            mtime-cache.json
           key: src-${{ steps.deps_hash.outputs.deps_hash }}-base
       - name: Retrieve cache (linux)
         if: ${{ runner.os == 'Linux' }}
@@ -185,6 +187,7 @@ jobs:
           for file in *.tzstd; do
             tar --zstd -xf "$file" -C "${{ inputs.working_dir }}"
           done
+          cp mtime-cache.json "${{ inputs.working_dir }}/src/electron/patches/"
       - name: Install node.js v16
         if: ${{ runner.os == 'Linux' }}
         run: |
@@ -194,8 +197,12 @@ jobs:
         id: build
         run: |
           cd ${{ inputs.working_dir }}
+          # Prevent patches from being applied without git index
+          scripts/write-apply-patch-noop.sh
+
           # Run the post-sync hooks
           scripts/e d gclient runhooks
+
           (cd -- src/electron && node script/yarn install --frozen-lockfile)
           # GitHub actions repeatedly kills GOMA, simply restart it and the build since GOMA_START_COMPILER_PROXY fails
           set +e

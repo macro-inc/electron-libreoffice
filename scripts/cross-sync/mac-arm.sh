@@ -14,14 +14,15 @@ diff --git a/.gclient b/.gclient
 index 5b21302..c2b4a5d 100644
 --- a/.gclient
 +++ b/.gclient
-@@ -12,6 +12,6 @@ solutions = [
+@@ -11,6 +11,7 @@ solutions = [
        "src/third_party/android_rust_toolchain": None,
        "src/chrome/test/data/xr/webvr_info": None,
      },
 -    "custom_vars": {},
-+    "custom_vars": {"host_os":"mac", "checkout_mac": True, "target_os": "mac", "target_cpu": "arm64", "checkout_arm": True, "checkout_arm64": True},
++    "custom_vars": {"host_os":"mac", "checkout_mac": True, "target_os": "mac", "target_cpu": "arm64", "checkout_arm": True, "checkout_arm64": True, "apply_patches": False},
    },
  ]
++target_os = ['mac']
 EOF
 )
 

@@ -14,7 +14,7 @@ diff --git a/.gclient b/.gclient
 index 5b21302..c2b4a5d 100644
 --- a/.gclient
 +++ b/.gclient
-@@ -12,6 +12,7 @@ solutions = [
+@@ -11,6 +11,7 @@ solutions = [
        "src/third_party/android_rust_toolchain": None,
        "src/chrome/test/data/xr/webvr_info": None,
      },

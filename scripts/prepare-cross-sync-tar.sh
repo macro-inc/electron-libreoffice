@@ -11,16 +11,16 @@ export PATH="$DEPOT_TOOLS_PATH:$SCRIPT_DIR:$PATH"
 cd "$BASE_PATH"
 
 scripts/e init
-if [ ! -d src/third_party/electron_node ]; then
-  ELECTRON_NODE_VERSION="$(python3 -c "import ast;o = open('src/electron/DEPS', 'r').read(); j = ast.literal_eval(ast.get_source_segment(o, ast.parse(o).body[1].value)); print(j['node_version'])")"
-  git clone --depth=1 --single-branch --branch "$ELECTRON_NODE_VERSION" https://github.com/nodejs/node.git src/third_party/electron_node
-fi
 
 # Cache between syncs
 export GIT_CACHE_PATH="$BASE_PATH/.git-cache"
 
 # Assume ths base platform is Linux, and start there
 scripts/cross-sync/linux.sh
+
+# Manually apply the patches, since the hooks will not be run until build-time
+vpython3 src/electron/script/apply_all_patches.py src/electron/patches/config.json
+vpython3 src/electron/script/patches-mtime-cache.py apply --cache-file src/electron/patches/mtime-cache.json
 
 # Bundle the base tarball, primarily consisting of the source
 tar --zstd -cf base.tzstd --exclude-from="$SCRIPT_DIR/tar_excludes_base.txt" src
