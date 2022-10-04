@@ -23,7 +23,11 @@ test ! -d "$BUILD_TOOLS_PATH" && fetch-electron-build-tools.sh
 GN_CONFIG=//electron/build/args/testing.gn
 GN_GOMA_FILE="$BUILD_TOOLS_PATH/third_party/goma.gn"
 
-if "${IS_RELEASE:=false}" = "true"; then
+IS_RELEASE="${IS_RELEASE:-false}"
+FOR_APPLE_SILICON="${FOR_APPLE_SILICON:-false}"
+
+if [ "$IS_RELEASE" = "true" ]; then
+  echo "Preparing release build"
   export GN_CONFIG=//electron/build/args/release.gn
   export STRIP_BINARIES=true
   export GENERATE_SYMBOLS=true
@@ -31,7 +35,8 @@ if "${IS_RELEASE:=false}" = "true"; then
 fi
 
 # The GH runners are x64 only, so we will need to cross compile
-if "${FOR_APPLE_SILICON:=false}" = "true"; then
+if [ "$FOR_APPLE_SILICON" = "true" ]; then
+  echo "Cross-compiling for Apple Silicon"
   export TARGET_ARCH=arm64
   GN_EXTRA_ARGS='target_cpu = "arm64" use_prebuilt_v8_context_snapshot = true'
   export USE_PREBUILT_V8_CONTEXT_SNAPSHOT=1
@@ -78,19 +83,20 @@ case "$1" in
     cd "$BASE_PATH/src"
     if [ ! -f out/.gn_ran ]; then
       gn gen out/Default --args="import(\"$GN_CONFIG\") import(\"$GN_GOMA_FILE\") $GN_EXTRA_ARGS $GN_BUILDFLAG_ARGS"
-      [ "$RUN_GN_ONCE" == "true" ] && touch out/.gn_ran
+      [ "$RUN_GN_ONCE" = "true" ] && touch out/.gn_ran
     fi
     NINJA_SUMMARIZE_BUILD=1 autoninja -C out/Default electron -j $NUMBER_OF_NINJA_PROCESSES
     cp out/Default/.ninja_log out/electron_ninja_log
     node electron/script/check-symlinks.js
 
     # Finish if not doing a full release
-    if "${IS_RELEASE}" != "true"; then
+    if [ "$IS_RELEASE" != "true" ]; then
+      echo "Not release, finishing"
       exit 0
     fi
 
     # Dist strip
-    if [ "$STRIP_BINARIES" == "true" ] && [ "$OS" == "linux" ]; then
+    if [ "$STRIP_BINARIES" = "true" ] && [ "$OS" = "linux" ]; then
       TARGET_CPU="${TARGET_ARCH:-x64}"
       electron/script/copy-debug-symbols.py --target-cpu="$TARGET_CPU" --out-dir=out/Default/debug --compress
       electron/script/strip-binaries.py --target-cpu="$TARGET_CPU"
@@ -101,7 +107,7 @@ case "$1" in
     ninja -C out/Default electron:electron_dist_zip
 
     # mksnapshot
-    if [ "$USE_PREBUILT_V8_CONTEXT_SNAPSHOT" == "1" ]; then
+    if [ "$USE_PREBUILT_V8_CONTEXT_SNAPSHOT" = "1" ]; then
       ninja -C out/Default electron:electron_mksnapshot_zip -j $NUMBER_OF_NINJA_PROCESSES
       ninja -C out/Default tools/v8_context_snapshot -j $NUMBER_OF_NINJA_PROCESSES
       gn desc out/Default v8:run_mksnapshot_default args > out/Default/mksnapshot_args
@@ -111,14 +117,14 @@ case "$1" in
       rm -rf out/Default/clang_x64_v8_arm64/thinlto-cache
       rm -rf out/Default/clang_x64/obj
       gn gen out/Default --args="import(\"$GN_CONFIG\") import(\"$GN_GOMA_FILE\") $GN_EXTRA_ARGS $GN_BUILDFLAG_ARGS"
-    elif [ "$OS" == "win" ]; then
+    elif [ "$OS" = "win" ]; then
         gn desc out/Default v8:run_mksnapshot_default args > out/Default/mksnapshot_args
         ninja -C out/Default electron:electron_mksnapshot_zip
         (cd out/Default; 7z a mksnapshot.zip mksnapshot_args gen/v8/embedded.S)
     else
       ninja -C out/Default electron:electron_mksnapshot -j $NUMBER_OF_NINJA_PROCESSES
       gn desc out/Default v8:run_mksnapshot_default args > out/Default/mksnapshot_args
-      if [ "$OS" == "linux" ]; then
+      if [ "$OS" = "linux" ]; then
         electron/script/strip-binaries.py --file $PWD/out/Default/mksnapshot
         electron/script/strip-binaries.py --file $PWD/out/Default/v8_context_snapshot_generator
       fi
@@ -127,17 +133,17 @@ case "$1" in
     fi
 
     # cross compile snapshot for Apple Silicon
-    if [ "$GENERATE_CROSS_ARCH_SNAPSHOT" == "true" ]; then
-      if [ "$TARGET_ARCH" == "arm" ]; then
+    if [ "$GENERATE_CROSS_ARCH_SNAPSHOT" = "true" ]; then
+      if [ "$TARGET_ARCH" = "arm" ]; then
         export MKSNAPSHOT_PATH="clang_x86_v8_arm"
-      elif [ "$TARGET_ARCH" == "arm64" ]; then
+      elif [ "$TARGET_ARCH" = "arm64" ]; then
         export MKSNAPSHOT_PATH="clang_x64_v8_arm64"
       fi
       cp "out/Default/$MKSNAPSHOT_PATH/mksnapshot" out/Default        
       cp "out/Default/$MKSNAPSHOT_PATH/v8_context_snapshot_generator" out/Default
-      if [ "$OS" == "linux" ]; then
+      if [ "$OS" = "linux" ]; then
         cp "out/Default/$MKSNAPSHOT_PATH/libffmpeg.so" out/Default
-      elif [ "$OS" == "mac" ]; then
+      elif [ "$OS" = "mac" ]; then
         cp "out/Default/$MKSNAPSHOT_PATH/libffmpeg.dylib" out/Default
       fi
       python3 electron/script/verify-mksnapshot.py --source-root "$PWD" --build-dir out/Default --create-snapshot-only
@@ -145,7 +151,7 @@ case "$1" in
       cp out/Default-mksnapshot-test/*.bin cross-arch-snapshots
     fi
 
-    if [ "$OS" == "win" ]; then
+    if [ "$OS" = "win" ]; then
       python3 electron/build/profile_toolchain.py --output-json=out/Default/windows_toolchain_profile.json
     fi
 
@@ -156,14 +162,14 @@ case "$1" in
     ninja -C out/Default electron:hunspell_dictionaries_zip -j $NUMBER_OF_NINJA_PROCESSES
 
     # libcxx
-    if [ "$OS" == "linux" ]; then
+    if [ "$OS" = "linux" ]; then
       ninja -C out/Default electron:libcxx_headers_zip -j $NUMBER_OF_NINJA_PROCESSES
       ninja -C out/Default electron:libcxxabi_headers_zip -j $NUMBER_OF_NINJA_PROCESSES
       ninja -C out/Default electron:libcxx_objects_zip -j $NUMBER_OF_NINJA_PROCESSES
     fi
 
     # Generate breakpad symbols
-    if [ "$GENERATE_SYMBOLS" == "true" ]; then
+    if [ "$GENERATE_SYMBOLS" = "true" ]; then
       ninja -C out/Default electron:electron_symbols
 
       # Zip symbols
@@ -174,18 +180,18 @@ case "$1" in
     fi
 
     # Build chromedriver
-    if [ "$TARGET_ARCH" == "arm" ] || [ "$TARGET_ARCH" == "arm64" ]; then
+    if [ "$TARGET_ARCH" = "arm" ] || [ "$TARGET_ARCH" = "arm64" ]; then
       gn gen out/chromedriver --args="import(\"$GN_CONFIG\") import(\"$GN_GOMA_FILE\") is_component_ffmpeg=false proprietary_codecs=false $GN_EXTRA_ARGS $GN_BUILDFLAG_ARGS"
       export CHROMEDRIVER_DIR="out/chromedriver"
     else
       export CHROMEDRIVER_DIR="out/Default"
     fi
     ninja -C $CHROMEDRIVER_DIR electron:electron_chromedriver -j $NUMBER_OF_NINJA_PROCESSES
-    if [ "$OS" == "linux" ]; then
+    if [ "$OS" = "linux" ]; then
       python3 electron/script/strip-binaries.py --target-cpu="$TARGET_ARCH" --file $PWD/$CHROMEDRIVER_DIR/chromedriver
     fi
     ninja -C $CHROMEDRIVER_DIR electron:electron_chromedriver_zip
-    if [ "$TARGET_ARCH" == "arm" ] || [ "$TARGET_ARCH" == "arm64" ]; then
+    if [ "$TARGET_ARCH" = "arm" ] || [ "$TARGET_ARCH" = "arm64" ]; then
       cp out/chromedriver/chromedriver.zip out/Default
     fi
 

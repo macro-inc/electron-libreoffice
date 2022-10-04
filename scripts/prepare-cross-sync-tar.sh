@@ -18,18 +18,18 @@ export GIT_CACHE_PATH="$BASE_PATH/.git-cache"
 # Assume ths base platform is Linux, and start there
 scripts/cross-sync/linux.sh
 
-# Manually apply the patches, since the hooks will not be run until build-time
-vpython3 src/electron/script/apply_all_patches.py src/electron/patches/config.json
-vpython3 src/electron/script/patches-mtime-cache.py apply --cache-file src/electron/patches/mtime-cache.json
-
 # Bundle the base tarball, primarily consisting of the source
-tar --zstd -cf base.tzstd --exclude-from="$SCRIPT_DIR/tar_excludes_base.txt" src
+tar --zstd -cf base.tzstd --anchored --exclude-from="$SCRIPT_DIR/tar_excludes_base.txt" src
 
-# Build the dawn/angle tarball (it needs the .git directories)
-tar --zstd -cf dawn-angle.tzstd src/third_party/dawn src/third_party/angle
+# Dereference and repack angle and dawn git to not use the cache
+(cd src/third_party/angle; git repack -a -d; rm .git/objects/info/alternates)
+(cd src/third_party/dawn; git repack -a -d; rm .git/objects/info/alternates)
+
+# Build the dawn/angle tarball (it needs the .git directories without )
+tar --zstd -cf dawn-angle.tzstd --anchored --exclude="src/third_party/angle/third_party/VK_GL-CTS/src" src/third_party/dawn src/third_party/angle
 
 # Build the confirmed non-OS-specific thirdparty tarball
-tar --zstd -cf thirdparty.tzstd --exclude-from="$SCRIPT_DIR/tar_excludes_os.txt" --files-from="$SCRIPT_DIR/tar_thirdparty_includes.txt"
+tar --zstd -cf thirdparty.tzstd --anchored --exclude-from="$SCRIPT_DIR/tar_thirdparty_excludes.txt" --files-from="$SCRIPT_DIR/tar_thirdparty_includes.txt"
 
 # Build the Windows-specific tarball
 scripts/cross-sync/win.sh

@@ -11,5 +11,13 @@ DEPOT_TOOLS_PATH="$BASE_PATH/depot_tools"
 # Reset any applied patches to .gclient
 (cd "$DEPOT_TOOLS_PATH"; git checkout -- gclient.py)
 
-# Undo any
-(cd "$BASE_PATH" && (rm .gclient_* || true) && git clean -ffdx src && (rm -rf src/.git || true) && git checkout -- src)
+# Don't trust the system Python
+(cd "$DEPOT_TOOLS_PATH";
+([ ! -f python3 ] && ln -s vpython3 python3) || true
+([ ! -f python3.bat ] && ln -s vpython3.bat python3.bat) || true
+([ ! -f python ] && ln -s vpython python) || true
+([ ! -f python.bat ] && ln -s vpython.bat python.bat) || true)
+
+echo 'undoing changes'
+# Undo any changes
+(cd "$BASE_PATH" && (rm .gclient_* || true) && (rm -rf src || true) && git checkout -- src/electron)

@@ -34,15 +34,16 @@ const addAllFiles = (dir) => {
 addAllFiles(path.resolve(__dirname, '../patches'));
 
 // Create Hash
-const platformless_hasher = crypto.createHash('SHA256');
+const platformlessHasher = crypto.createHash('SHA256');
+platformlessHasher.update('HASH_VERSION:5');
 const hasher = crypto.createHash('SHA256');
 hasher.update(`HASH_VERSION:${HASH_VERSIONS[process.platform] || FALLBACK_HASH_VERSION}`);
 for (const file of filesToHash) {
   hasher.update(fs.readFileSync(file));
-  platformless_hasher.update(fs.readFileSync(file));
+  platformlessHasher.update(fs.readFileSync(file));
 }
 
-fs.writeFileSync(path.resolve(__dirname, '../.depshash-platformless'), platformless_hasher.digest('hex'));
+fs.writeFileSync(path.resolve(__dirname, '../.depshash-platformless'), platformlessHasher.digest('hex'));
 
 // Add the GCLIENT_EXTRA_ARGS variable to the hash
 const extraArgs = process.env.GCLIENT_EXTRA_ARGS || 'no_extra_args';

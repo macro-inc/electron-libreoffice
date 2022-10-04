@@ -9,7 +9,7 @@ export PATH="$DEPOT_TOOLS_PATH:$SCRIPT_DIR:$PATH"
 scripts/cross-sync/reset-after.sh
 
 # It's not possible to override this as command line arg
-(cd "$BASE_PATH"; patch <<EOF
+(cd "$BASE_PATH"; patch <<'EOF'
 diff --git a/.gclient b/.gclient
 index 5b21302..c2b4a5d 100644
 --- a/.gclient
@@ -44,7 +44,8 @@ index 3b7dc4b..628f61b 100755
 EOF
 )
 
-(cd "$BASE_PATH"; gclient sync -R -D --no-history --with_branch_heads --with_tags -v -v --deps=linux --nohooks)
+# Prevent depot-tools from self-updating and erasing any changes during sync
+export DEPOT_TOOLS_UPDATE=0
+(cd "$BASE_PATH"; gclient sync -R -D --no-history --with_branch_heads --with_tags -v -v --deps=linux)
 
-# Build the Linux-specifc tarball
 (cd "$BASE_PATH"; tar --zstd -cf linux.tzstd --exclude-from="$SCRIPT_DIR/tar_excludes_os.txt" --exclude-from="$SCRIPT_DIR/tar_thirdparty_includes.txt" src/third_party src/buildtools src/tools .gclient_entries .gclient_previous_sync_commits)

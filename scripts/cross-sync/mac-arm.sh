@@ -44,5 +44,7 @@ index 3b7dc4b..628f61b 100755
 EOF
 )
 
-(cd "$BASE_PATH"; gclient sync -R -D --no-history --with_branch_heads --with_tags -v -v --deps=win --nohooks)
+# Prevent depot-tools from self-updating and erasing any changes during sync
+export DEPOT_TOOLS_UPDATE=0
+(cd "$BASE_PATH"; gclient sync -R -D --no-history --with_branch_heads --with_tags -v -v --deps=win)
 tar --zstd -cf mac-arm.tzstd --exclude-from="$SCRIPT_DIR/tar_excludes_os.txt" --exclude-from="$SCRIPT_DIR/tar_thirdparty_includes.txt" src/third_party src/buildtools src/tools .gclient_entries .gclient_previous_sync_commits

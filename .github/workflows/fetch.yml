@@ -83,7 +83,6 @@ jobs:
             base.tzstd
             dawn-angle.tzstd
             thirdparty.tzstd
-            mtime-cache.json
           key: src-${{ steps.deps_hash.outputs.deps_hash }}-base
       - name: Retrieve cache (linux)
         id: cache-src-linux
@@ -122,7 +121,6 @@ jobs:
           cd /r/el
           scripts/prepare-cross-sync-tar.sh
           cp -rf *.tzstd "$GITHUB_WORKSPACE"
-          cp mtime-cache.json "$GITHUB_WORKSPACE"
       - name: Linux - Remove RAM disk
         if: ${{ runner.os == 'Linux' && always() }}
         run: |

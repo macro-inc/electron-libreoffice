@@ -128,7 +128,6 @@ jobs:
             base.tzstd
             dawn-angle.tzstd
             thirdparty.tzstd
-            mtime-cache.json
           key: src-${{ steps.deps_hash.outputs.deps_hash }}-base
       - name: Retrieve cache (linux)
         if: ${{ runner.os == 'Linux' }}
@@ -182,27 +181,39 @@ jobs:
           sudo rm -rf $TMPDIR/del-target
       - name: Extract cache
         run: |
-          cd "$GITHUB_WORKSPACE"
+          cd "${{ inputs.working_dir }}"
           export MSYS=winsymlinks:nativestrict # https://github.com/git-for-windows/git/pull/156, use proper links to prevent errors
-          for file in *.tzstd; do
-            tar --zstd -xf "$file" -C "${{ inputs.working_dir }}"
-          done
-          cp mtime-cache.json "${{ inputs.working_dir }}/src/electron/patches/"
-      - name: Install node.js v16
+          tar --zstd -xf "$GITHUB_WORKSPACE/base.tzstd"
+          tar --zstd -xf "$GITHUB_WORKSPACE/dawn-angle.tzstd"
+          tar --zstd --overwrite -xf "$GITHUB_WORKSPACE/thirdparty.tzstd"
+          case "${{ runner.os }}" in
+            macOS)
+              if [ "$FOR_APPLE_SILICON" == "true" ]; then
+                tar --zstd --overwrite -xf "$GITHUB_WORKSPACE/mac-arm.tzstd"
+              else
+                tar --zstd --overwrite -xf "$GITHUB_WORKSPACE/mac.tzstd"
+              fi
+              ;;
+            Linux)
+              tar --zstd --overwrite -xf "$GITHUB_WORKSPACE/linux.tzstd"
+              ;;
+            Windows)
+              tar --zstd --overwrite -xf "$GITHUB_WORKSPACE/windows.tzstd"
+              ;;
+          esac
+      - name: Linux - Install node.js v16
         if: ${{ runner.os == 'Linux' }}
         run: |
           curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
           sudo apt-get install -y nodejs
+      - name: Linux - Install zip
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          sudo apt-get install -y zip
       - name: Build
         id: build
         run: |
           cd ${{ inputs.working_dir }}
-          # Prevent patches from being applied without git index
-          scripts/write-apply-patch-noop.sh
-
-          # Run the post-sync hooks
-          scripts/e d gclient runhooks
-
           (cd -- src/electron && node script/yarn install --frozen-lockfile)
           # GitHub actions repeatedly kills GOMA, simply restart it and the build since GOMA_START_COMPILER_PROXY fails
           set +e
@@ -221,7 +232,7 @@ jobs:
           goma_watch &
           GOMA_WATCH_PID=$!
           export RUN_GN_ONCE=true
-          while [ $attempts -le 20 -a $finished -eq 0 ]
+          while [ $attempts -le 3 -a $finished -eq 0 ]
           do
             echo "Attempt: $attempts"
             scripts/e build && finished=1
@@ -234,6 +245,7 @@ jobs:
         run: |
           cd "$GITHUB_WORKSPACE"
           cp -rf ${{ inputs.working_dir }}/src/out/Default/* .
+          cp -f ${{ inputs.working_dir }}/src/electron/{electron-api.json,electron.d.ts}{,.sha256sum} .
       - name: Create release
         uses: ncipollo/release-action@v1
         with:

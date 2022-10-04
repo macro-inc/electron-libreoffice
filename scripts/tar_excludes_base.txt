@@ -1,4 +1,4 @@
-.git
+*.git
 src/electron
 src/out
 src/buildtools
