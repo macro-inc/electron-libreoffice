@@ -29,10 +29,10 @@ jobs:
     strategy:
       matrix:
         include:
-          # - name: Windows x64
-          #   os: macro-windows
-          #   runner: WINDOWS_RUNNER_INSTANCE_ID
-          #   working_dir: /r/el
+          - name: Windows x64
+            os: macro-windows
+            runner: WINDOWS_RUNNER_INSTANCE_ID
+            working_dir: /r/el
           - name: Linux x64
             os: macro-linux
             runner: LINUX_RUNNER_INSTANCE_ID
