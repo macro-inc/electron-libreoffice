@@ -135,6 +135,7 @@ jobs:
     name: Stop EC2 Runner
     needs: [fetch]
     runs-on: ubuntu-latest
+    if: ${{ always() }}
     steps:
       - name: Setup AWS-CLI
         uses: aws-actions/configure-aws-credentials@v1

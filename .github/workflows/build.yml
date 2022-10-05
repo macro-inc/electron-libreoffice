@@ -183,22 +183,28 @@ jobs:
         run: |
           cd "${{ inputs.working_dir }}"
           export MSYS=winsymlinks:nativestrict # https://github.com/git-for-windows/git/pull/156, use proper links to prevent errors
-          tar --zstd -xf "$GITHUB_WORKSPACE/base.tzstd"
-          tar --zstd -xf "$GITHUB_WORKSPACE/dawn-angle.tzstd"
-          tar --zstd --overwrite -xf "$GITHUB_WORKSPACE/thirdparty.tzstd"
+          # GITHUB_WORKSPACE _should_ be the unix path in bash on Windows, but it isn't set correctly
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            export EL_WORKSPACE=$(cygpath -u '${{ github.workspace }}')
+          else
+            export EL_WORKSPACE='${{ github.workspace }}'
+          fi
+          tar --zstd -xf "$EL_WORKSPACE/base.tzstd"
+          tar --zstd -xf "$EL_WORKSPACE/dawn-angle.tzstd"
+          tar --zstd --overwrite -xf "$EL_WORKSPACE/thirdparty.tzstd"
           case "${{ runner.os }}" in
             macOS)
               if [ "$FOR_APPLE_SILICON" == "true" ]; then
-                tar --zstd --overwrite -xf "$GITHUB_WORKSPACE/mac-arm.tzstd"
+                tar --zstd --overwrite -xf "$EL_WORKSPACE/mac-arm.tzstd"
               else
-                tar --zstd --overwrite -xf "$GITHUB_WORKSPACE/mac.tzstd"
+                tar --zstd --overwrite -xf "$EL_WORKSPACE/mac.tzstd"
               fi
               ;;
             Linux)
-              tar --zstd --overwrite -xf "$GITHUB_WORKSPACE/linux.tzstd"
+              tar --zstd --overwrite -xf "$EL_WORKSPACE/linux.tzstd"
               ;;
             Windows)
-              tar --zstd --overwrite -xf "$GITHUB_WORKSPACE/windows.tzstd"
+              tar --zstd --overwrite -xf "$EL_WORKSPACE/windows.tzstd"
               ;;
           esac
       - name: Linux - Install node.js v16
@@ -214,22 +220,23 @@ jobs:
         id: build
         run: |
           cd ${{ inputs.working_dir }}
+          scripts/e setup
+
           (cd -- src/electron && node script/yarn install --frozen-lockfile)
           # GitHub actions repeatedly kills GOMA, simply restart it and the build since GOMA_START_COMPILER_PROXY fails
           set +e
           set +o pipefail
           attempts=1
           finished=0
-          function goma_watch() {
-            while true
-            do
-              scripts/goma.sh check_restart
-              sleep 300
-            done
-          }
+          # function goma_watch() {
+          #   while true
+          #   do
+          #     scripts/goma.sh check_restart
+          #     sleep 300
+          #   done
+          # }
 
-          scripts/e setup
-          goma_watch &
+          # goma_watch &
           GOMA_WATCH_PID=$!
           export RUN_GN_ONCE=true
           while [ $attempts -le 3 -a $finished -eq 0 ]
@@ -238,7 +245,7 @@ jobs:
             scripts/e build && finished=1
             ((attempts++))
           done
-          kill -9 $GOMA_WATCH_PID || true
+          # kill -9 $GOMA_WATCH_PID || true
           scripts/goma.sh ensure_stop || true
           [ $finished -eq 1 ] && echo "Finished successfully"
       - name: Copy build artifacts
@@ -277,6 +284,7 @@ jobs:
     name: Stop EC2 Runner
     needs: [build]
     runs-on: ubuntu-latest
+    if: ${{ always() }}
     steps:
       - name: Setup AWS-CLI
         uses: aws-actions/configure-aws-credentials@v1
