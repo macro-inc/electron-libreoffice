@@ -35,7 +35,7 @@ addAllFiles(path.resolve(__dirname, '../patches'));
 
 // Create Hash
 const platformlessHasher = crypto.createHash('SHA256');
-platformlessHasher.update('HASH_VERSION:5');
+platformlessHasher.update('HASH_VERSION:6');
 const hasher = crypto.createHash('SHA256');
 hasher.update(`HASH_VERSION:${HASH_VERSIONS[process.platform] || FALLBACK_HASH_VERSION}`);
 for (const file of filesToHash) {

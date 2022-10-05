@@ -50,4 +50,4 @@ export DEPOT_TOOLS_UPDATE=0
 export DEPOT_TOOLS_WIN_TOOLCHAIN=0
 (cd "$BASE_PATH"; gclient sync -R -D --no-history --with_branch_heads --with_tags -v -v --deps=win)
 
-tar --zstd -cf windows.tzstd --exclude-from="$SCRIPT_DIR/tar_excludes_os.txt" --exclude-from="$SCRIPT_DIR/tar_thirdparty_includes.txt" src/third_party src/buildtools src/tools .gclient_entries .gclient_previous_sync_commits
+(cd "$BASE_PATH"; tar --zstd -cf windows.tzstd --exclude-from="$SCRIPT_DIR/tar_excludes_os.txt" --exclude-from="$SCRIPT_DIR/tar_thirdparty_includes.txt" --files-from="$SCRIPT_DIR/tar_includes_os.txt")

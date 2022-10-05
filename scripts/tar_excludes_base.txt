@@ -7,3 +7,4 @@ src/third_party
 src/chrome/test/data/xr/webvr_info
 src/android_webview
 src/ios/chrome
+src/chrome/build/pgo_profiles

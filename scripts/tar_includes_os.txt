@@ -1,0 +1,6 @@
+src/third_party
+src/buildtools
+src/tools
+src/chrome/build/pgo_profiles
+.gclient_entries
+.gclient_previous_sync_commits

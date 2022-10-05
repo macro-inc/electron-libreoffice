@@ -77,7 +77,7 @@ case "$1" in
     # Use goma
     export NUMBER_OF_NINJA_PROCESSES=${2:-200}
     export GOMA_START_COMPILER_PROXY=true
-    goma.sh start
+    goma.sh ensure_start
 
     # Build electron
     cd "$BASE_PATH/src"
