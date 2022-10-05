@@ -143,6 +143,10 @@
 #include "shell/browser/osr/osr_web_contents_view.h"
 #endif
 
+#if BUILDFLAG(IS_WIN)
+#include "shell/browser/native_window_views.h"
+#endif
+
 #if !BUILDFLAG(IS_MAC)
 #include "ui/aura/window.h"
 #else
@@ -173,9 +177,8 @@
 
 #if BUILDFLAG(IS_WIN)
 #include "printing/backend/win_helper.h"
-#include "shell/browser/native_window_views.h"
 #endif
-#endif
+#endif  // BUILDFLAG(ENABLE_PRINTING)
 
 #if BUILDFLAG(ENABLE_PICTURE_IN_PICTURE)
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
@@ -2407,14 +2410,6 @@ void WebContents::OpenDevTools(gin::Arguments* args) {
       !owner_window()) {
     state = "detach";
   }
-  bool activate = true;
-  if (args && args->Length() == 1) {
-    gin_helper::Dictionary options;
-    if (args->GetNext(&options)) {
-      options.Get("mode", &state);
-      options.Get("activate", &activate);
-    }
-  }
 
 #if BUILDFLAG(IS_WIN)
   auto* win = static_cast<NativeWindowViews*>(owner_window());
@@ -2423,6 +2418,15 @@ void WebContents::OpenDevTools(gin::Arguments* args) {
   if (win && win->IsWindowControlsOverlayEnabled())
     state = "detach";
 #endif
+
+  bool activate = true;
+  if (args && args->Length() == 1) {
+    gin_helper::Dictionary options;
+    if (args->GetNext(&options)) {
+      options.Get("mode", &state);
+      options.Get("activate", &activate);
+    }
+  }
 
   DCHECK(inspectable_web_contents_);
   inspectable_web_contents_->SetDockState(state);
