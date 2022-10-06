@@ -62,4 +62,4 @@ gclient runhooks
 mv src/build/vs_toolchain{.tmp,}.py
 
 cd "$BASE_PATH"
-tar --zstd -cf windows.tzstd --exclude-from="$SCRIPT_DIR/tar_excludes_os.txt" --exclude-from="$SCRIPT_DIR/tar_thirdparty_includes.txt" --files-from="$SCRIPT_DIR/tar_includes_os.txt"
+tar --zstd -cf windows.tzstd --anchored --exclude-from="$SCRIPT_DIR/tar_excludes_os.txt" --exclude-from="$SCRIPT_DIR/tar_thirdparty_includes.txt" --files-from="$SCRIPT_DIR/tar_includes_os.txt"

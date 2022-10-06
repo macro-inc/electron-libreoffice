@@ -48,4 +48,4 @@ EOF
 export DEPOT_TOOLS_UPDATE=0
 (cd "$BASE_PATH"; gclient sync -R -D --no-history --with_branch_heads --with_tags -v -v --deps=linux)
 
-(cd "$BASE_PATH"; tar --zstd -cf linux.tzstd --exclude-from="$SCRIPT_DIR/tar_excludes_os.txt" --exclude-from="$SCRIPT_DIR/tar_thirdparty_includes.txt" --files-from="$SCRIPT_DIR/tar_includes_os.txt")
+(cd "$BASE_PATH"; tar --zstd -cf linux.tzstd --anchored --exclude-from="$SCRIPT_DIR/tar_excludes_os.txt" --exclude-from="$SCRIPT_DIR/tar_thirdparty_includes.txt" --files-from="$SCRIPT_DIR/tar_includes_os.txt")

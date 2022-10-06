@@ -27,16 +27,17 @@ jobs:
     needs: [check_version, fetch]
     if: ${{ needs.check_version.outputs.should_run != 'false' }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - name: Windows x64
             os: macro-windows
             runner: WINDOWS_RUNNER_INSTANCE_ID
             working_dir: /r/el
-          - name: Linux x64
-            os: macro-linux
-            runner: LINUX_RUNNER_INSTANCE_ID
-            working_dir: /r/el
+          # - name: Linux x64
+          #   os: macro-linux
+          #   runner: LINUX_RUNNER_INSTANCE_ID
+          #   working_dir: /r/el
     name: ${{ matrix.name }}
     uses: ./.github/workflows/build.yml
     with:

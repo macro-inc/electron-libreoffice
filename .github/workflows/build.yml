@@ -216,6 +216,11 @@ jobs:
         if: ${{ runner.os == 'Linux' }}
         run: |
           sudo apt-get install -y zip
+      - name: Windows - Prepare for build
+        if: ${{ runner.os == 'Windows' }}
+        run: |
+          # cleanup old goma.ipc if necessary
+          rm 'C:\Users\RUNNER~1\AppData\Local\Temp\goma\goma.ipc' || true
       - name: Build
         id: build
         run: |
@@ -223,20 +228,21 @@ jobs:
           scripts/e setup
 
           (cd -- src/electron && node script/yarn install --frozen-lockfile)
+          scripts/goma.sh ensure_start
           # GitHub actions repeatedly kills GOMA, simply restart it and the build since GOMA_START_COMPILER_PROXY fails
           set +e
           set +o pipefail
           attempts=1
           finished=0
-          # function goma_watch() {
-          #   while true
-          #   do
-          #     scripts/goma.sh check_restart
-          #     sleep 300
-          #   done
-          # }
+          function goma_watch() {
+            while true
+            do
+              scripts/goma.sh check_restart
+              sleep 300
+            done
+          }
 
-          # goma_watch &
+          goma_watch &
           GOMA_WATCH_PID=$!
           export RUN_GN_ONCE=true
           while [ $attempts -le 3 -a $finished -eq 0 ]
@@ -245,7 +251,7 @@ jobs:
             scripts/e build && finished=1
             ((attempts++))
           done
-          # kill -9 $GOMA_WATCH_PID || true
+          kill -9 $GOMA_WATCH_PID || true
           scripts/goma.sh ensure_stop || true
           [ $finished -eq 1 ] && echo "Finished successfully"
       - name: Copy build artifacts

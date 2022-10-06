@@ -47,4 +47,4 @@ EOF
 # Prevent depot-tools from self-updating and erasing any changes during sync
 export DEPOT_TOOLS_UPDATE=0
 (cd "$BASE_PATH"; gclient sync -R -D --no-history --with_branch_heads --with_tags -v -v --deps=mac)
-(cd "$BASE_PATH"; tar --zstd -cf mac.tzstd --exclude-from="$SCRIPT_DIR/tar_excludes_os.txt" --exclude-from="$SCRIPT_DIR/tar_thirdparty_includes.txt" --files-from="$SCRIPT_DIR/tar_includes_os.txt")
+(cd "$BASE_PATH"; tar --zstd -cf mac.tzstd --anchored --exclude-from="$SCRIPT_DIR/tar_excludes_os.txt" --exclude-from="$SCRIPT_DIR/tar_thirdparty_includes.txt" --files-from="$SCRIPT_DIR/tar_includes_os.txt")
