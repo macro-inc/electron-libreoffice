@@ -19,7 +19,7 @@ index 5b21302..c2b4a5d 100644
        "src/chrome/test/data/xr/webvr_info": None,
      },
 -    "custom_vars": {},
-+    "custom_vars": {"host_os":"mac", "checkout_mac": True, "target_os": "mac", "target_cpu": "arm64", "checkout_arm": True, "checkout_arm64": True, "apply_patches": False},
++    "custom_vars": {"host_os":"mac", "checkout_mac": True, "checkout_linux": False, "target_os": "mac", "target_cpu": "arm64", "checkout_arm": True, "checkout_arm64": True},
    },
  ]
 +target_os = ['mac']

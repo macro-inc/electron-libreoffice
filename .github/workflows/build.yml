@@ -264,17 +264,6 @@ jobs:
           body: |
             This is an automated release built from the `main` branch.
             For changes, please review the commit log.
-      - name: Windows - Remove RAM disk
-        if: ${{ runner.os == 'Windows' && always() }}
-        run: |
-          rm -rf /r/el
-          sleep 10
-          imdisk.exe -d -m 'R:' || true
-      - name: Linux - Remove RAM disk
-        if: ${{ runner.os == 'Linux' && always() }}
-        run: |
-          sudo umount /r || true
-          sudo rm -rf /r || true
       - name: The job has succeeded
         if: ${{ success() }}
         id: check
@@ -284,7 +273,6 @@ jobs:
     name: Stop EC2 Runner
     needs: [build]
     runs-on: ubuntu-latest
-    if: ${{ always() }}
     steps:
       - name: Setup AWS-CLI
         uses: aws-actions/configure-aws-credentials@v1

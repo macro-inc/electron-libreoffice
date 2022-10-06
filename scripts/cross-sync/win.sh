@@ -19,7 +19,7 @@ index 5b21302..c2b4a5d 100644
        "src/chrome/test/data/xr/webvr_info": None,
      },
 -    "custom_vars": {},
-+    "custom_vars": {"host_os":"win", "checkout_win": True, "target_os": "win", "target_cpu": "x64", "apply_patches": False},
++    "custom_vars": {"host_os":"win", "checkout_win": True, "checkout_linux": False, "target_os": "win", "target_cpu": "x64"},
    },
  ]
 +target_os = ['win']
@@ -48,6 +48,18 @@ EOF
 export DEPOT_TOOLS_UPDATE=0
 # Don't pull Visual Studio dependencies
 export DEPOT_TOOLS_WIN_TOOLCHAIN=0
-(cd "$BASE_PATH"; gclient sync -R -D --no-history --with_branch_heads --with_tags -v -v --deps=win)
 
-(cd "$BASE_PATH"; tar --zstd -cf windows.tzstd --exclude-from="$SCRIPT_DIR/tar_excludes_os.txt" --exclude-from="$SCRIPT_DIR/tar_thirdparty_includes.txt" --files-from="$SCRIPT_DIR/tar_includes_os.txt")
+cd "$BASE_PATH"
+gclient sync -R -D --no-history --with_branch_heads --with_tags -v -v --deps=win --nohooks
+
+# No-op the VS update tools before running hooks, since this runs on Linux
+cd "$BASE_PATH"
+mv src/build/vs_toolchain{,.tmp}.py
+touch src/build/vs_toolchain.py
+gclient runhooks
+
+# Restore after running hooks
+mv src/build/vs_toolchain{.tmp,}.py
+
+cd "$BASE_PATH"
+tar --zstd -cf windows.tzstd --exclude-from="$SCRIPT_DIR/tar_excludes_os.txt" --exclude-from="$SCRIPT_DIR/tar_thirdparty_includes.txt" --files-from="$SCRIPT_DIR/tar_includes_os.txt"
