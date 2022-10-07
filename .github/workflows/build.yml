@@ -221,6 +221,17 @@ jobs:
         run: |
           # cleanup old goma.ipc if necessary
           rm 'C:\Users\RUNNER~1\AppData\Local\Temp\goma\goma.ipc' || true
+
+          cd ${{ inputs.working_dir }}
+          scripts/e setup
+      - name: Windows - Fix Clang toolchain
+        if: ${{ runner.os == 'Windows' }}
+        run: |
+          Set-Location R:\el
+          $env:PATH = 'R:\el\depot_tools;' + $env:PATH
+          & cmd /c call depot_tools\vpython3.bat src\tools\clang\scripts\update.py
+          & cmd /c call depot_tools\vpython3.bat src/third_party/depot_tools/download_from_google_storage.py --no_resume --no_auth --bucket chromium-browser-clang/rc -s src/build/toolchain/win/rc/win/rc.exe.sha1
+        shell: powershell
       - name: Build
         id: build
         run: |
@@ -228,7 +239,6 @@ jobs:
           scripts/e setup
 
           (cd -- src/electron && node script/yarn install --frozen-lockfile)
-          scripts/goma.sh ensure_start
           # GitHub actions repeatedly kills GOMA, simply restart it and the build since GOMA_START_COMPILER_PROXY fails
           set +e
           set +o pipefail
@@ -237,8 +247,8 @@ jobs:
           function goma_watch() {
             while true
             do
-              scripts/goma.sh check_restart
               sleep 300
+              scripts/goma.sh check_restart
             done
           }
 
@@ -258,7 +268,9 @@ jobs:
         run: |
           cd "$GITHUB_WORKSPACE"
           cp -rf ${{ inputs.working_dir }}/src/out/Default/* .
-          cp -f ${{ inputs.working_dir }}/src/electron/{electron-api.json,electron.d.ts}{,.sha256sum} .
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            cp -f ${{ inputs.working_dir }}/src/electron/{electron-api.json,electron.d.ts}{,.sha256sum} .
+          fi
       - name: Create release
         uses: ncipollo/release-action@v1
         with:
