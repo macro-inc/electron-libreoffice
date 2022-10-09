@@ -94,11 +94,16 @@ def main():
     output_file = os.path.join(args.output_dir, filename)
     # /program directory already exists and the archive is the same checksum,
     # exit early
-    if check_valid_sha256(output_file, checksum) and os.path.isdir(
-            os.path.join(args.output_dir, 'program')):
-        print("file '{}' already exists with checksum {}".format(
-                  filename, checksum))
-        return 0
+    if check_valid_sha256(output_file, checksum):
+        if os.path.isdir(os.path.join(args.output_dir, 'instdir')):
+            print("file '{}' already exists with checksum {}".format(
+                      filename, checksum))
+            return 0
+        else:
+            print("extracting '{}'".format(output_file))
+            with tarfile.open(output_file) as f:
+                f.extractall(args.output_dir)
+            return 0
 
     # remove the existing output_dir
     if os.path.isdir(args.output_dir):
@@ -117,7 +122,7 @@ def main():
 
     print("extracting '{}'".format(output_file))
     with tarfile.open(output_file) as f:
-        f.extractall(os.path.dirname(args.output_dir))
+        f.extractall(args.output_dir)
 
     return 0
 

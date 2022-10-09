@@ -11,6 +11,7 @@ vars = {
     '0e5d146ba13101a1302d59ea6e6e0b3cace4ae38',
 
   'pyyaml_version': '3.12',
+  'libreofficekit_version': 'v0.0.1',
 
   'chromium_git': 'https://chromium.googlesource.com',
   'electron_git': 'https://github.com/electron',
@@ -145,6 +146,20 @@ hooks = [
       'python3',
       '-c',
       'import os, subprocess; os.chdir(os.path.join("src", "electron")); subprocess.check_call(["python3", "script/lib/npx.py", "yarn@' + (Var("yarn_version")) + '", "install", "--frozen-lockfile"]);',
+    ],
+  },
+  {
+    'name': 'download_libreofficekit',
+    'pattern': 'src/electron',
+    'action': [
+      'python3',
+      'src/electron/script/download-libreofficekit.py',
+      '--os',
+      (Var("host_os")),
+      '--version',
+      (Var("libreofficekit_version")),
+      '--outdir',
+      'src/third_party/libreofficekit'
     ],
   },
 ]
