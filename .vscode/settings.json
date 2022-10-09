@@ -14,14 +14,17 @@
   "files.insertFinalNewline": true,
   "files.trimFinalNewlines": true,
   "files.watcherExclude": {
-    "**/out*/**": true,
+    "**/out": true,
     "**/third_party/**": true,
-    "**/.git/objects/**": true,
-    "**/.git/subtree-cache/**": true,
-    "**/node_modules/*/**": true
+    "**/.git": true,
+    "**/.gitignore": true,
+    "**/node_modules/*/**": true,
+    "**/src/third_party": true,
+    "**/build-tools": true,
+    "**/depot_tools": true,
   },
   "files.watcherInclude": [
-    "shell/**"
+    "src/electron/**",
   ],
   "files.exclude": {
     "**/.git": true,
@@ -32,20 +35,17 @@
     "**/Thumbs.db": true,
     "**/out": true,
     "out*/**": true,
-    "${workspaceFodler}/../out*/**": true,
+    "${workspaceFodler}/src/out*/**": true,
     "**/node_modules": true,
     "**/*.runtime_deps": true,
     ".cache": true
   },
   "C_Cpp.intelliSenseEngine": "Disabled",
-  "C_Cpp.clang_format_path": "${workspaceFolder}/../third_party/depot_tools/clang-format",
+  "C_Cpp.clang_format_path": "${workspaceFolder}/src/third_party/depot_tools/clang-format",
   "C_Cpp.clang_format_sortIncludes": true,
   "C_Cpp.vcFormat.indent.multiLineRelativeTo": "statementBegin",
   "editor.formatOnSave": false,
   "editor.formatOnSaveMode": "modifications",
-  "clangd.fallbackFlags": [
-    "-std=c++17"
-  ],
   "C/C++ Include Guard.Macro Type": "Filepath",
   "C/C++ Include Guard.Remove Extension": false,
   "C/C++ Include Guard.Suffix": "_",

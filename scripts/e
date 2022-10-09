@@ -208,10 +208,20 @@ case "$1" in
   d)
     "$2" ${@:3}
     ;;
+  run)
+    OUT_DIR="out/$ELECTRON_OUT_DIR"
+    export RUN_GN_ONCE=true
+    scripts/e build
+    if [ "$OS" = "win" ]; then
+      EXE_SUFFIX=".exe"
+    fi
+    "src/$OUT_DIR/electron$EXE_SUFFIX" --no-sandbox ${@:2}
+    ;;
   gen_clangd)
     OUT_DIR="out/$ELECTRON_OUT_DIR"
-    cd "$BASE_PATH/src"
-    gn gen "$OUT_DIR" --args="import(\"$GN_CONFIG\") import(\"$GN_GOMA_FILE\") $GN_EXTRA_ARGS $GN_BUILDFLAG_ARGS"
-    "./tools/clang/scripts/generate_compdb.py" -p "$OUT_DIR" -o "$BASE_PATH/compile_commands.json"
+    cd "$BASE_PATH"
+    echo "Building so that buildflag headers exist"
+    scripts/e build
+    "$BASE_PATH/src/tools/clang/scripts/generate_compdb.py" -p "src/$OUT_DIR" > "$BASE_PATH/compile_commands.json"
     ;;
 esac
