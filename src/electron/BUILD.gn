@@ -734,6 +734,10 @@ source_set("electron_lib") {
   if (allow_runtime_configurable_key_storage) {
     defines += [ "ALLOW_RUNTIME_CONFIGURABLE_KEY_STORAGE" ]
   }
+
+  if (enable_office) {
+    deps += [ "//electron/office:office_web_plugin" ]
+  }
 }
 
 electron_paks("packed_resources") {

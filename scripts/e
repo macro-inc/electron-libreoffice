@@ -139,7 +139,7 @@ case "$1" in
       elif [ "$TARGET_ARCH" = "arm64" ]; then
         export MKSNAPSHOT_PATH="clang_x64_v8_arm64"
       fi
-      cp "out/Default/$MKSNAPSHOT_PATH/mksnapshot" out/Default        
+      cp "out/Default/$MKSNAPSHOT_PATH/mksnapshot" out/Default
       cp "out/Default/$MKSNAPSHOT_PATH/v8_context_snapshot_generator" out/Default
       if [ "$OS" = "linux" ]; then
         cp "out/Default/$MKSNAPSHOT_PATH/libffmpeg.so" out/Default
@@ -207,5 +207,11 @@ case "$1" in
     ;;
   d)
     "$2" ${@:3}
+    ;;
+  gen_clangd)
+    OUT_DIR="out/$ELECTRON_OUT_DIR"
+    cd "$BASE_PATH/src"
+    gn gen "$OUT_DIR" --args="import(\"$GN_CONFIG\") import(\"$GN_GOMA_FILE\") $GN_EXTRA_ARGS $GN_BUILDFLAG_ARGS"
+    "./tools/clang/scripts/generate_compdb.py" -p "$OUT_DIR" -o "$BASE_PATH/compile_commands.json"
     ;;
 esac

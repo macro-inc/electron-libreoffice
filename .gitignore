@@ -12,3 +12,6 @@
 # ignore gsync'd source files
 /src/*
 !/src/electron
+
+# clangd
+/compile_commands.json
