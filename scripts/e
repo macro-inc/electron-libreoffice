@@ -17,7 +17,10 @@ if [ -z "$CI" ]; then
   export GIT_CACHE_PATH="$BASE_PATH/.git-cache"
 fi
 
-test ! -d "$DEPOT_TOOLS_PATH" && fetch-depot-tools.sh
+if [ ! -d "$DEPOT_TOOLS_PATH" ]; then
+  fetch-depot-tools.sh
+  update_depot_tools
+fi
 test ! -d "$BUILD_TOOLS_PATH" && fetch-electron-build-tools.sh
 
 GN_CONFIG=//electron/build/args/testing.gn
