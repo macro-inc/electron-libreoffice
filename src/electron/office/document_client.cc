@@ -61,7 +61,6 @@ void DocumentClient::HandleLOKCallback(int type,
 }
 
 // gin::Wrappable
-// static gin::WrapperInfo kWrapperInfo;
 gin::ObjectTemplateBuilder DocumentClient::GetObjectTemplateBuilder(
     v8::Isolate* isolate) {
   gin::PerIsolateData* data = gin::PerIsolateData::From(isolate);
@@ -343,6 +342,10 @@ void DocumentClient::HandleLOKEvent(int type, const char* payload) {
       break;
     case LOK_CALLBACK_STATE_CHANGED:
       HandleStateChange(payload);
+      break;
+    // Don't log these, too frequent
+    case LOK_CALLBACK_JSDIALOG:
+    case LOK_CALLBACK_RULER_UPDATE:
       break;
     default:
       LOG(ERROR) << "DOC EVENT(" << lok_callback::TypeToEventString(type)

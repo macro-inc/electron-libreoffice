@@ -267,8 +267,8 @@ bool IsTypeJSON(int type) {
     case LOK_CALLBACK_VALIDITY_INPUT_HELP:
     case LOK_CALLBACK_CLIPBOARD_CHANGED:
     case LOK_CALLBACK_REFERENCE_MARKS:
-      // TODO: Not Certain, limited documentation {
     case LOK_CALLBACK_JSDIALOG:
+      // TODO: Not Certain, limited documentation {
     case LOK_CALLBACK_CALC_FUNCTION_LIST:
     case LOK_CALLBACK_TAB_STOP_LIST:
     case LOK_COMMAND_BLOCKED:
