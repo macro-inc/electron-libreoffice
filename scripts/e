@@ -11,6 +11,7 @@ export CHROMIUM_BUILDTOOLS_PATH="$BASE_PATH/src/buildtools"
 export ELECTRON_OUT_DIR=Default
 export ELECTRON_ENABLE_STACK_DUMPING=1
 export ELECTRON_ALSO_LOG_TO_STDERR=1
+export DEPOT_TOOLS_WIN_TOOLCHAIN=0
 
 # cache git requests only if not in CI, where they are abandoned
 if [ -z "$CI" ]; then
@@ -92,7 +93,7 @@ case "$1" in
       gn gen out/Default --args="import(\"$GN_CONFIG\") import(\"$GN_GOMA_FILE\") $GN_EXTRA_ARGS $GN_BUILDFLAG_ARGS"
       [ "$RUN_GN_ONCE" = "true" ] && touch out/.gn_ran
     fi
-    NINJA_SUMMARIZE_BUILD=1 autoninja -C out/Default electron -j $NUMBER_OF_NINJA_PROCESSES
+    autoninja -C out/Default electron -j $NUMBER_OF_NINJA_PROCESSES
     cp out/Default/.ninja_log out/electron_ninja_log
     node electron/script/check-symlinks.js
 
@@ -217,12 +218,30 @@ case "$1" in
     ;;
   run)
     OUT_DIR="out/$ELECTRON_OUT_DIR"
+    LAST_RUN_STAMP="$BASE_PATH/.last_run_stamp"
     export RUN_GN_ONCE=true
-    scripts/e build
+
+    # Only build if there are changes to src/electron since the last successful build
+    if [ -e "$LAST_RUN_STAMP" ] && find "$BASE_PATH/src/electron" -newer "$LAST_RUN_STAMP" -exec false {} +
+    then
+      echo "No changes since last build"
+    else
+      if scripts/e build; then
+        touch "$LAST_RUN_STAMP"
+      else
+        exit 1
+      fi
+    fi
     if [ "$OS" = "win" ]; then
       EXE_SUFFIX=".exe"
     fi
-    "src/$OUT_DIR/electron$EXE_SUFFIX" --no-sandbox ${@:2}
+
+    # By default, open the QA file
+    ARGS="qa/index.html"
+    if [ ${#@} -gt 1 ]; then
+      ARGS=${@:2}
+    fi
+    "$BASE_PATH/src/$OUT_DIR/electron$EXE_SUFFIX" --no-sandbox $ARGS
     ;;
   gen_clangd)
     OUT_DIR="out/$ELECTRON_OUT_DIR"

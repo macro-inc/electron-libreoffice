@@ -23,9 +23,12 @@ For compiling for Apple Silicon: `FOR_APPLE_SILICON=true scripts/e build`
 ## How do I run this build?
 
 ``` bash
-scripts/e run ...
+# To run with the included manual QA page, use:
+scripts/e run
+
+# To run with another file use scripts/e run ..., just as you would use `electron` normally
 # For example:
-scripts/e run index.html
+scripts/e run ~/my-electron-libreoffice-app/index.html
 ```
 
 This basically runs `src/out/Default/electron` with the `--no-sandbox` flag.

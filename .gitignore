@@ -16,3 +16,4 @@
 # clangd
 /compile_commands.json
 /.cache
+/.last_run_stamp
