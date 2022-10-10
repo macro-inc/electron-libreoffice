@@ -281,11 +281,10 @@ bool OfficeWebPlugin::HandleMouseEvent(const blink::WebMouseEvent& event,
   if (raw_modifiers & blink::WebInputEvent::kRightButtonDown)
     buttons |= 4;
 
-  document_client_->GetDocument()->postMouseEvent(
-      event_type, pos.x(), pos.y(), event.ClickCount(), buttons,
-      office::EventModifiersToLOKModifiers(raw_modifiers));
-
-  if (event.GetModifiers() & event.kLeftButtonDown) {
+  if (buttons > 0) {
+    document_client_->GetDocument()->postMouseEvent(
+        event_type, pos.x(), pos.y(), event.ClickCount(), buttons,
+        office::EventModifiersToLOKModifiers(raw_modifiers));
     return true;
   }
 
