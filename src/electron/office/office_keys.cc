@@ -28,7 +28,7 @@ static inline const std::unordered_map<DomCode::K, LOKKeyCodes> directMap_{
     {K::NUMPAD_BACKSPACE, L::BACKSPACE},
     {K::SPACE, L::SPACE},
     {K::INSERT, L::INSERT},
-    {K::DEL, L::DELETE},
+    {K::DEL, L::DEL},
     {K::NUMPAD_ADD, L::ADD},
     {K::NUMPAD_SUBTRACT, L::SUBTRACT},
     {K::NUMPAD_MULTIPLY, L::MULTIPLY},

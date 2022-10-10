@@ -187,16 +187,16 @@ void DocumentClient::Paint(const gfx::Rect& rect,
   long doc_height_scaled = document_size_px_.height() * scale_factor;
 
   // Total number of rows / columns in this document.
-  uint rows =
+  int rows =
       ceil(static_cast<double>(doc_height_scaled) / tile_size_px_scaled);
-  uint columns =
+  int columns =
       ceil(static_cast<double>(doc_width_scaled) / tile_size_px_scaled);
 
   SkCanvas canvas(image_data);
 
   // Render the tiles.
-  for (uint row = 0; row < rows; ++row) {
-    for (uint column = 0; column < columns; ++column) {
+  for (int row = 0; row < rows; ++row) {
+    for (int column = 0; column < columns; ++column) {
       gfx::Rect tile_rect_twips, tile_rect_px;
 
       // Determine size of the tile: the rightmost/bottommost tiles may

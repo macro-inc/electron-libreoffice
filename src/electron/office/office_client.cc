@@ -56,11 +56,12 @@ OfficeClient::OfficeClient() {
     return;
 
   base::FilePath libreoffice_path =
-      module_path.Append("libreofficekit").Append("program");
+      module_path.Append(FILE_PATH_LITERAL("libreofficekit"))
+          .Append(FILE_PATH_LITERAL("program"));
 
   // TODO: set the user profile path to the proper directory
   // TODO: handle case where this fails, when == nullptr
-  office_ = lok::lok_cpp_init(libreoffice_path.value().c_str());
+  office_ = lok::lok_cpp_init(libreoffice_path.AsUTF8Unsafe().c_str());
   office_->registerCallback(&OfficeClient::HandleLOKCallback,
                             weak_factory_.GetWeakPtr().get());
 }

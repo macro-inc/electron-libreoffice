@@ -99,7 +99,7 @@ enum LOKKeyCodes : unsigned short {
   BACKSPACE,
   SPACE,
   INSERT,
-  DELETE,
+  DEL,
   ADD,
   SUBTRACT,
   MULTIPLY,
