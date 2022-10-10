@@ -154,11 +154,13 @@ hooks = [
     'action': [
       'python3',
       'src/electron/script/download-libreofficekit.py',
+      '--base-url',
+      'https://github.com/coparse-inc/libreofficekit/releases/download',
       '--os',
       (Var("host_os")),
       '--version',
       (Var("libreofficekit_version")),
-      '--outdir',
+      '--output-dir',
       'src/third_party/libreofficekit'
     ],
   },
