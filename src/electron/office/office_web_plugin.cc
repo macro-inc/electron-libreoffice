@@ -172,12 +172,7 @@ void OfficeWebPlugin::UpdateVisibility(bool visibility) {}
 blink::WebInputEventResult OfficeWebPlugin::HandleInputEvent(
     const blink::WebCoalescedInputEvent& event,
     ui::Cursor* cursor) {
-  std::unique_ptr<blink::WebInputEvent> scaled_event =
-      ui::ScaleWebInputEvent(event.Event(), viewport_to_dip_scale_);
-  const blink::WebInputEvent& event_to_handle =
-      scaled_event ? *scaled_event : event.Event();
-
-  auto event_type = event_to_handle.GetType();
+  blink::WebInputEvent::Type event_type = event.Event().GetType();
 
   // TODO: handle gestures
   if (blink::WebInputEvent::IsGestureEventType(event_type))
@@ -187,25 +182,44 @@ blink::WebInputEventResult OfficeWebPlugin::HandleInputEvent(
     *cursor = cursor_type_;
   }
 
-  if (blink::WebInputEvent::IsMouseEventType(event_type)) {
-    return HandleMouseEvent(
-               static_cast<const blink::WebMouseEvent&>(event_to_handle),
-               cursor)
+  if (blink::WebInputEvent::IsKeyboardEventType(event_type))
+    return HandleKeyEvent(std::move(static_cast<const blink::WebKeyboardEvent&>(
+                              event.Event())),
+                          cursor)
                ? blink::WebInputEventResult::kHandledApplication
                : blink::WebInputEventResult::kNotHandled;
+
+  std::unique_ptr<blink::WebInputEvent> scaled_event =
+      ui::ScaleWebInputEvent(event.Event(), viewport_to_dip_scale_);
+  std::unique_ptr<blink::WebInputEvent> transformed_event =
+      ui::TranslateAndScaleWebInputEvent(
+          scaled_event ? *scaled_event : event.Event(),
+          gfx::Vector2dF(-available_area_.x() / device_scale_, 0),
+          device_scale_);
+
+  const blink::WebInputEvent& event_to_handle =
+      transformed_event ? *transformed_event : event.Event();
+
+  switch (event_type) {
+    case blink::WebInputEvent::Type::kMouseDown:
+    case blink::WebInputEvent::Type::kMouseUp:
+    case blink::WebInputEvent::Type::kMouseMove:
+      break;
+    default:
+      return blink::WebInputEventResult::kNotHandled;
   }
 
-  if (blink::WebInputEvent::IsKeyboardEventType(event_type))
-    return HandleKeyEvent(
-               static_cast<const blink::WebKeyboardEvent&>(event_to_handle),
-               cursor)
-               ? blink::WebInputEventResult::kHandledApplication
-               : blink::WebInputEventResult::kNotHandled;
+  blink::WebMouseEvent mouse_event =
+      static_cast<const blink::WebMouseEvent&>(event_to_handle);
 
-  return blink::WebInputEventResult::kNotHandled;
+  int modifiers = mouse_event.GetModifiers();
+  return HandleMouseEvent(event_type, mouse_event.PositionInWidget(), modifiers,
+                          mouse_event.ClickCount(), cursor)
+             ? blink::WebInputEventResult::kHandledApplication
+             : blink::WebInputEventResult::kNotHandled;
 }
 
-bool OfficeWebPlugin::HandleKeyEvent(const blink::WebKeyboardEvent& event,
+bool OfficeWebPlugin::HandleKeyEvent(const blink::WebKeyboardEvent event,
                                      ui::Cursor* cursor) {
   if (!document_client_ || view_id_ == -1)
     return false;
@@ -243,13 +257,16 @@ bool OfficeWebPlugin::HandleKeyEvent(const blink::WebKeyboardEvent& event,
   return true;
 }
 
-bool OfficeWebPlugin::HandleMouseEvent(const blink::WebMouseEvent& event,
+bool OfficeWebPlugin::HandleMouseEvent(blink::WebInputEvent::Type type,
+                                       gfx::PointF position,
+                                       int modifiers,
+                                       int clickCount,
                                        ui::Cursor* cursor) {
   if (!document_client_ || view_id_ == -1)
     return false;
 
   LibreOfficeKitMouseEventType event_type;
-  switch (event.GetType()) {
+  switch (type) {
     case blink::WebInputEvent::Type::kMouseDown:
       event_type = LOK_MOUSEEVENT_MOUSEBUTTONDOWN;
       break;
@@ -264,8 +281,8 @@ bool OfficeWebPlugin::HandleMouseEvent(const blink::WebMouseEvent& event,
   }
 
   // TODO: handle offsets
-  gfx::Point pos = gfx::ToRoundedPoint(gfx::ScalePoint(
-      event.PositionInWidget(), office::lok_callback::TWIP_PER_PX));
+  gfx::Point pos = gfx::ToRoundedPoint(
+      gfx::ScalePoint(position, office::lok_callback::TWIP_PER_PX));
 
   // allow focus even if not in area
   if (!available_area_twips_.Contains(pos)) {
@@ -273,18 +290,17 @@ bool OfficeWebPlugin::HandleMouseEvent(const blink::WebMouseEvent& event,
   }
 
   int buttons = 0;
-  int raw_modifiers = event.GetModifiers();
-  if (raw_modifiers & blink::WebInputEvent::kLeftButtonDown)
+  if (modifiers & blink::WebInputEvent::kLeftButtonDown)
     buttons |= 1;
-  if (raw_modifiers & blink::WebInputEvent::kMiddleButtonDown)
+  if (modifiers & blink::WebInputEvent::kMiddleButtonDown)
     buttons |= 2;
-  if (raw_modifiers & blink::WebInputEvent::kRightButtonDown)
+  if (modifiers & blink::WebInputEvent::kRightButtonDown)
     buttons |= 4;
 
   if (buttons > 0) {
     document_client_->GetDocument()->postMouseEvent(
-        event_type, pos.x(), pos.y(), event.ClickCount(), buttons,
-        office::EventModifiersToLOKModifiers(raw_modifiers));
+        event_type, pos.x(), pos.y(), clickCount, buttons,
+        office::EventModifiersToLOKModifiers(modifiers));
     return true;
   }
 

@@ -241,6 +241,10 @@ std::string TypeToEventString(int type) {
       return "content_control";
     case LOK_CALLBACK_PRINT_RANGES:
       return "print_ranges";
+    case LOK_CALLBACK_FONTS_MISSING:
+      return "fonts_missing";
+    default:
+      return "unknown_event";
   }
 }
 

@@ -167,8 +167,12 @@ class OfficeWebPlugin : public blink::WebPlugin,
  private:
   // call `Destroy()` instead.
   ~OfficeWebPlugin() override;
-  bool HandleKeyEvent(const blink::WebKeyboardEvent& event, ui::Cursor* cursor);
-  bool HandleMouseEvent(const blink::WebMouseEvent& event, ui::Cursor* cursor);
+  bool HandleKeyEvent(const blink::WebKeyboardEvent event, ui::Cursor* cursor);
+  bool HandleMouseEvent(blink::WebInputEvent::Type type,
+                        gfx::PointF position,
+                        int modifiers,
+                        int clickCount,
+                        ui::Cursor* cursor);
 
   // PaintManager::Client
   void OnPaint(const std::vector<gfx::Rect>& paint_rects,

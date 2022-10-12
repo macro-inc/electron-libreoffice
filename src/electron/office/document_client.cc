@@ -187,8 +187,7 @@ void DocumentClient::Paint(const gfx::Rect& rect,
   long doc_height_scaled = document_size_px_.height() * scale_factor;
 
   // Total number of rows / columns in this document.
-  int rows =
-      ceil(static_cast<double>(doc_height_scaled) / tile_size_px_scaled);
+  int rows = ceil(static_cast<double>(doc_height_scaled) / tile_size_px_scaled);
   int columns =
       ceil(static_cast<double>(doc_width_scaled) / tile_size_px_scaled);
 
