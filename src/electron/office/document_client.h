@@ -16,21 +16,15 @@
 #include "gin/handle.h"
 #include "gin/wrappable.h"
 #include "office/event_bus.h"
+#include "shell/common/gin_helper/pinnable.h"
 #include "third_party/libreofficekit/LibreOfficeKit.hxx"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "third_party/skia/include/core/SkImage.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/size_f.h"
-
-// prevent circular include
-#ifndef OFFICE_DOCUMENT_CLIENT_DEFINED
-#define OFFICE_DOCUMENT_CLIENT_DEFINED
-namespace electron::office {
-class DocumentClient;
-}
-#include "office/office_web_plugin.h"
-#endif
+#include "v8-persistent-handle.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -46,22 +40,21 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   DocumentClient(const DocumentClient&) = delete;
   DocumentClient& operator=(const DocumentClient&) = delete;
 
-  DocumentClient(lok::Office* office,
-                 lok::Document* document,
-                 std::string path);
+  DocumentClient(lok::Document* document,
+                 std::string path,
+                 EventBus* event_bus);
 
-  static gin::Handle<DocumentClient> Create(v8::Isolate* isolate,
-                                            lok::Office* office,
-                                            lok::Document* document,
-                                            std::string path);
-
-  static void HandleLOKCallback(int type, const char* payload, void* callback);
+  static void HandleLibreOfficeCallback(int type,
+                                        const char* payload,
+                                        void* callback);
 
   // gin::Wrappable
   static gin::WrapperInfo kWrapperInfo;
   gin::ObjectTemplateBuilder GetObjectTemplateBuilder(
       v8::Isolate* isolate) override;
   const char* GetTypeName() override;
+
+  gin::Handle<DocumentClient> GetHandle(v8::Isolate* isolate);
 
   // Loaded and capable of receiving events
   bool IsReady();
@@ -72,10 +65,10 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   gfx::Size DocumentSizeTwips();
 
   // returns the view ID associated with the mount
-  int Mount(OfficeWebPlugin* renderer);
+  int Mount(v8::Isolate *isolate);
   // returns if the view was unmounted, if false could be due to one view
   // left/never mounted
-  bool Unmount();
+  // bool Unmount();
 
   // Plugin Engine {
   void PageOffsetUpdated(const gfx::Vector2d& page_offset);
@@ -99,23 +92,20 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   bool HasEditableText();
   // }
 
+  void Unmount();
+
   base::WeakPtr<DocumentClient> GetWeakPtr();
 
- protected:
-  // nothing
  private:
-  void EmitLOKEvent(int type, std::string payload);
-  void HandleStateChange(const char* payload);
-  void HandleLOKEvent(int type, const char* payload);
-  void RefreshSize();
-  void Invalidate(const char* payload);
 
-  // owned by
-  lok::Office* office_;
-  OfficeWebPlugin* renderer_ = nullptr;
+  void HandleStateChange(std::string payload);
+  void HandleDocSizeChanged(std::string payload);
+  void HandleInvalidate(std::string payload);
+
+  void RefreshSize();
 
   // has a
-  lok::Document* document_;
+  lok::Document* document_ = nullptr;
   std::string path_;
   int view_id_ = -1;
   LibreOfficeKitTileMode tile_mode_;
@@ -134,8 +124,10 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   std::vector<std::string> state_change_buffer_;
 
   bool is_ready_;
-  EventBus event_bus_;
-  scoped_refptr<base::SequencedTaskRunner> task_runner_;
+  EventBus* event_bus_;
+
+  // prevents from being garbage collected
+  v8::Global<v8::Value> mounted_;
 
   base::WeakPtrFactory<DocumentClient> weak_factory_{this};
 };

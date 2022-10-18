@@ -319,7 +319,7 @@ bool IsTypeMultipleCSV(int type) {
   }
 }
 
-std::pair<std::string, std::string> ParseStatusChange(const char* payload) {
+std::pair<std::string, std::string> ParseStatusChange(std::string payload) {
   std::string_view sv(payload);
   std::string_view::const_iterator target = sv.begin();
   std::string_view::const_iterator end = sv.end();

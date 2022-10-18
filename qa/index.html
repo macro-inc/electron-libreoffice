@@ -29,8 +29,7 @@
       const picker = document.getElementById("el-picker");
       const embed = document.getElementById("el-embed");
 
-      const { office } = embed;
-      office.on("status_indicator_set_value", (x) => {
+      libreoffice.on("status_indicator_set_value", (x) => {
         console.log(x);
       });
 
@@ -39,7 +38,7 @@
           const uri = encodeURI(
             "file:///" + picker.files[0].path.replace(/\\/g, "/")
           );
-          const doc = office.loadDocument(uri);
+          const doc = libreoffice.loadDocument(uri);
           doc.on("ready", (x) => {
             console.log(x);
           });

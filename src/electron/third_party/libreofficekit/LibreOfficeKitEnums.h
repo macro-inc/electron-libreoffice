@@ -1006,9 +1006,10 @@ static inline const char* lokCallbackTypeToString(int nType) {
       return "LOK_CALLBACK_PRINT_RANGES";
     case LOK_CALLBACK_FONTS_MISSING:
       return "LOK_CALLBACK_FONTS_MISSING";
+    default:
+      return "LOK_CALLBACK_UNKNOWN";
   }
 
-  assert(!"Unknown LibreOfficeKitCallbackType type.");
   return nullptr;
 }
 #endif

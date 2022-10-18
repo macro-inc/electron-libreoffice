@@ -14,9 +14,11 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "cc/paint/paint_image.h"
 #include "include/core/SkImage.h"
+#include "office/document_client.h"
 #include "office/event_bus.h"
 #include "office/office_client.h"
 #include "pdf/paint_manager.h"
@@ -35,16 +37,6 @@
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 #include "v8/include/v8-value.h"
-#include "v8/include/v8.h"
-
-// prevent circular include
-#ifndef OFFICE_OFFICE_WEB_PLUGIN_DEFINED
-#define OFFICE_OFFICE_WEB_PLUGIN_DEFINED
-namespace electron {
-class OfficeWebPlugin;
-}
-#include "office/document_client.h"
-#endif
 
 namespace content {
 class RenderFrame;
@@ -163,6 +155,7 @@ class OfficeWebPlugin : public blink::WebPlugin,
 
   void Invalidate(const gfx::Rect& rect);
   void TriggerFullRerender();
+  base::WeakPtr<OfficeWebPlugin> GetWeakPtr();
 
  private:
   // call `Destroy()` instead.
@@ -227,7 +220,10 @@ class OfficeWebPlugin : public blink::WebPlugin,
   void UpdateScroll(const gfx::PointF& scroll_position);
 
   // prepares the embed as the document client's mounted viewer
-  void RenderDocument(v8::Isolate* isolate, office::DocumentClient* client);
+  bool RenderDocument(v8::Isolate* isolate,
+                      gin::Handle<office::DocumentClient> client);
+
+  void HandleInvalidateTiles(std::string payload);
 
   // owns this class
   blink::WebPluginContainer* container_;
@@ -290,6 +286,8 @@ class OfficeWebPlugin : public blink::WebPlugin,
   // process of zooming the plugin so that flickering doesn't occur while
   // zooming.
   bool stop_scrolling_ = false;
+
+  LibreOfficeKitTileMode tile_mode_;
   // }
 
   // UI State {
@@ -316,13 +314,16 @@ class OfficeWebPlugin : public blink::WebPlugin,
   */
 
   // owned by
-  content::RenderFrame* render_frame_;
-  lok::Office* office_;
-  office::OfficeClient* office_client_;
+  content::RenderFrame* render_frame_ = nullptr;
+  lok::Office* office_ = nullptr;
+  office::OfficeClient* office_client_ = nullptr;
 
   // maybe has a
+  lok::Document* document_ = nullptr;
   office::DocumentClient* document_client_ = nullptr;
   int view_id_ = -1;
+
+  scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
   // invalidates when destroy() is called
   base::WeakPtrFactory<OfficeWebPlugin> weak_factory_{this};

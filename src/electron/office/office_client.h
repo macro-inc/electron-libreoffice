@@ -24,10 +24,20 @@ namespace electron::office {
 
 class OfficeClient : public gin::Wrappable<OfficeClient> {
  public:
+  static constexpr char kGlobalEntry[] = "libreoffice";
+
   static OfficeClient* GetInstance();
-  static void HandleLOKCallback(int type,
-                                const char* payload,
-                                void* office_client);
+  static void HandleLibreOfficeCallback(int type,
+                                        const char* payload,
+                                        void* office_client);
+  static void HandleDocumentCallback(int type,
+                                     const char* payload,
+                                     void* document);
+  void HandleDocumentEvent(lok::Document* document,
+                           LibreOfficeKitCallbackType type,
+                           EventBus::EventCallback callback);
+  static gin::Handle<OfficeClient> GetHandle(v8::Isolate* isolate);
+  static bool IsValid();
 
   // disable copy
   OfficeClient(const OfficeClient&) = delete;
@@ -55,18 +65,17 @@ class OfficeClient : public gin::Wrappable<OfficeClient> {
   OfficeClient();
   ~OfficeClient() override;
 
-  void EmitLOKEvent(int type, const char* payload);
+  void EmitLibreOfficeEvent(int type, const char* payload);
 
   friend struct base::DefaultSingletonTraits<OfficeClient>;
 
-  lok::Office* office_;
+  lok::Office* office_ = nullptr;
   std::unordered_map<std::string, lok::Document*> document_map_;
   std::unordered_set<lok::Document*> documents_mounted_;
-  scoped_refptr<base::SequencedTaskRunner> task_runner_;
-  EventBus event_bus_;
+  std::unordered_map<lok::Document*, EventBus*> document_event_router_;
 
-  // invalidates when destroy() is called
-  base::WeakPtrFactory<OfficeClient> weak_factory_{this};
+  scoped_refptr<base::SequencedTaskRunner> task_runner_ = nullptr;
+  EventBus event_bus_;
 };
 
 }  // namespace electron::office

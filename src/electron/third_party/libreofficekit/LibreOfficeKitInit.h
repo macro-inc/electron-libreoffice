@@ -191,7 +191,10 @@ static void* lok_dlopen(const char* install_path, char** _imp_lib) {
     return NULL;
 
   if (stat(install_path, &dir_st) != 0) {
-    fprintf(stderr, "installation path \"%s\" does not exist\n", install_path);
+    fprintf(
+        stderr,
+        "unable to access \"%s\": the renderer may be running in a sandbox\n",
+        install_path);
     return NULL;
   }
 

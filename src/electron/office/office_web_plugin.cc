@@ -8,10 +8,14 @@
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/task/thread_pool.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_image.h"
@@ -24,6 +28,7 @@
 #include "include/core/SkColor.h"
 #include "include/core/SkFontStyle.h"
 #include "include/core/SkTextBlob.h"
+#include "office/document_client.h"
 #include "office/event_bus.h"
 #include "office/lok_callback.h"
 #include "office/office_client.h"
@@ -69,10 +74,16 @@ blink::WebPlugin* CreateInternalPlugin(blink::WebPluginParams params,
 using Modifiers = blink::WebInputEvent::Modifiers;
 
 OfficeWebPlugin::OfficeWebPlugin(blink::WebPluginParams params,
-                                 content::RenderFrame* render_frame) {
+                                 content::RenderFrame* render_frame)
+    : render_frame_(render_frame),
+      task_runner_(render_frame->GetTaskRunner(
+          blink::TaskType::kInternalMediaRealTime)) {
   office_client_ = office::OfficeClient::GetInstance();
   office_ = office_client_->GetOffice();
-  render_frame_ = render_frame;
+
+  // auto* frame = render_frame->GetWebFrame();
+  // v8::Local<v8::Context> main_context = frame->MainWorldScriptContext();
+  // v8::Isolate* isolate = main_context->GetIsolate();
 };
 
 // blink::WebPlugin {
@@ -87,14 +98,15 @@ void OfficeWebPlugin::Destroy() {
   if (container_) {
     // TODO: release client container value
   }
+  if (document_client_) {
+    document_client_->Unmount();
+  }
   delete this;
 }
 
 v8::Local<v8::Object> OfficeWebPlugin::V8ScriptableObject(
     v8::Isolate* isolate) {
   gin_helper::Dictionary dict = gin::Dictionary::CreateEmpty(isolate);
-  dict.SetReadOnlyNonConfigurable("office",
-                                  gin::CreateHandle(isolate, office_client_));
   dict.SetMethod("renderDocument",
                  base::BindRepeating(&OfficeWebPlugin::RenderDocument,
                                      weak_factory_.GetWeakPtr()));
@@ -221,7 +233,7 @@ blink::WebInputEventResult OfficeWebPlugin::HandleInputEvent(
 
 bool OfficeWebPlugin::HandleKeyEvent(const blink::WebKeyboardEvent event,
                                      ui::Cursor* cursor) {
-  if (!document_client_ || view_id_ == -1)
+  if (!document_ || view_id_ == -1)
     return false;
 
   // only handle provided key events
@@ -245,13 +257,16 @@ bool OfficeWebPlugin::HandleKeyEvent(const blink::WebKeyboardEvent event,
   int lok_key_code =
       office::DOMKeyCodeToLOKKeyCode(event.dom_code, event.GetModifiers());
 
-  document_client_->GetDocument()->setView(view_id_);
-  document_client_->GetDocument()->postKeyEvent(
-      event.GetType() == blink::WebInputEvent::Type::kKeyUp
-          ? LOK_KEYEVENT_KEYUP
-          : LOK_KEYEVENT_KEYINPUT,
-      event.text[0], lok_key_code);
-
+  task_runner_->PostTask(FROM_HERE,
+                         base::BindOnce(&lok::Document::setView,
+                                        base::Unretained(document_), view_id_));
+  task_runner_->PostTask(
+      FROM_HERE,
+      base::BindOnce(&lok::Document::postKeyEvent, base::Unretained(document_),
+                     event.GetType() == blink::WebInputEvent::Type::kKeyUp
+                         ? LOK_KEYEVENT_KEYUP
+                         : LOK_KEYEVENT_KEYINPUT,
+                     event.text[0], lok_key_code));
   needs_reraster_ = true;
 
   return true;
@@ -262,7 +277,7 @@ bool OfficeWebPlugin::HandleMouseEvent(blink::WebInputEvent::Type type,
                                        int modifiers,
                                        int clickCount,
                                        ui::Cursor* cursor) {
-  if (!document_client_ || view_id_ == -1)
+  if (!document_ || view_id_ == -1)
     return false;
 
   LibreOfficeKitMouseEventType event_type;
@@ -282,7 +297,7 @@ bool OfficeWebPlugin::HandleMouseEvent(blink::WebInputEvent::Type type,
 
   // TODO: handle offsets
   gfx::Point pos = gfx::ToRoundedPoint(
-      gfx::ScalePoint(position, office::lok_callback::TWIP_PER_PX));
+      gfx::ScalePoint(position, office::lok_callback::kTwipPerPx));
 
   // allow focus even if not in area
   if (!available_area_twips_.Contains(pos)) {
@@ -298,9 +313,8 @@ bool OfficeWebPlugin::HandleMouseEvent(blink::WebInputEvent::Type type,
     buttons |= 4;
 
   if (buttons > 0) {
-    document_client_->GetDocument()->postMouseEvent(
-        event_type, pos.x(), pos.y(), clickCount, buttons,
-        office::EventModifiersToLOKModifiers(modifiers));
+    document_->postMouseEvent(event_type, pos.x(), pos.y(), clickCount, buttons,
+                              office::EventModifiersToLOKModifiers(modifiers));
     return true;
   }
 
@@ -386,23 +400,25 @@ void OfficeWebPlugin::DoPaint(const std::vector<gfx::Rect>& paint_rects,
       continue;
 
     // Paint the rendering of the document.
-    gfx::Rect pdf_rect = gfx::IntersectRects(rect, available_area_);
-    if (!pdf_rect.IsEmpty()) {
-      pdf_rect.Offset(-available_area_.x(), 0);
+    gfx::Rect dirty_rect = gfx::IntersectRects(rect, available_area_);
+    if (!dirty_rect.IsEmpty()) {
+      dirty_rect.Offset(-available_area_.x(), 0);
 
-      std::vector<gfx::Rect> pdf_ready;
-      std::vector<gfx::Rect> pdf_pending;
-      document_client_->Paint(pdf_rect, image_data_, pdf_ready, pdf_pending);
-      for (gfx::Rect& ready_rect : pdf_ready) {
+      std::vector<gfx::Rect> callback_ready;
+      std::vector<gfx::Rect> callback_pending;
+      document_client_->Paint(dirty_rect, image_data_, callback_ready,
+                              callback_pending);
+      for (gfx::Rect& ready_rect : callback_ready) {
         ready_rect.Offset(available_area_.OffsetFromOrigin());
         ready_rects.push_back(ready_rect);
       }
-      for (gfx::Rect& pending_rect : pdf_pending) {
+      for (gfx::Rect& pending_rect : callback_pending) {
         pending_rect.Offset(available_area_.OffsetFromOrigin());
         pending.push_back(pending_rect);
       }
     }
 
+    // TODO: this is probably wrong
     // Ensure the background parts are filled.
     for (const BackgroundPart& background_part : background_parts_) {
       gfx::Rect intersection =
@@ -454,8 +470,6 @@ void OfficeWebPlugin::RecalculateAreas(double old_zoom,
   available_area_ = gfx::Rect(plugin_rect_.size());
   int doc_width = GetDocumentPixelWidth();
   if (doc_width < available_area_.width()) {
-    // Center the document horizontally inside the plugin rectangle.
-    // available_area_.Offset((plugin_rect_.width() - doc_width) / 2, 0);
     available_area_.set_width(doc_width);
   }
 
@@ -466,7 +480,7 @@ void OfficeWebPlugin::RecalculateAreas(double old_zoom,
     available_area_.set_height(bottom_of_document);
 
   available_area_twips_ = gfx::ScaleToEnclosingRect(
-      available_area_, office::lok_callback::TWIP_PER_PX);
+      available_area_, office::lok_callback::kTwipPerPx);
 
   CalculateBackgroundParts();
 
@@ -520,13 +534,17 @@ void OfficeWebPlugin::InvalidateAfterPaintDone() {
 
 void OfficeWebPlugin::Invalidate(const gfx::Rect& rect) {
   if (in_paint_) {
-    LOG(ERROR) << "IN PAINT!";
     deferred_invalidates_.push_back(rect);
     return;
   }
 
   gfx::Rect offset_rect = rect + available_area_.OffsetFromOrigin();
-  paint_manager_.InvalidateRect(offset_rect);
+
+  // paint manager aborts outside of a valid task runner
+  task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&chrome_pdf::PaintManager::InvalidateRect,
+                                base::Unretained(&paint_manager_),
+                                std::move(offset_rect)));
 }
 
 void OfficeWebPlugin::ClearDeferredInvalidates() {
@@ -611,15 +629,47 @@ void OfficeWebPlugin::OnViewportChanged(
   OnGeometryChanged(zoom_, old_device_scale);
 }
 
-void OfficeWebPlugin::RenderDocument(v8::Isolate* isolate,
-                                     office::DocumentClient* client) {
-  if (!client) {
+void OfficeWebPlugin::HandleInvalidateTiles(std::string payload) {
+  // not mounted
+  if (view_id_ == -1)
+    return;
+
+  std::string_view payload_sv(payload);
+  std::string_view::const_iterator start = payload_sv.begin();
+  gfx::Rect dirty_rect =
+      office::lok_callback::ParseRect(start, payload_sv.end());
+  if (payload_sv == "EMPTY") {
+    TriggerFullRerender();
+  } else if (!dirty_rect.IsEmpty()) {
+    Invalidate(gfx::ScaleToEnclosingRect(
+        dirty_rect, 1.0f / office::lok_callback::kTwipPerPx));
+  }
+}
+
+bool OfficeWebPlugin::RenderDocument(
+    v8::Isolate* isolate,
+    gin::Handle<office::DocumentClient> client) {
+  if (client.IsEmpty()) {
     LOG(ERROR) << "invalid document client";
+    return true;
   }
 
-  document_client_ = client;
+  document_ = client->GetDocument();
+  document_client_ = client.get();
+  view_id_ = client->Mount(isolate);
 
-  view_id_ = document_client_->Mount(this);
+  document_->setViewLanguage(view_id_, "en-US");
+  document_->setView(view_id_);
+  document_->resetSelection();
+
+  office::OfficeClient* office = office::OfficeClient::GetInstance();
+  office->HandleDocumentEvent(
+      document_, LOK_CALLBACK_INVALIDATE_TILES,
+      base::BindRepeating(&OfficeWebPlugin::HandleInvalidateTiles,
+                          base::Unretained(this)));
+
+  TriggerFullRerender();
+  return true;
 }
 
 void OfficeWebPlugin::TriggerFullRerender() {
@@ -627,9 +677,11 @@ void OfficeWebPlugin::TriggerFullRerender() {
   OnGeometryChanged(zoom_, device_scale_);
   if (document_client_ && !document_client_->DocumentSizePx().IsEmpty()) {
     paint_manager_.InvalidateRect(gfx::Rect(plugin_rect_.size()));
-    LOG(ERROR) << "INVALIDATING RECT ON FULL RERENDER: "
-               << plugin_rect_.ToString();
   }
+}
+
+base::WeakPtr<OfficeWebPlugin> OfficeWebPlugin::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
 }
 
 // } blink::WebPlugin

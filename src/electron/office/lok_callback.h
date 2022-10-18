@@ -32,7 +32,7 @@ std::vector<gfx::Rect> ParseMultipleRects(
     std::string_view::const_iterator end,
     size_t size);
 
-std::pair<std::string, std::string> ParseStatusChange(const char* payload);
+std::pair<std::string, std::string> ParseStatusChange(std::string payload);
 
 v8::Local<v8::Value> ParseJSON(v8::Isolate* isolate,
                                v8::Local<v8::String> json);
@@ -40,13 +40,13 @@ v8::Local<v8::Value> PayloadToLocalValue(v8::Isolate* isolate,
                                          int type,
                                          const char* payload);
 
-constexpr float TWIP_PER_PX = 15.0f;
+constexpr float kTwipPerPx = 15.0f;
 inline float PixelToTwip(float in, float zoom) {
-  return in / zoom * TWIP_PER_PX;
+  return in / zoom * kTwipPerPx;
 }
 
 inline float TwipToPixel(float in, float zoom) {
-  return in / TWIP_PER_PX * zoom;
+  return in / kTwipPerPx * zoom;
 }
 
 }  // namespace electron::office::lok_callback

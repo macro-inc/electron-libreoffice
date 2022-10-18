@@ -54,9 +54,8 @@ void EventBus::On(const std::string& event_name,
 
   event_listeners_.try_emplace(event_name, std::vector<PersistedFn>());
 
-  auto itr = event_listeners_.find(event_name);
   PersistedFn persisted(listener_callback->GetIsolate(), listener_callback);
-  itr->second.push_back(persisted);
+  event_listeners_[event_name].push_back(persisted);
 }
 
 void EventBus::Off(const std::string& event_name,
@@ -67,6 +66,10 @@ void EventBus::Off(const std::string& event_name,
 
   auto& vec = itr->second;
   vec.erase(std::remove(vec.begin(), vec.end(), listener_callback), vec.end());
+}
+
+void EventBus::Handle(LibreOfficeKitCallbackType type, EventCallback callback) {
+  internal_event_listeners_[type].emplace_back(callback);
 }
 
 void EventBus::Emit(const std::string& event_name, v8::Local<v8::Value> data) {
@@ -94,27 +97,18 @@ void EventBus::Emit(const std::string& event_name, v8::Local<v8::Value> data) {
   }
 }
 
-void EventBus::EmitLOKEvent(int type,
-                            const char* payload,
-                            OfficeClient* source) {
-  std::string type_string = lok_callback::TypeToEventString(type);
-  if (event_listeners_.find(type_string) == event_listeners_.end())
-    return;
+void EventBus::EmitLibreOfficeEvent(int type, std::string payload) {
+  LibreOfficeKitCallbackType type_enum =
+      static_cast<LibreOfficeKitCallbackType>(type);
+  // handle internal events first
+  auto internal = internal_event_listeners_.find(type_enum);
+  if (internal != internal_event_listeners_.end() &&
+      !internal->second.empty()) {
+    for (EventCallback& callback : internal->second) {
+      callback.Run(payload);
+    }
+  }
 
-  // TODO: Is there a better way of getting the isolate?
-  v8::Isolate* isolate = blink::MainThreadIsolate();
-  gin_helper::Dictionary dict = gin::Dictionary::CreateEmpty(isolate);
-  dict.Set("source", source);
-  dict.Set("type", type_string);
-  dict.Set("payload",
-           lok_callback::PayloadToLocalValue(isolate, type, payload));
-
-  Emit(type_string, dict.GetHandle());
-}
-
-void EventBus::EmitLOKEvent(int type,
-                            std::string payload,
-                            DocumentClient* source) {
   std::string type_string = lok_callback::TypeToEventString(type);
   if (event_listeners_.find(type_string) == event_listeners_.end())
     return;
@@ -130,7 +124,6 @@ void EventBus::EmitLOKEvent(int type,
   v8::Context::Scope context_scope(context);
 
   gin_helper::Dictionary dict = gin::Dictionary::CreateEmpty(isolate);
-  dict.Set("source", source);
   dict.Set("type", type_string);
   dict.Set("payload",
            lok_callback::PayloadToLocalValue(isolate, type, payload.c_str()));
@@ -146,11 +139,11 @@ gin::ObjectTemplateBuilder EventBus::Extend(
     gin::ObjectTemplateBuilder builder) {
   return builder
       .SetMethod("on",
-                 base::BindRepeating(&EventBus::On, weak_factory_.GetWeakPtr()))
-      .SetMethod("off", base::BindRepeating(&EventBus::Off,
-                                            weak_factory_.GetWeakPtr()))
-      .SetMethod("emit", base::BindRepeating(&EventBus::Emit,
-                                             weak_factory_.GetWeakPtr()));
+                 base::BindRepeating(&EventBus::On, base::Unretained(this)))
+      .SetMethod("off",
+                 base::BindRepeating(&EventBus::Off, base::Unretained(this)))
+      .SetMethod("emit",
+                 base::BindRepeating(&EventBus::Emit, base::Unretained(this)));
 }
 
 }  // namespace electron::office
