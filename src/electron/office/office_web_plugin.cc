@@ -109,7 +109,7 @@ v8::Local<v8::Object> OfficeWebPlugin::V8ScriptableObject(
   gin_helper::Dictionary dict = gin::Dictionary::CreateEmpty(isolate);
   dict.SetMethod("renderDocument",
                  base::BindRepeating(&OfficeWebPlugin::RenderDocument,
-                                     weak_factory_.GetWeakPtr()));
+                                     base::Unretained(this)));
   return dict.GetHandle();
 }
 
@@ -651,7 +651,7 @@ bool OfficeWebPlugin::RenderDocument(
     gin::Handle<office::DocumentClient> client) {
   if (client.IsEmpty()) {
     LOG(ERROR) << "invalid document client";
-    return true;
+    return false;
   }
 
   document_ = client->GetDocument();
