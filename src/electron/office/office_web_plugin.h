@@ -20,6 +20,7 @@
 #include "include/core/SkImage.h"
 #include "office/document_client.h"
 #include "office/event_bus.h"
+#include "office/lok_tilebuffer.h"
 #include "office/office_client.h"
 #include "pdf/paint_manager.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
@@ -223,7 +224,10 @@ class OfficeWebPlugin : public blink::WebPlugin,
   bool RenderDocument(v8::Isolate* isolate,
                       gin::Handle<office::DocumentClient> client);
 
+  // LOK event handlers {
   void HandleInvalidateTiles(std::string payload);
+  void HandleDocumentSizeChanged(std::string payload);
+  // }
 
   // owns this class
   blink::WebPluginContainer* container_;
@@ -322,6 +326,8 @@ class OfficeWebPlugin : public blink::WebPlugin,
   lok::Document* document_ = nullptr;
   office::DocumentClient* document_client_ = nullptr;
   int view_id_ = -1;
+
+  std::vector<office::TileBuffer> part_tile_buffer_;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 

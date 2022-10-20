@@ -31,6 +31,8 @@ source_set("internal") {
     "document_client.h",
     "event_bus.cc",
     "event_bus.h",
+    "lok_tilebuffer.cc",
+    "lok_tilebuffer.h",
     "lok_callback.cc",
     "lok_callback.h",
     "office_client.cc",

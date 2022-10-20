@@ -73,12 +73,6 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   // Plugin Engine {
   void PageOffsetUpdated(const gfx::Vector2d& page_offset);
   void PluginSizeUpdated(const gfx::Size& size);
-  void PrePaint();
-  void Paint(const gfx::Rect& rect,
-             SkBitmap& image_data,
-             std::vector<gfx::Rect>& ready,
-             std::vector<gfx::Rect>& pending);
-  void PostPaint();
   int GetNumberOfPages() const;
   gfx::Rect GetPageScreenRect(int page_index) const;
   void ZoomUpdated(double new_zoom_level);

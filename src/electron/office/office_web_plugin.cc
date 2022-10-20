@@ -388,9 +388,11 @@ void OfficeWebPlugin::DoPaint(const std::vector<gfx::Rect>& paint_rects,
   if (!needs_reraster_)
     return;
 
-  document_client_->PrePaint();
+  DCHECK(document_);
+  document_->setView(view_id_);
 
   std::vector<gfx::Rect> ready_rects;
+  SkCanvas canvas(image_data_);
   for (const gfx::Rect& paint_rect : paint_rects) {
     // Intersect with plugin area since there could be pending invalidates from
     // when the plugin area was larger.
@@ -406,8 +408,11 @@ void OfficeWebPlugin::DoPaint(const std::vector<gfx::Rect>& paint_rects,
 
       std::vector<gfx::Rect> callback_ready;
       std::vector<gfx::Rect> callback_pending;
-      document_client_->Paint(dirty_rect, image_data_, callback_ready,
-                              callback_pending);
+
+      // TODO: handle current part for non-text documents
+      part_tile_buffer_.at(0).PaintInvalidTiles(
+          canvas, std::move(gfx::RectF(dirty_rect)));
+      callback_ready.emplace_back(dirty_rect);
       for (gfx::Rect& ready_rect : callback_ready) {
         ready_rect.Offset(available_area_.OffsetFromOrigin());
         ready_rects.push_back(ready_rect);
@@ -430,8 +435,6 @@ void OfficeWebPlugin::DoPaint(const std::vector<gfx::Rect>& paint_rects,
       }
     }
   }
-
-  document_client_->PostPaint();
 
   // TODO(crbug.com/1263614): Write pixels directly to the `SkSurface` in
   // `PaintManager`, rather than using an intermediate `SkBitmap` and `SkImage`.
@@ -638,11 +641,28 @@ void OfficeWebPlugin::HandleInvalidateTiles(std::string payload) {
   std::string_view::const_iterator start = payload_sv.begin();
   gfx::Rect dirty_rect =
       office::lok_callback::ParseRect(start, payload_sv.end());
+
+  // TODO: handle non-text document types for parts
   if (payload_sv == "EMPTY") {
+    part_tile_buffer_.at(0).InvalidateAllTiles();
     TriggerFullRerender();
   } else if (!dirty_rect.IsEmpty()) {
+    part_tile_buffer_.at(0).InvalidateTilesInTwipRect(dirty_rect);
     Invalidate(gfx::ScaleToEnclosingRect(
         dirty_rect, 1.0f / office::lok_callback::kTwipPerPx));
+  }
+}
+
+void OfficeWebPlugin::HandleDocumentSizeChanged(std::string payload) {
+  // todo: handle scale/zoom
+  part_tile_buffer_.clear();
+  // there is only one tile buffer for text documents
+  if (document_->getDocumentType() == LOK_DOCTYPE_TEXT) {
+    part_tile_buffer_.emplace_back(document_);
+  } else {
+    int parts = document_->getParts();
+    for (int part = 0; part < parts; ++part)
+      part_tile_buffer_.emplace_back(document_, part);
   }
 }
 
@@ -657,6 +677,7 @@ bool OfficeWebPlugin::RenderDocument(
   document_ = client->GetDocument();
   document_client_ = client.get();
   view_id_ = client->Mount(isolate);
+  part_tile_buffer_.emplace_back(document_);
 
   document_->setViewLanguage(view_id_, "en-US");
   document_->setView(view_id_);
@@ -667,6 +688,10 @@ bool OfficeWebPlugin::RenderDocument(
       document_, LOK_CALLBACK_INVALIDATE_TILES,
       base::BindRepeating(&OfficeWebPlugin::HandleInvalidateTiles,
                           base::Unretained(this)));
+  office->HandleDocumentEvent(
+      document_, LOK_CALLBACK_DOCUMENT_SIZE_CHANGED,
+      base::BindRepeating(&OfficeWebPlugin::HandleDocumentSizeChanged,
+                          base::Unretained(this)));
 
   TriggerFullRerender();
   return true;
@@ -676,7 +701,10 @@ void OfficeWebPlugin::TriggerFullRerender() {
   needs_reraster_ = true;
   OnGeometryChanged(zoom_, device_scale_);
   if (document_client_ && !document_client_->DocumentSizePx().IsEmpty()) {
-    paint_manager_.InvalidateRect(gfx::Rect(plugin_rect_.size()));
+    task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&chrome_pdf::PaintManager::InvalidateRect,
+                                  base::Unretained(&paint_manager_),
+                                  gfx::Rect(plugin_rect_.size())));
   }
 }
 
@@ -685,9 +713,5 @@ base::WeakPtr<OfficeWebPlugin> OfficeWebPlugin::GetWeakPtr() {
 }
 
 // } blink::WebPlugin
-
-namespace {}  // namespace
-
-// OfficeWebPlugin::~OfficeWebPlugin() = default;
 
 }  // namespace electron
