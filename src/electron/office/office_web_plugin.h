@@ -204,10 +204,9 @@ class OfficeWebPlugin : public blink::WebPlugin,
   // aren't painted by the PDF engine).
   void CalculateBackgroundParts();
 
-  // Computes document width/height in device pixels, based on current zoom and
-  // device scale
-  int GetDocumentPixelWidth() const;
-  int GetDocumentPixelHeight() const;
+  // Computes document width/height in device pixels, based on current browser
+  // zoom and device scale
+  gfx::Size GetDocumentPixelSize() const;
 
   // Schedules invalidation tasks after painting finishes.
   void InvalidateAfterPaintDone();
@@ -218,11 +217,14 @@ class OfficeWebPlugin : public blink::WebPlugin,
   void UpdateScaledValues();
   void OnViewportChanged(const gfx::Rect& plugin_rect_in_css_pixel,
                          float new_device_scale);
+
+  // Exposed methods {
   void UpdateScroll(const gfx::PointF& scroll_position);
 
   // prepares the embed as the document client's mounted viewer
   bool RenderDocument(v8::Isolate* isolate,
                       gin::Handle<office::DocumentClient> client);
+  // }
 
   // LOK event handlers {
   void HandleInvalidateTiles(std::string payload);
@@ -269,7 +271,7 @@ class OfficeWebPlugin : public blink::WebPlugin,
   // currently painting, to track deferred invalidates
   bool in_paint_ = false;
   // True if last bitmap was smaller than the screen.
-  bool last_bitmap_smaller_ = false;
+  // bool last_bitmap_smaller_ = false;
   // True if we request a new bitmap rendering.
   bool needs_reraster_ = true;
   struct BackgroundPart {
@@ -282,16 +284,16 @@ class OfficeWebPlugin : public blink::WebPlugin,
   // The UI direction.
   // base::i18n::TextDirection ui_direction_ = base::i18n::UNKNOWN_DIRECTION;
 
-  // The scroll offset for the last raster in CSS pixels, before any
+  // The scroll position for the last raster in CSS pixels, before any
   // transformations are applied.
-  gfx::Vector2dF scroll_offset_at_last_raster_;
+  gfx::PointF scroll_position_at_last_raster_;
+  // The scroll position in CSS pixels, before any transformations are applied.
+  gfx::PointF scroll_position_;
   // If this is true, then don't scroll the plugin in response to calls to
   // `UpdateScroll()`. This will be true when the extension page is in the
   // process of zooming the plugin so that flickering doesn't occur while
   // zooming.
   bool stop_scrolling_ = false;
-
-  LibreOfficeKitTileMode tile_mode_;
   // }
 
   // UI State {
@@ -300,22 +302,6 @@ class OfficeWebPlugin : public blink::WebPlugin,
   bool has_focus_;
   std::vector<gfx::Rect> paint_points_;
   // }
-  /*
-
-  // Text Handle State {
-  gfx::Rect handle_start_rect_;
-  gfx::Rect handle_middle_rect_;
-  gfx::Rect handle_end_rect_;
-  bool in_drag_start_handle_;
-  bool in_drag_middle_handle_;
-  bool in_drag_end_handle_;
-  // }
-
-  // 8-point Graphic Handle State {
-  gfx::Rect graphic_handle_rects_[8];
-  gfx::Rect in_drag_graphic_handles_[8];
-  // }
-  */
 
   // owned by
   content::RenderFrame* render_frame_ = nullptr;

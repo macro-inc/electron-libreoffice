@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
@@ -59,11 +60,12 @@ void OfficeClient::HandleDocumentCallback(int type,
       client->document_event_router_[static_cast<lok::Document*>(document)];
   DCHECK(event_router);
 
-  client->task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&EventBus::EmitLibreOfficeEvent,
-                     base::Unretained(event_router), type,
-                     payload ? std::string(payload) : std::string()));
+  if (client->renderer_task_runner_)
+    client->renderer_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&EventBus::EmitLibreOfficeEvent,
+                       base::Unretained(event_router), type,
+                       payload ? std::string(payload) : std::string()));
 }
 
 void OfficeClient::HandleDocumentEvent(lok::Document* document,
@@ -75,7 +77,13 @@ void OfficeClient::HandleDocumentEvent(lok::Document* document,
 }
 
 gin::Handle<OfficeClient> OfficeClient::GetHandle(v8::Isolate* isolate) {
-  return gin::CreateHandle(isolate, GetInstance());
+  // TODO: this should probably be per-isolate data, or at least the runner
+  // should be passed to the document callback
+  OfficeClient* inst = GetInstance();
+  inst->event_bus_.SetContext(isolate, isolate->GetCurrentContext());
+  inst->renderer_task_runner_ = base::SequencedTaskRunnerHandle::Get();
+
+  return gin::CreateHandle(isolate, inst);
 }
 
 // instance

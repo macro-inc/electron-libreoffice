@@ -4,6 +4,7 @@
 
 #include "office/document_client.h"
 
+#include <iterator>
 #include <string_view>
 #include <vector>
 #include "base/bind.h"
@@ -23,11 +24,17 @@
 #include "office/event_bus.h"
 #include "office/lok_callback.h"
 #include "office/office_client.h"
+#include "shell/common/gin_converters/gfx_converter.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/libreofficekit/LibreOfficeKitEnums.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_f.h"
+#include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/size_conversions.h"
+#include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "v8/include/v8-container.h"
 #include "v8/include/v8-context.h"
@@ -75,6 +82,9 @@ gin::ObjectTemplateBuilder DocumentClient::GetObjectTemplateBuilder(
   return event_bus_
       ->Extend(gin::ObjectTemplateBuilder(isolate, GetTypeName(),
                                           constructor->InstanceTemplate()))
+      .SetMethod("twipToPx", &DocumentClient::TwipToPx)
+      .SetLazyDataProperty("pageRects", &DocumentClient::PageRects)
+      .SetLazyDataProperty("size", &DocumentClient::Size)
       .SetLazyDataProperty("isReady", &DocumentClient::IsReady);
 }
 
@@ -82,8 +92,29 @@ const char* DocumentClient::GetTypeName() {
   return "DocumentClient";
 }
 
-bool DocumentClient::IsReady() {
+bool DocumentClient::IsReady() const {
   return is_ready_;
+}
+
+std::vector<gfx::Rect> DocumentClient::PageRects() const {
+  std::vector<gfx::Rect> result;
+  float zoom = zoom_;
+  std::transform(page_rects_.begin(), page_rects_.end(),
+                 std::back_inserter(result), [zoom](const gfx::Rect& rect) {
+                   float scale = zoom / lok_callback::kTwipPerPx;
+                   return gfx::Rect(
+                       gfx::ScaleToCeiledPoint(rect.origin(), scale),
+                       gfx::ScaleToCeiledSize(rect.size(), scale));
+                 });
+  return result;
+}
+
+gfx::Size DocumentClient::Size() const {
+  return gfx::ToCeiledSize(document_size_px_);
+}
+
+float DocumentClient::TwipToPx(float in) const {
+  return lok_callback::TwipToPixel(in, zoom_);
 }
 
 lok::Document* DocumentClient::GetDocument() {
@@ -107,6 +138,7 @@ int DocumentClient::Mount(v8::Isolate* isolate) {
     v8::HandleScope scope(isolate);
     v8::Local<v8::Value> wrapper;
     if (this->GetWrapper(isolate).ToLocal(&wrapper)) {
+      event_bus_->SetContext(isolate, isolate->GetCurrentContext());
       // prevent garbage collection
       mounted_.Reset(isolate, wrapper);
     }
@@ -174,7 +206,7 @@ gfx::Rect DocumentClient::GetPageScreenRect(int page_index) const {
 
   return page_rects_[page_index];
 }
-void DocumentClient::ZoomUpdated(double new_zoom_level) {}
+void DocumentClient::BrowserZoomUpdated(double new_zoom_level) {}
 //}
 
 // Editing State {

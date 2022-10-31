@@ -54,10 +54,13 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
       v8::Isolate* isolate) override;
   const char* GetTypeName() override;
 
-  gin::Handle<DocumentClient> GetHandle(v8::Isolate* isolate);
-
+  // Exposed to v8 {
   // Loaded and capable of receiving events
-  bool IsReady();
+  bool IsReady() const;
+  std::vector<gfx::Rect> PageRects() const;
+  gfx::Size Size() const;
+  float TwipToPx(float in) const;
+  // }
 
   lok::Document* GetDocument();
 
@@ -75,7 +78,7 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   void PluginSizeUpdated(const gfx::Size& size);
   int GetNumberOfPages() const;
   gfx::Rect GetPageScreenRect(int page_index) const;
-  void ZoomUpdated(double new_zoom_level);
+  void BrowserZoomUpdated(double new_zoom_level);
   // }
 
   // Editing State {

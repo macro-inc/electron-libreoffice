@@ -33,6 +33,7 @@
 #include "office/lok_callback.h"
 #include "office/office_client.h"
 #include "office/office_keys.h"
+#include "shell/common/gin_converters/gfx_converter.h"
 #include "shell/common/gin_helper/dictionary.h"
 #include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
@@ -53,6 +54,9 @@
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
+#include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/size_conversions.h"
+#include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/native_widget_types.h"
 #include "v8/include/v8-isolate.h"
@@ -110,6 +114,9 @@ v8::Local<v8::Object> OfficeWebPlugin::V8ScriptableObject(
   dict.SetMethod("renderDocument",
                  base::BindRepeating(&OfficeWebPlugin::RenderDocument,
                                      base::Unretained(this)));
+  dict.SetMethod("updateScroll",
+                 base::BindRepeating(&OfficeWebPlugin::UpdateScroll,
+                                     base::Unretained(this)));
   return dict.GetHandle();
 }
 
@@ -133,7 +140,7 @@ void OfficeWebPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
   // nothing drawn yet
   if (snapshot_.GetSkImageInfo().isEmpty()) {
     cc::PaintFlags flags;
-    flags.setBlendMode(SkBlendMode::kDst);
+    flags.setBlendMode(SkBlendMode::kSrc);
     flags.setColor(SK_ColorTRANSPARENT);
 
     canvas->drawRect(invalidate_rect, flags);
@@ -388,11 +395,17 @@ void OfficeWebPlugin::DoPaint(const std::vector<gfx::Rect>& paint_rects,
   if (!needs_reraster_)
     return;
 
+  scroll_position_at_last_raster_ = scroll_position_;
+
   DCHECK(document_);
   document_->setView(view_id_);
 
   std::vector<gfx::Rect> ready_rects;
   SkCanvas canvas(image_data_);
+  // LOK paint tiles are drawn in an absolute grid, whereas the canvas is drawn
+  // in a grid relative to the available area
+  canvas.translate(-scroll_position_.x(), -scroll_position_.y());
+
   for (const gfx::Rect& paint_rect : paint_rects) {
     // Intersect with plugin area since there could be pending invalidates from
     // when the plugin area was larger.
@@ -404,15 +417,19 @@ void OfficeWebPlugin::DoPaint(const std::vector<gfx::Rect>& paint_rects,
     // Paint the rendering of the document.
     gfx::Rect dirty_rect = gfx::IntersectRects(rect, available_area_);
     if (!dirty_rect.IsEmpty()) {
-      dirty_rect.Offset(-available_area_.x(), 0);
-
       std::vector<gfx::Rect> callback_ready;
       std::vector<gfx::Rect> callback_pending;
+      dirty_rect.Offset(-available_area_.x(), 0);
 
+      // pages have transparent gaps, so erase the dirty area
+      image_data_.erase(background_color_, gfx::RectToSkIRect(dirty_rect));
+      callback_ready.emplace_back(dirty_rect);
+
+      // pain the absolute rect to the tile buffer
+      dirty_rect.Offset(scroll_position_.x(), scroll_position_.y());
       // TODO: handle current part for non-text documents
       part_tile_buffer_.at(0).PaintInvalidTiles(
           canvas, std::move(gfx::RectF(dirty_rect)));
-      callback_ready.emplace_back(dirty_rect);
       for (gfx::Rect& ready_rect : callback_ready) {
         ready_rect.Offset(available_area_.OffsetFromOrigin());
         ready_rects.push_back(ready_rect);
@@ -468,17 +485,17 @@ void OfficeWebPlugin::RecalculateAreas(double old_zoom,
     return;
 
   if (zoom_ != old_zoom || device_scale_ != old_device_scale)
-    document_client_->ZoomUpdated(zoom_ * device_scale_);
+    document_client_->BrowserZoomUpdated(zoom_ * device_scale_);
 
   available_area_ = gfx::Rect(plugin_rect_.size());
-  int doc_width = GetDocumentPixelWidth();
-  if (doc_width < available_area_.width()) {
-    available_area_.set_width(doc_width);
+  gfx::Size doc_size = GetDocumentPixelSize();
+  if (doc_size.width() < available_area_.width()) {
+    available_area_.set_width(doc_size.width());
   }
 
   // The distance between top of the plugin and the bottom of the document in
   // pixels.
-  int bottom_of_document = GetDocumentPixelHeight();
+  int bottom_of_document = doc_size.height();
   if (bottom_of_document < plugin_rect_.height())
     available_area_.set_height(bottom_of_document);
 
@@ -514,16 +531,9 @@ void OfficeWebPlugin::CalculateBackgroundParts() {
     background_parts_.push_back(part);
 }
 
-int OfficeWebPlugin::GetDocumentPixelWidth() const {
-  return static_cast<int>(
-      std::ceil(document_client_->DocumentSizePx()
-                    .width()));  // * zoom_ * device_scale_));
-}
-
-int OfficeWebPlugin::GetDocumentPixelHeight() const {
-  return static_cast<int>(
-      std::ceil(document_client_->DocumentSizePx()
-                    .height()));  // * zoom_ * device_scale_));
+gfx::Size OfficeWebPlugin::GetDocumentPixelSize() const {
+  return gfx::ToCeiledSize(gfx::ScaleSize(document_client_->DocumentSizePx(),
+                                          zoom_ * device_scale_));
 }
 
 void OfficeWebPlugin::InvalidateAfterPaintDone() {
@@ -666,6 +676,33 @@ void OfficeWebPlugin::HandleDocumentSizeChanged(std::string payload) {
   }
 }
 
+void OfficeWebPlugin::UpdateScroll(const gfx::PointF& scroll_position) {
+  if (!document_client_ || stop_scrolling_)
+    return;
+
+  float max_x = std::max(
+      document_client_->DocumentSizePx().width() - plugin_dip_size_.width(),
+      0.0f);
+  float max_y = std::max(
+      document_client_->DocumentSizePx().height() - plugin_dip_size_.height(),
+      0.0f);
+
+  gfx::PointF scaled_scroll_position(
+      base::clamp(scroll_position.x(), 0.0f, max_x),
+      base::clamp(scroll_position.y(), 0.0f, max_y));
+  scaled_scroll_position.Scale(device_scale_);
+  scroll_position_ = scaled_scroll_position;
+
+  // needs_reraster_ = true;
+  // paint manager requires that the x and y axis are updated separately
+  gfx::Vector2d diff_x(
+      scroll_position_at_last_raster_.x() - scaled_scroll_position.x(), 0);
+  gfx::Vector2d diff_y(
+      0, scroll_position_at_last_raster_.y() - scaled_scroll_position.y());
+
+  paint_manager_.ScrollRect(available_area_, diff_y);
+}
+
 bool OfficeWebPlugin::RenderDocument(
     v8::Isolate* isolate,
     gin::Handle<office::DocumentClient> client) {
@@ -702,9 +739,11 @@ void OfficeWebPlugin::TriggerFullRerender() {
   OnGeometryChanged(zoom_, device_scale_);
   if (document_client_ && !document_client_->DocumentSizePx().IsEmpty()) {
     task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&chrome_pdf::PaintManager::InvalidateRect,
-                                  base::Unretained(&paint_manager_),
-                                  gfx::Rect(plugin_rect_.size())));
+        FROM_HERE,
+        base::BindOnce(
+            &chrome_pdf::PaintManager::InvalidateRect,
+            base::Unretained(&paint_manager_),
+            gfx::Rect(gfx::ToCeiledSize(document_client_->DocumentSizePx()))));
   }
 }
 

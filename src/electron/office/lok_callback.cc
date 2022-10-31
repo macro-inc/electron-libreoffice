@@ -250,6 +250,7 @@ std::string TypeToEventString(int type) {
 
 bool IsTypeJSON(int type) {
   switch (static_cast<LibreOfficeKitCallbackType>(type)) {
+    case LOK_CALLBACK_INVALIDATE_VISIBLE_CURSOR: // INVALIDATE_VISIBLE_CURSOR may also be CSV
     case LOK_CALLBACK_CURSOR_VISIBLE:
     case LOK_CALLBACK_VIEW_CURSOR_VISIBLE:
     case LOK_CALLBACK_GRAPHIC_SELECTION:
@@ -293,7 +294,7 @@ bool IsTypeJSON(int type) {
 /* Is comma-separated number values. A semi-colon indicates a new array */
 bool IsTypeCSV(int type) {
   switch (static_cast<LibreOfficeKitCallbackType>(type)) {
-    case LOK_CALLBACK_INVALIDATE_VISIBLE_CURSOR:
+    case LOK_CALLBACK_INVALIDATE_VISIBLE_CURSOR: // INVALIDATE_VISIBLE_CURSOR may also be JSON
     case LOK_CALLBACK_INVALIDATE_TILES:
     case LOK_CALLBACK_TEXT_SELECTION_START:
     case LOK_CALLBACK_TEXT_SELECTION_END:
@@ -403,7 +404,8 @@ v8::Local<v8::Value> PayloadToLocalValue(v8::Isolate* isolate,
     return GraphicSelectionPayloadToLocalValue(isolate, payload);
   }
 
-  if (IsTypeCSV(type)) {
+  // INVALIDATE_VISIBLE_CURSOR may also be JSON, so check if the payload starts with '{'
+  if (IsTypeCSV(type) && payload[0] != '{') {
     std::string_view payload_sv(payload);
     std::string_view::const_iterator start = payload_sv.begin();
     std::vector<uint64_t> result = ParseCSV(start, payload_sv.end());

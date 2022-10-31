@@ -20,11 +20,8 @@
       accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     />
 
-    <embed
-      id="el-embed"
-      type="application/x-libreoffice"
-      style="width: 100%; height: 100%"
-    />
+    <script src="wrapper.js"></script>
+    <office-doc id="el-embed" />
     <script>
       const picker = document.getElementById("el-picker");
       const embed = document.getElementById("el-embed");

@@ -55,7 +55,7 @@ void EventBus::On(const std::string& event_name,
   event_listeners_.try_emplace(event_name, std::vector<PersistedFn>());
 
   PersistedFn persisted(listener_callback->GetIsolate(), listener_callback);
-  event_listeners_[event_name].push_back(persisted);
+  event_listeners_[event_name].emplace_back(std::move(persisted));
 }
 
 void EventBus::Off(const std::string& event_name,
@@ -73,6 +73,9 @@ void EventBus::Handle(LibreOfficeKitCallbackType type, EventCallback callback) {
 }
 
 void EventBus::Emit(const std::string& event_name, v8::Local<v8::Value> data) {
+  if (context_.IsEmpty())
+    return;
+
   auto itr = event_listeners_.find(event_name);
   if (itr == event_listeners_.end())
     return;
@@ -82,18 +85,17 @@ void EventBus::Emit(const std::string& event_name, v8::Local<v8::Value> data) {
     return;
 
   v8::Local<v8::Value> args[] = {data};
-  v8::Isolate* isolate = v8::Isolate::GetCurrent();
 
   for (PersistedFn& callback : vec) {
-    if (std::move(callback).IsEmpty())
+    if (callback.IsEmpty())
       continue;
 
-    v8::HandleScope handle_scope(isolate);
-    auto local = v8::Local<v8::Function>::New(isolate, std::move(callback));
-    auto context = v8::Context::New(isolate);
+    v8::HandleScope handle_scope(isolate_);
+    auto local = v8::Local<v8::Function>::New(isolate_, std::move(callback));
+    v8::Local<v8::Context> context = context_.Get(isolate_);
     v8::Context::Scope context_scope(context);
 
-    std::ignore = local->Call(context, v8::Null(isolate), 1, args);
+    std::ignore = local->Call(context, v8::Null(isolate_), 1, args);
   }
 }
 
@@ -113,20 +115,23 @@ void EventBus::EmitLibreOfficeEvent(int type, std::string payload) {
   if (event_listeners_.find(type_string) == event_listeners_.end())
     return;
 
-  // TODO: Is there a better way of getting the isolate?
-  v8::Isolate* isolate = blink::MainThreadIsolate();
+  if (context_.IsEmpty()) {
+    LOG(ERROR) << "CONTEXT IS INVALID";
+    return;
+  }
 
   // coming from another thread means the original scope is entirely lost
-  v8::HandleScope handle_scope(isolate);
+  v8::Isolate::Scope isolate_scope(isolate_);
+  v8::HandleScope handle_scope(isolate_);
   v8::MicrotasksScope microtasks_scope(
-      isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
-  v8::Handle<v8::Context> context = v8::Context::New(isolate);
+      isolate_, v8::MicrotasksScope::kDoNotRunMicrotasks);
+  v8::Local<v8::Context> context = context_.Get(isolate_);
   v8::Context::Scope context_scope(context);
 
-  gin_helper::Dictionary dict = gin::Dictionary::CreateEmpty(isolate);
+  gin_helper::Dictionary dict = gin::Dictionary::CreateEmpty(isolate_);
   dict.Set("type", type_string);
   dict.Set("payload",
-           lok_callback::PayloadToLocalValue(isolate, type, payload.c_str()));
+           lok_callback::PayloadToLocalValue(isolate_, type, payload.c_str()));
 
   Emit(type_string, dict.GetHandle());
 }
@@ -144,6 +149,12 @@ gin::ObjectTemplateBuilder EventBus::Extend(
                  base::BindRepeating(&EventBus::Off, base::Unretained(this)))
       .SetMethod("emit",
                  base::BindRepeating(&EventBus::Emit, base::Unretained(this)));
+}
+
+void EventBus::SetContext(v8::Isolate* isolate,
+                          v8::Local<v8::Context> context) {
+  isolate_ = isolate;
+  context_.Reset(isolate, context);
 }
 
 }  // namespace electron::office

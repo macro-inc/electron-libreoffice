@@ -8,10 +8,13 @@
 #include <unordered_map>
 #include <vector>
 #include "base/callback_forward.h"
+#include "base/memory/raw_ptr.h"
 #include "gin/object_template_builder.h"
 #include "gin/public/wrapper_info.h"
 #include "gin/wrappable.h"
 #include "third_party/libreofficekit/LibreOfficeKitEnums.h"
+#include "v8/include/v8-context.h"
+#include "v8/include/v8-persistent-handle.h"
 #include "v8/include/v8-function.h"
 #include "v8/include/v8-isolate.h"
 #include "v8/include/v8-object.h"
@@ -35,8 +38,7 @@ class EventBus : public gin::Wrappable<EventBus> {
       v8::Isolate* isolate) override;
   const char* GetTypeName() override;
 
-  typedef base::RepeatingCallback<void(std::string payload)>
-      EventCallback;
+  typedef base::RepeatingCallback<void(std::string payload)> EventCallback;
 
   void On(const std::string& event_name,
           v8::Local<v8::Function> listener_callback);
@@ -52,10 +54,12 @@ class EventBus : public gin::Wrappable<EventBus> {
 
   gin::ObjectTemplateBuilder Extend(gin::ObjectTemplateBuilder builder);
 
+  void SetContext(v8::Isolate* isolate, v8::Local<v8::Context> context);
+
  private:
-  typedef v8::Persistent<v8::Function,
-                         v8::CopyablePersistentTraits<v8::Function>>
-      PersistedFn;
+  typedef v8::Global<v8::Function> PersistedFn;
+  v8::Global<v8::Context> context_;
+  raw_ptr<v8::Isolate> isolate_;
 
   std::unordered_map<std::string, std::vector<PersistedFn>> event_listeners_;
   std::unordered_map<LibreOfficeKitCallbackType, std::vector<EventCallback>>

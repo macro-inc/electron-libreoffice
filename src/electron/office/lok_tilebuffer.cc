@@ -44,7 +44,6 @@ TileBuffer::TileBuffer(const TileBuffer&) = default;
 void TileBuffer::PaintTile(int column, int row) {
   DCHECK(document_);
   int index = CoordToIndex(column, row);
-  DCHECK(tiles_.size() > (size_t)index);
 
   document_->paintPartTile(
       tiles_.at(index).pixels_, part_, tile_size_scaled_px_, tile_size_scaled_px_,

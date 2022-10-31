@@ -75,6 +75,7 @@ class OfficeClient : public gin::Wrappable<OfficeClient> {
   std::unordered_map<lok::Document*, EventBus*> document_event_router_;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_ = nullptr;
+  scoped_refptr<base::SequencedTaskRunner> renderer_task_runner_ = nullptr;
   EventBus event_bus_;
 };
 
