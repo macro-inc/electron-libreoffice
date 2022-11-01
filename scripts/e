@@ -11,22 +11,30 @@ export CHROMIUM_BUILDTOOLS_PATH="$BASE_PATH/src/buildtools"
 export ELECTRON_OUT_DIR=Default
 export ELECTRON_ENABLE_STACK_DUMPING=1
 export ELECTRON_ALSO_LOG_TO_STDERR=1
+export DEPOT_TOOLS_WIN_TOOLCHAIN=0
 
 # cache git requests only if not in CI, where they are abandoned
 if [ -z "$CI" ]; then
   export GIT_CACHE_PATH="$BASE_PATH/.git-cache"
 fi
 
-test ! -d "$DEPOT_TOOLS_PATH" && fetch-depot-tools.sh
+if [ ! -d "$DEPOT_TOOLS_PATH" ]; then
+  fetch-depot-tools.sh
+  update_depot_tools
+fi
 test ! -d "$BUILD_TOOLS_PATH" && fetch-electron-build-tools.sh
 
 GN_CONFIG=//electron/build/args/testing.gn
 GN_GOMA_FILE="$BUILD_TOOLS_PATH/third_party/goma.gn"
 
 IS_RELEASE="${IS_RELEASE:-false}"
+IS_DEBUG="${IS_DEBUG:-false}"
 FOR_APPLE_SILICON="${FOR_APPLE_SILICON:-false}"
 
-if [ "$IS_RELEASE" = "true" ]; then
+if [ "$IS_DEBUG" = "true" ]; then
+  echo "Preparing debug build"
+  export GN_CONFIG=//electron/build/args/debug.gn
+elif [ "$IS_RELEASE" = "true" ]; then
   echo "Preparing release build"
   export GN_CONFIG=//electron/build/args/release.gn
   export STRIP_BINARIES=true
@@ -70,7 +78,11 @@ echo "Running $1 for $OS"
 case "$1" in
   sync)
     cd "$BASE_PATH"
-    ELECTRON_USE_THREE_WAY_MERGE_FOR_PATCHES=1 gclient sync --no-history --with_branch_heads --with_tags -v -v ${@:2}
+    # Move misbehaving git files to their proper places
+    mv src/{.git,.gitignore}{.bak,} || true
+    ELECTRON_USE_THREE_WAY_MERGE_FOR_PATCHES=1 gclient sync --no-history --with_branch_heads --with_tags -v -v "${@:2}"
+    # Move misbehaving git files out of the way
+    mv src/{.git,.gitignore}{,.bak} || true
     ;;
   build)
     # Mostly pulled from src/electron/.circleci/config/base.yml -- MIT LICENSE Copyright (c) Electron contributors Copyright (c) 2013-2020 GitHub Inc.
@@ -81,11 +93,12 @@ case "$1" in
 
     # Build electron
     cd "$BASE_PATH/src"
+    echo "$GN_CONFIG"
     if [ ! -f out/.gn_ran ]; then
       gn gen out/Default --args="import(\"$GN_CONFIG\") import(\"$GN_GOMA_FILE\") $GN_EXTRA_ARGS $GN_BUILDFLAG_ARGS"
       [ "$RUN_GN_ONCE" = "true" ] && touch out/.gn_ran
     fi
-    NINJA_SUMMARIZE_BUILD=1 autoninja -C out/Default electron -j $NUMBER_OF_NINJA_PROCESSES
+    autoninja -C out/Default electron -j "$NUMBER_OF_NINJA_PROCESSES"
     cp out/Default/.ninja_log out/electron_ninja_log
     node electron/script/check-symlinks.js
 
@@ -108,8 +121,8 @@ case "$1" in
 
     # mksnapshot
     if [ "$USE_PREBUILT_V8_CONTEXT_SNAPSHOT" = "1" ]; then
-      ninja -C out/Default electron:electron_mksnapshot_zip -j $NUMBER_OF_NINJA_PROCESSES
-      ninja -C out/Default tools/v8_context_snapshot -j $NUMBER_OF_NINJA_PROCESSES
+      ninja -C out/Default electron:electron_mksnapshot_zip -j "$NUMBER_OF_NINJA_PROCESSES"
+      ninja -C out/Default tools/v8_context_snapshot -j "$NUMBER_OF_NINJA_PROCESSES"
       gn desc out/Default v8:run_mksnapshot_default args > out/Default/mksnapshot_args
       (cd out/Default; zip mksnapshot.zip mksnapshot_args clang_x64_v8_arm64/gen/v8/embedded.S)
       rm -rf out/Default/clang_x64_v8_arm64/gen
@@ -122,13 +135,13 @@ case "$1" in
         ninja -C out/Default electron:electron_mksnapshot_zip
         (cd out/Default; 7z a mksnapshot.zip mksnapshot_args gen/v8/embedded.S)
     else
-      ninja -C out/Default electron:electron_mksnapshot -j $NUMBER_OF_NINJA_PROCESSES
+      ninja -C out/Default electron:electron_mksnapshot -j "$NUMBER_OF_NINJA_PROCESSES"
       gn desc out/Default v8:run_mksnapshot_default args > out/Default/mksnapshot_args
       if [ "$OS" = "linux" ]; then
-        electron/script/strip-binaries.py --file $PWD/out/Default/mksnapshot
-        electron/script/strip-binaries.py --file $PWD/out/Default/v8_context_snapshot_generator
+        electron/script/strip-binaries.py --file "$PWD/out/Default/mksnapshot"
+        electron/script/strip-binaries.py --file "$PWD/out/Default/v8_context_snapshot_generator"
       fi
-      ninja -C out/Default electron:electron_mksnapshot_zip -j $NUMBER_OF_NINJA_PROCESSES
+      ninja -C out/Default electron:electron_mksnapshot_zip -j "$NUMBER_OF_NINJA_PROCESSES"
       (cd out/Default; zip mksnapshot.zip mksnapshot_args gen/v8/embedded.S)
     fi
 
@@ -139,7 +152,7 @@ case "$1" in
       elif [ "$TARGET_ARCH" = "arm64" ]; then
         export MKSNAPSHOT_PATH="clang_x64_v8_arm64"
       fi
-      cp "out/Default/$MKSNAPSHOT_PATH/mksnapshot" out/Default        
+      cp "out/Default/$MKSNAPSHOT_PATH/mksnapshot" out/Default
       cp "out/Default/$MKSNAPSHOT_PATH/v8_context_snapshot_generator" out/Default
       if [ "$OS" = "linux" ]; then
         cp "out/Default/$MKSNAPSHOT_PATH/libffmpeg.so" out/Default
@@ -159,13 +172,13 @@ case "$1" in
     ninja -C out/Default third_party/electron_node:headers
 
     # hunspell
-    ninja -C out/Default electron:hunspell_dictionaries_zip -j $NUMBER_OF_NINJA_PROCESSES
+    ninja -C out/Default electron:hunspell_dictionaries_zip -j "$NUMBER_OF_NINJA_PROCESSES"
 
     # libcxx
     if [ "$OS" = "linux" ]; then
-      ninja -C out/Default electron:libcxx_headers_zip -j $NUMBER_OF_NINJA_PROCESSES
-      ninja -C out/Default electron:libcxxabi_headers_zip -j $NUMBER_OF_NINJA_PROCESSES
-      ninja -C out/Default electron:libcxx_objects_zip -j $NUMBER_OF_NINJA_PROCESSES
+      ninja -C out/Default electron:libcxx_headers_zip -j "$NUMBER_OF_NINJA_PROCESSES"
+      ninja -C out/Default electron:libcxxabi_headers_zip -j "$NUMBER_OF_NINJA_PROCESSES"
+      ninja -C out/Default electron:libcxx_objects_zip -j "$NUMBER_OF_NINJA_PROCESSES"
     fi
 
     # Generate breakpad symbols
@@ -176,7 +189,7 @@ case "$1" in
       export BUILD_PATH="$PWD/out/Default"
       ninja -C out/Default electron:licenses
       ninja -C out/Default electron:electron_version
-      DELETE_DSYMS_AFTER_ZIP=1 python3 electron/script/zip-symbols.py -b $BUILD_PATH
+      DELETE_DSYMS_AFTER_ZIP=1 python3 electron/script/zip-symbols.py -b "$BUILD_PATH"
     fi
 
     # Build chromedriver
@@ -186,9 +199,9 @@ case "$1" in
     else
       export CHROMEDRIVER_DIR="out/Default"
     fi
-    ninja -C $CHROMEDRIVER_DIR electron:electron_chromedriver -j $NUMBER_OF_NINJA_PROCESSES
+    ninja -C $CHROMEDRIVER_DIR electron:electron_chromedriver -j "$NUMBER_OF_NINJA_PROCESSES"
     if [ "$OS" = "linux" ]; then
-      python3 electron/script/strip-binaries.py --target-cpu="$TARGET_ARCH" --file $PWD/$CHROMEDRIVER_DIR/chromedriver
+      python3 electron/script/strip-binaries.py --target-cpu="$TARGET_ARCH" --file "$PWD/$CHROMEDRIVER_DIR/chromedriver"
     fi
     ninja -C $CHROMEDRIVER_DIR electron:electron_chromedriver_zip
     if [ "$TARGET_ARCH" = "arm" ] || [ "$TARGET_ARCH" = "arm64" ]; then
@@ -206,6 +219,40 @@ case "$1" in
     goma.sh stop
     ;;
   d)
-    "$2" ${@:3}
+    "$2" "${@:3}"
+    ;;
+  run)
+    OUT_DIR="out/$ELECTRON_OUT_DIR"
+    LAST_RUN_STAMP="$BASE_PATH/.last_run_stamp"
+    export RUN_GN_ONCE=true
+
+    # Only build if there are changes to src/electron since the last successful build
+    if [ -e "$LAST_RUN_STAMP" ] && find "$BASE_PATH/src/electron" -newer "$LAST_RUN_STAMP" -exec false {} +
+    then
+      echo "No changes since last build"
+    else
+      if scripts/e build; then
+        touch "$LAST_RUN_STAMP"
+      else
+        exit 1
+      fi
+    fi
+    if [ "$OS" = "win" ]; then
+      EXE_SUFFIX=".exe"
+    fi
+
+    # By default, open the QA file
+    ARGS=("qa/index.html")
+    if [ ${#@} -gt 1 ]; then
+      ARGS=("${@:2}")
+    fi
+    "$BASE_PATH/src/$OUT_DIR/electron$EXE_SUFFIX" --no-sandbox "${ARGS[@]}"
+    ;;
+  gen_clangd)
+    OUT_DIR="out/$ELECTRON_OUT_DIR"
+    cd "$BASE_PATH"
+    echo "Building so that buildflag headers exist"
+    scripts/e build
+    "$BASE_PATH/src/tools/clang/scripts/generate_compdb.py" -p "src/$OUT_DIR" > "$BASE_PATH/compile_commands.json"
     ;;
 esac

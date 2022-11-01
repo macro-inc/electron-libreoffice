@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Test</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+      }
+    </style>
+  </head>
+  <body style="height: 100vh">
+    <input
+      id="el-picker"
+      type="file"
+      accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    />
+
+    <script src="wrapper.js"></script>
+    <office-doc id="el-embed" />
+    <script>
+      const picker = document.getElementById("el-picker");
+      const embed = document.getElementById("el-embed");
+
+      libreoffice.on("status_indicator_set_value", (x) => {
+        console.log(x);
+      });
+
+      picker.onchange = () => {
+        if (picker.files.length === 1) {
+          const uri = encodeURI(
+            "file:///" + picker.files[0].path.replace(/\\/g, "/")
+          );
+          const doc = libreoffice.loadDocument(uri);
+          doc.on("ready", (x) => {
+            console.log(x);
+          });
+          embed.renderDocument(doc);
+          embed.focus();
+        }
+      };
+    </script>
+  </body>
+</html>

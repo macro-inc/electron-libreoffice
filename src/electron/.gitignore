@@ -4,7 +4,7 @@
 **/.npmrc
 .tags*
 .vs/
-.vscode/
+.vscode/*
 *.log
 *.pyc
 *.sln
@@ -54,3 +54,12 @@ ts-gen
 patches/mtime-cache.json
 
 spec/fixtures/logo.png
+
+# clangd cache
+.cache
+
+# allow some vscode
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/tasks.json
+!.vscode/cpp.code-snippets

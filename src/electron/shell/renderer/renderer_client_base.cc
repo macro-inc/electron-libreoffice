@@ -20,6 +20,7 @@
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/render_view.h"
 #include "electron/buildflags/buildflags.h"
+#include "electron/office/office_web_plugin.h"
 #include "printing/buildflags/buildflags.h"
 #include "shell/browser/api/electron_api_protocol.h"
 #include "shell/common/api/electron_api_native_image.h"
@@ -359,6 +360,12 @@ bool RendererClientBase::OverrideCreatePlugin(
     content::RenderFrame* render_frame,
     const blink::WebPluginParams& params,
     blink::WebPlugin** plugin) {
+#if BUILDFLAG(ENABLE_OFFICE)
+  if (params.mime_type.Utf8() == office::kInternalPluginMimeType) {
+    *plugin = office::CreateInternalPlugin(std::move(params), render_frame);
+    return true;
+  }
+#endif
 #if BUILDFLAG(ENABLE_PDF_VIEWER)
   if (params.mime_type.Utf8() == pdf::kInternalPluginMimeType) {
     *plugin = pdf::CreateInternalPlugin(
@@ -396,9 +403,9 @@ bool RendererClientBase::IsPluginHandledExternally(
     const blink::WebElement& plugin_element,
     const GURL& original_url,
     const std::string& mime_type) {
-#if BUILDFLAG(ENABLE_PDF_VIEWER)
   DCHECK(plugin_element.HasHTMLTagName("object") ||
          plugin_element.HasHTMLTagName("embed"));
+#if BUILDFLAG(ENABLE_PDF_VIEWER)
   if (mime_type == pdf::kInternalPluginMimeType) {
     if (IsPdfInternalPluginAllowedOrigin(
             render_frame->GetWebFrame()->GetSecurityOrigin())) {

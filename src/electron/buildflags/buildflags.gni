@@ -3,18 +3,18 @@
 # found in the LICENSE file.
 
 declare_args() {
-  enable_desktop_capturer = true
+  enable_desktop_capturer = false
 
   # Allow running Electron as a node binary.
   enable_run_as_node = true
 
-  enable_osr = true
+  enable_osr = false
 
   enable_views_api = true
 
   enable_pdf_viewer = true
 
-  enable_tts = true
+  enable_tts = false
 
   enable_color_chooser = true
 
@@ -30,5 +30,8 @@ declare_args() {
   enable_electron_extensions = true
 
   # Enable Spellchecker support
-  enable_builtin_spellchecker = true
+  enable_builtin_spellchecker = false
+
+  # Enable LibreOffice integration
+  enable_office = true
 }

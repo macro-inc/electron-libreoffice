@@ -1,0 +1,109 @@
+# Copyright (c) 2022 Macro.
+# Use of this source code is governed by the MIT license that can be
+# found in the LICENSE file.
+
+import("//build/buildflag_header.gni")
+import("//electron/buildflags/buildflags.gni")
+import("//ppapi/buildflags/buildflags.gni")
+import("//v8/gni/v8.gni")
+
+buildflag_header("buildflags") {
+  header = "buildflags.h"
+  flags = [ "ENABLE_OFFICE=$enable_office" ]
+}
+
+assert(enable_office)
+
+copy("copy_libreofficekit") {
+  sources = [ "//third_party/libreofficekit/instdir" ]
+  outputs = [ "$root_out_dir/libreofficekit" ]
+}
+
+config("electron_lib_config") {
+  include_dirs = [ "//electron" ]
+}
+
+source_set("internal") {
+  visibility = [ ":*" ]
+
+  sources = [
+    "document_client.cc",
+    "document_client.h",
+    "event_bus.cc",
+    "event_bus.h",
+    "lok_tilebuffer.cc",
+    "lok_tilebuffer.h",
+    "lok_callback.cc",
+    "lok_callback.h",
+    "office_client.cc",
+    "office_client.h",
+    "office_keys.cc",
+    "office_keys.h",
+  ]
+
+  deps = [
+    ":buildflags",
+    "//base",
+    "//components/plugins/renderer",
+    "//components/strings",
+    "//gin",
+    "//third_party/blink/public:blink_headers",
+    "//third_party/icu",
+    "//ui/base",
+    "//ui/base/cursor/mojom:cursor_type",
+    "//ui/events:events_base",
+    "//ui/events/blink",
+    "//ui/gfx/codec",
+    "//ui/gfx/range",
+  ]
+
+  configs += [ ":electron_lib_config" ]
+
+  public_deps = [
+    "//skia",
+    "//v8",
+  ]
+
+  libs = []
+  ldflags = []
+
+  if (is_win) {
+    libs += []
+  }
+
+  if (is_mac) {
+    libs += []
+    ldflags += [ "-Wl,-rpath,\$ORIGIN/libreofficekit/program" ]
+  }
+
+  if (is_linux) {
+    libs += []
+    ldflags += [ "-Wl,-rpath,\$ORIGIN/libreofficekit/program" ]
+  }
+}
+
+static_library("office_web_plugin") {
+  assert(enable_plugins,
+         "The LibreOffice viewer relies on plugin infrastructure")
+
+  sources = [ "office_web_plugin.cc" ]
+
+  configs += [ ":electron_lib_config" ]
+
+  deps = [
+    ":buildflags",
+    ":copy_libreofficekit",
+    ":internal",
+    "//base",
+    "//base:i18n",
+    "//cc/paint",
+    "//gin",
+    "//pdf",  # for PaintManager, might want to vendor this?
+    "//skia",
+    "//third_party/blink/public:blink_headers",
+    "//ui/base/cursor",
+    "//ui/base/cursor/mojom:cursor_type",
+    "//ui/events/blink",
+    "//v8",
+  ]
+}

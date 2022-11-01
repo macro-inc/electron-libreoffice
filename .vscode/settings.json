@@ -1,0 +1,66 @@
+{
+  "editor.tabSize": 2,
+  "editor.detectIndentation": false,
+  "editor.rulers": [
+    80
+  ],
+  "editor.quickSuggestions": {
+    "other": "on",
+    "comments": "off",
+    "strings": "off"
+  },
+  "files.eol": "\n",
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "files.trimFinalNewlines": true,
+  "files.watcherExclude": {
+    "**/out": true,
+    "**/third_party/**": true,
+    "**/.git": true,
+    "**/.gitignore": true,
+    "**/node_modules/*/**": true,
+    "**/src/third_party": true,
+    "**/build-tools": true,
+    "**/depot_tools": true,
+  },
+  "files.watcherInclude": [
+    "src/electron/**",
+  ],
+  "files.exclude": {
+    "**/.git": true,
+    "**/.svn": true,
+    "**/.hg": true,
+    "**/CVS": true,
+    "**/.DS_Store": true,
+    "**/Thumbs.db": true,
+    "**/out": true,
+    "out*/**": true,
+    "${workspaceFodler}/src/out*/**": true,
+    "**/node_modules": true,
+    "**/*.runtime_deps": true,
+    ".cache": true
+  },
+  "C_Cpp.intelliSenseEngine": "Disabled",
+  "C_Cpp.clang_format_path": "${workspaceFolder}/src/third_party/depot_tools/clang-format",
+  "C_Cpp.clang_format_sortIncludes": true,
+  "C_Cpp.vcFormat.indent.multiLineRelativeTo": "statementBegin",
+  "editor.formatOnSave": false,
+  "editor.formatOnSaveMode": "modifications",
+  "C/C++ Include Guard.Macro Type": "Filepath",
+  "C/C++ Include Guard.Remove Extension": false,
+  "C/C++ Include Guard.Suffix": "_",
+  "C/C++ Include Guard.Auto Include Guard Insertion For New File": false,
+  "clangd.onConfigChanged": "restart",
+  "editor.inlayHints.enabled": "on",
+  "editor.guides.indentation": false,
+  "editor.guides.bracketPairs": "active",
+  "scm.defaultViewMode": "tree",
+  "definition-autocompletion.trigger_character": ":",
+  "definition-autocompletion.source_file_extension_patterns": [
+    "c",
+    "cpp",
+    "cc"
+  ],
+  "C/C++ Include Guard.File Path Pascal Case to Snake Case": true,
+  "C/C++ Include Guard.Comment Style": "Line",
+}

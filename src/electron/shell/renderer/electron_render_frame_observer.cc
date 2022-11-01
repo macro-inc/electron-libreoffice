@@ -17,6 +17,7 @@
 #include "ipc/ipc_message_macros.h"
 #include "net/base/net_module.h"
 #include "net/grit/net_resources.h"
+#include "office/office_client.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "shell/common/gin_helper/microtasks_scope.h"
 #include "shell/common/options_switches.h"
@@ -129,6 +130,17 @@ void ElectronRenderFrameObserver::DidInstallConditionalFeatures(
   bool should_create_isolated_context =
       use_context_isolation && is_main_world &&
       (is_main_frame || allow_node_in_sub_frames);
+
+#if BUILDFLAG(ENABLE_OFFICE)
+  if (is_main_world && office::OfficeClient::IsValid()) {
+    v8::HandleScope handle_scope(isolate);
+    v8::Context::Scope context_scope(context);
+    auto source_context = web_frame->MainWorldScriptContext();
+    gin_helper::Dictionary global(isolate, source_context->Global());
+    global.SetReadOnlyNonConfigurable(office::OfficeClient::kGlobalEntry,
+                                      office::OfficeClient::GetHandle(isolate));
+  }
+#endif
 
   if (should_create_isolated_context) {
     CreateIsolatedWorldContext();
