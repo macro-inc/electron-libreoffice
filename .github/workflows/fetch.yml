@@ -98,18 +98,10 @@ jobs:
           path: |
             windows.tzstd
           key: src-${{ steps.deps_hash.outputs.deps_hash }}-windows
-      - name: Retrieve cache (mac)
-        id: cache-src-mac
-        uses: actions/cache@v3
-        with:
-          path: |
-            mac.tzstd
-            mac-arm.tzstd
-          key: src-${{ steps.deps_hash.outputs.deps_hash }}-mac
       - name: Check cache
         id: check_cache
         run: |
-          echo "::set-output name=build_cache::${{ steps.cache-src-base.outputs.cache-hit != 'true' || steps.cache-src-linux.outputs.cache-hit != 'true' || steps.cache-src-windows.outputs.cache-hit != 'true' || steps.cache-src-mac.outputs.cache-hit != 'true' }}"
+          echo "::set-output name=build_cache::${{ steps.cache-src-base.outputs.cache-hit != 'true' || steps.cache-src-linux.outputs.cache-hit != 'true' || steps.cache-src-windows.outputs.cache-hit != 'true' }}"
       - name: Install node.js v16
         if: ${{ runner.os == 'Linux' }}
         run: |

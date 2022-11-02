@@ -33,9 +33,3 @@ tar --zstd -cf thirdparty.tzstd --anchored --exclude-from="$SCRIPT_DIR/tar_third
 
 # Build the Windows-specific tarball
 scripts/cross-sync/win.sh
-
-# Build the Mac-specific tarball
-scripts/cross-sync/mac.sh
-
-# Build the Mac Apple Silicon-specific tarball
-scripts/cross-sync/mac-arm.sh
