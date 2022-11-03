@@ -82,7 +82,7 @@ class OfficeDoc extends HTMLElement {
 
     this.embed = document.createElement("embed");
     this.embed.setAttribute("type", "application/x-libreoffice");
-    // this.embed.style = "background:pink;";
+    this.embed.style.display = "none";
 
     this.sizer = document.createElement("div");
     this.sizer.className = "sizer";
@@ -122,6 +122,7 @@ class OfficeDoc extends HTMLElement {
    * @param {any} doc DocumentClient object to render
    */
   renderDocument(doc) {
+    this.embed.style.display = "block";
     this.embed.renderDocument(doc);
     this.doc = doc;
     this._refreshSize();
