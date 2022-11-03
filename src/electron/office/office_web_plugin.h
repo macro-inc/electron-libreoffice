@@ -25,6 +25,7 @@
 #include "pdf/paint_manager.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
+#include "third_party/blink/public/platform/web_input_event_result.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_text_input_type.h"
 #include "third_party/blink/public/web/web_plugin.h"
@@ -161,7 +162,7 @@ class OfficeWebPlugin : public blink::WebPlugin,
  private:
   // call `Destroy()` instead.
   ~OfficeWebPlugin() override;
-  bool HandleKeyEvent(const blink::WebKeyboardEvent event, ui::Cursor* cursor);
+  blink::WebInputEventResult HandleKeyEvent(const blink::WebKeyboardEvent event, ui::Cursor* cursor);
   bool HandleMouseEvent(blink::WebInputEvent::Type type,
                         gfx::PointF position,
                         int modifiers,

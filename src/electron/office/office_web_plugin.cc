@@ -202,11 +202,9 @@ blink::WebInputEventResult OfficeWebPlugin::HandleInputEvent(
   }
 
   if (blink::WebInputEvent::IsKeyboardEventType(event_type))
-    return HandleKeyEvent(std::move(static_cast<const blink::WebKeyboardEvent&>(
-                              event.Event())),
-                          cursor)
-               ? blink::WebInputEventResult::kHandledApplication
-               : blink::WebInputEventResult::kNotHandled;
+    return HandleKeyEvent(
+        std::move(static_cast<const blink::WebKeyboardEvent&>(event.Event())),
+        cursor);
 
   std::unique_ptr<blink::WebInputEvent> scaled_event =
       ui::ScaleWebInputEvent(event.Event(), viewport_to_dip_scale_);
@@ -238,18 +236,26 @@ blink::WebInputEventResult OfficeWebPlugin::HandleInputEvent(
              : blink::WebInputEventResult::kNotHandled;
 }
 
-bool OfficeWebPlugin::HandleKeyEvent(const blink::WebKeyboardEvent event,
-                                     ui::Cursor* cursor) {
+blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
+    const blink::WebKeyboardEvent event,
+    ui::Cursor* cursor) {
   if (!document_ || view_id_ == -1)
-    return false;
+    return blink::WebInputEventResult::kNotHandled;
+
+  blink::WebInputEvent::Type type = event.GetType();
+
+  // supress scroll event for any containers when pressing space
+  if (type == blink::WebInputEvent::Type::kChar && event.dom_code == office::DomCode::SPACE) {
+    return blink::WebInputEventResult::kHandledSuppressed;
+  }
 
   // only handle provided key events
-  switch (event.GetType()) {
+  switch (type) {
     case blink::WebInputEvent::Type::kRawKeyDown:
     case blink::WebInputEvent::Type::kKeyUp:
       break;
     default:
-      return false;
+      return blink::WebInputEventResult::kNotHandled;
   }
 
   // intercept some special key events on Ctr/Command
@@ -257,7 +263,7 @@ bool OfficeWebPlugin::HandleKeyEvent(const blink::WebKeyboardEvent event,
     switch (event.dom_code) {
       // don't close the internal LO window
       case office::DomCode::US_W:
-        return false;
+        return blink::WebInputEventResult::kNotHandled;
     }
   }
 
@@ -270,13 +276,13 @@ bool OfficeWebPlugin::HandleKeyEvent(const blink::WebKeyboardEvent event,
   task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&lok::Document::postKeyEvent, base::Unretained(document_),
-                     event.GetType() == blink::WebInputEvent::Type::kKeyUp
+                     type == blink::WebInputEvent::Type::kKeyUp
                          ? LOK_KEYEVENT_KEYUP
                          : LOK_KEYEVENT_KEYINPUT,
                      event.text[0], lok_key_code));
   needs_reraster_ = true;
 
-  return true;
+  return blink::WebInputEventResult::kHandledApplication;
 }
 
 bool OfficeWebPlugin::HandleMouseEvent(blink::WebInputEvent::Type type,
