@@ -35,16 +35,17 @@ module.exports = async ({github}) => {
   });
 
   // once file is written we will want to delete the individual sha files from the release
-  // for (const id of toDelete) {
-  //   await github.request(
-  //     'DELETE /repos/{owner}/{repo}/releases/assets/{asset_id}',
-  //     {
-  //       owner: 'coparse-inc',
-  //       repo: 'electron-libreoffice',
-  //       asset_id: id,
-  //     },
-  //   );
-  // }
+  for (const id of toDelete) {
+    // TODO: Uncomment me if we want to delete the individual sha files after generating the SUMS
+    // await github.request(
+    //   'DELETE /repos/{owner}/{repo}/releases/assets/{asset_id}',
+    //   {
+    //     owner: 'coparse-inc',
+    //     repo: 'electron-libreoffice',
+    //     asset_id: id,
+    //   },
+    // );
+  }
 };
 
 async function downloadFile(github, assetId, decoder) {

@@ -17,7 +17,7 @@ jobs:
           VERSION: ${{ inputs.version }}
         with:
           script: |
-            const script = require('./ci/script.js')
+            const script = require('./ci/generateSha.js')
             await script({github})
       - name: Update release with SHASUMS256
         uses: ncipollo/release-action@v1
