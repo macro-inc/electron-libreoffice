@@ -11,7 +11,7 @@ jobs:
     name: Generate SHASUMS256.txt
     steps:
       - uses: actions/checkout@v3
-      - name: View context attributes
+      - name: Create sums file
         uses: actions/github-script@v6
         env:
           VERSION: ${{ inputs.version }}
@@ -19,8 +19,14 @@ jobs:
           script: |
             const script = require('./ci/script.js')
             await script({github})
-      - name: Upload SHASUM256.txt
-        uses: actions/upload-artifact@v3
+      - name: Update release with SHASUMS256
+        uses: ncipollo/release-action@v1
         with:
-          name: shasum-${{inputs.version}}
-          path: ./ci/SHASUMS256.txt
+          artifacts: ./ci/SHASUMS256.txt
+          allowUpdates: true
+          artifactErrorsFailBuild: true
+          name: ${{ inputs.version }}
+          tag: ${{ inputs.version }}
+          body: |
+            This is an automated release built from the `main` branch.
+            For changes, please review the commit log.
