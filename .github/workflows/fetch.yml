@@ -74,7 +74,7 @@ jobs:
         run: |
           cd /r/el/src/electron
           node script/generate-deps-hash.js
-          echo "::set-output name=deps_hash::$(cat .depshash-platformless)"
+          echo "deps_hash=$(cat .depshash-platformless)" >> $GITHUB_OUTPUT
       - name: Retrieve cache (base)
         id: cache-src-base
         uses: actions/cache@v3
@@ -101,7 +101,7 @@ jobs:
       - name: Check cache
         id: check_cache
         run: |
-          echo "::set-output name=build_cache::${{ steps.cache-src-base.outputs.cache-hit != 'true' || steps.cache-src-linux.outputs.cache-hit != 'true' || steps.cache-src-windows.outputs.cache-hit != 'true' }}"
+          echo "build_cache=${{ steps.cache-src-base.outputs.cache-hit != 'true' || steps.cache-src-linux.outputs.cache-hit != 'true' || steps.cache-src-windows.outputs.cache-hit != 'true' }}" >> $GITHUB_OUTPUT
       - name: Install node.js v16
         if: ${{ runner.os == 'Linux' }}
         run: |
@@ -121,8 +121,7 @@ jobs:
       - name: The job has succeeded
         if: ${{ success() }}
         id: check
-        run: |
-          echo "::set-output name=check::true"
+        run: echo "check=true" >> $GITHUB_OUTPUT
   stop_runner:
     name: Stop EC2 Runner
     needs: [fetch]

@@ -25,5 +25,5 @@ jobs:
           git clone --depth=1 https://${{ github.token }}@github.com/${{ github.repository }} e-l
           cd e-l
           VERSION="$(cat src/electron/ELECTRON_VERSION)"
-          echo "::set-output name=version::$VERSION"
-          git ls-remote --tags --exit-code -q https://github.com/${{ github.repository }} "refs/tags/$VERSION" && echo "::set-output name=should_run::false"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          git ls-remote --tags --exit-code -q https://github.com/${{ github.repository }} "refs/tags/$VERSION" && echo "should_run=false" >> $GITHUB_OUTPUT

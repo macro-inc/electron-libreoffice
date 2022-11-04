@@ -10,7 +10,7 @@ on:
         type: string
       working_dir:
         required: false
-        default: "/r/el"
+        default: '/r/el'
         type: string
       for_apple_silicon:
         required: false
@@ -119,7 +119,7 @@ jobs:
         run: |
           cd ${{ inputs.working_dir }}/src/electron
           node script/generate-deps-hash.js
-          echo "::set-output name=deps_hash::$(cat .depshash-platformless)"
+          echo "deps_hash=$(cat .depshash-platformless)" >> $GITHUB_OUTPUT
       - name: Retrieve cache (base)
         id: cache-src-base
         uses: actions/cache@v3
@@ -285,8 +285,7 @@ jobs:
       - name: The job has succeeded
         if: ${{ success() }}
         id: check
-        run: |
-          echo "::set-output name=check::true"
+        run: echo "check=true" >> $GITHUB_OUTPUT
   stop_runner:
     name: Stop EC2 Runner
     needs: [build]
