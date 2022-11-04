@@ -1,0 +1,32 @@
+name: Generate SHA
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+jobs:
+  generate_sha:
+    runs-on: ubuntu-latest
+    name: Generate SHASUMS256.txt
+    steps:
+      - uses: actions/checkout@v3
+      - name: Create sums file
+        uses: actions/github-script@v6
+        env:
+          VERSION: ${{ inputs.version }}
+        with:
+          script: |
+            const script = require('./ci/generateSha.js')
+            await script({github})
+      - name: Update release with SHASUMS256
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: ./ci/SHASUMS256.txt
+          allowUpdates: true
+          artifactErrorsFailBuild: true
+          name: ${{ inputs.version }}
+          tag: ${{ inputs.version }}
+          body: |
+            This is an automated release built from the `main` branch.
+            For changes, please review the commit log.
