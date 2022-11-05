@@ -219,8 +219,10 @@ class OfficeWebPlugin : public blink::WebPlugin,
   void OnViewportChanged(const gfx::Rect& plugin_rect_in_css_pixel,
                          float new_device_scale);
 
-  // Exposed methods {
   void UpdateScroll(const gfx::PointF& scroll_position);
+
+  // Exposed methods {
+  void UpdateScrollInTask(const gfx::PointF& scroll_position);
 
   // prepares the embed as the document client's mounted viewer
   bool RenderDocument(v8::Isolate* isolate,
@@ -301,7 +303,6 @@ class OfficeWebPlugin : public blink::WebPlugin,
   // current cursor
   ui::mojom::CursorType cursor_type_ = ui::mojom::CursorType::kPointer;
   bool has_focus_;
-  std::vector<gfx::Rect> paint_points_;
   // }
 
   // owned by

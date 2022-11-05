@@ -7,8 +7,12 @@
 #include "office/lok_callback.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkImage.h"
+#include "third_party/skia/include/core/SkRect.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/rect_f.h"
+
+// Enable to display debug painting
+// #define TILEBUFFER_DEBUG_PAINT
 
 namespace electron::office {
 
@@ -20,8 +24,7 @@ TileBuffer::TileBuffer(lok::Document* document, float scale, int part)
   doc_width_scaled_px_ = lok_callback::TwipToPixel(doc_width_twips_, scale_);
   doc_height_scaled_px_ = lok_callback::TwipToPixel(doc_height_twips_, scale_);
 
-  tile_size_scaled_px_ = kTileSize * scale_;
-  tile_size_scaled_twips_ = tile_size_scaled_px_ * lok_callback::kTwipPerPx;
+  tile_size_scaled_px_ = kTileSizePx * scale_;
 
   LibreOfficeKitTileMode tile_mode =
       static_cast<LibreOfficeKitTileMode>(document_->getTileMode());
@@ -32,23 +35,42 @@ TileBuffer::TileBuffer(lok::Document* document, float scale, int part)
                                                        : kRGBA_8888_SkColorType,
                         kPremul_SkAlphaType);
 
+  pool_buffer_stride_ = image_info_.computeMinByteSize();
+  pool_size_ = kPoolAllocatedSize / pool_buffer_stride_;
+
   columns_ = std::ceil(static_cast<double>(doc_width_scaled_px_) /
                        tile_size_scaled_px_);
   rows_ = std::ceil(static_cast<double>(doc_height_scaled_px_) /
                     tile_size_scaled_px_);
+
+  pool_buffer_ = std::make_unique<uint8_t[]>(kPoolAllocatedSize);
+  pool_bitmaps_ = std::make_unique<SkBitmap[]>(pool_size_ - 1);
+  pool_index_to_tile_index_ = std::make_unique<int[]>(pool_size_ - 1);
+  for (size_t index = 0; index < pool_size_ - 1; index++) {
+    // set the bitmap allocation to the installed pixels
+    pool_bitmaps_[index].installPixels(image_info_, GetPoolBuffer(index),
+                                       image_info_.minRowBytes());
+    // share memory, don't copy
+    pool_bitmaps_[index].setImmutable();
+
+    // invalidate the tiles
+    pool_index_to_tile_index_[index] = -1;
+  }
 }
 
 TileBuffer::~TileBuffer() = default;
-TileBuffer::TileBuffer(const TileBuffer&) = default;
 
-void TileBuffer::PaintTile(int column, int row) {
+// transfer, because there shouldn't logically be more than one instance
+TileBuffer::TileBuffer(const TileBuffer& o) = default;
+
+void TileBuffer::PaintTile(uint8_t* buffer, int column, int row) {
   DCHECK(document_);
   int index = CoordToIndex(column, row);
 
-  document_->paintPartTile(
-      tiles_.at(index).pixels_, part_, tile_size_scaled_px_, tile_size_scaled_px_,
-      tile_size_scaled_twips_ * column, tile_size_scaled_twips_ * row,
-      tile_size_scaled_twips_, tile_size_scaled_twips_);
+  document_->paintPartTile(buffer, part_, tile_size_scaled_px_,
+                           tile_size_scaled_px_, kTileSizeTwips * column,
+                           kTileSizeTwips * row, kTileSizeTwips,
+                           kTileSizeTwips);
 
   valid_tile_.emplace(index);
 }
@@ -85,7 +107,7 @@ void TileBuffer::InvalidateTilesInRect(const gfx::RectF& rect) {
 void TileBuffer::InvalidateTilesInTwipRect(const gfx::Rect& rect_twips) {
   auto tile_rect =
       TileRect(std::move(gfx::RectF(rect_twips)), doc_width_twips_,
-               doc_height_twips_, kTileSize * lok_callback::kTwipPerPx);
+               doc_height_twips_, kTileSizePx * lok_callback::kTwipPerPx);
   DCHECK(tile_rect.right() <= columns_);
   DCHECK(tile_rect.bottom() <= rows_);
 
@@ -108,28 +130,39 @@ void TileBuffer::PaintInvalidTiles(SkCanvas& canvas, const gfx::RectF& rect) {
 
   for (int row = tile_rect.y(); row < tile_rect.bottom(); ++row) {
     for (int column = tile_rect.x(); column < tile_rect.right(); ++column) {
-      int index = CoordToIndex(column, row);
-      auto tile_ = tiles_.try_emplace(index, image_info_).first;
-      if (valid_tile_.count(index) == 0) {
-        PaintTile(column, row);
+      int tile_index = CoordToIndex(column, row);
+      size_t pool_index;
+      if (!TileToPoolIndex(tile_index, &pool_index)) {
+        valid_tile_.erase(tile_index);
+        InvalidatePoolTile(current_index_);
+        pool_index = current_index_;
+        tile_index_to_pool_index_[tile_index] = pool_index;
+        pool_index_to_tile_index_[pool_index] = tile_index;
+        current_index_ = NextPoolIndex();
       }
-      canvas.drawImage(tile_->second.bitmap_.asImage(), tile_size_scaled_px_ * column,
+
+      if (valid_tile_.count(tile_index) == 0) {
+        PaintTile(GetPoolBuffer(pool_index), column, row);
+      }
+
+      canvas.drawImage(pool_bitmaps_[pool_index].asImage(),
+                       tile_size_scaled_px_ * column,
                        tile_size_scaled_px_ * row);
+#ifdef TILEBUFFER_DEBUG_PAINT
+      SkPaint debugPaint;
+      debugPaint.setARGB(255, 255, 64, 0);
+      debugPaint.setStroke(true);
+      debugPaint.setStrokeWidth(1);
+      SkRect rect{(float)tile_size_scaled_px_ * column,
+                  (float)tile_size_scaled_px_ * row,
+                  (float)tile_size_scaled_px_ * (column + 1),
+                  (float)tile_size_scaled_px_ * (row + 1)
+
+      };
+      canvas.drawRect(rect, debugPaint);
+#endif
     }
   }
-}
-
-TileBuffer::Tile::Tile(const SkImageInfo& info)
-    : pixels_(static_cast<uint8_t*>(
-          calloc(info.height() * info.width(), info.minRowBytes()))) {
-  // set the bitmap allocation to the installed pixels
-  bitmap_.installPixels(info, pixels_, info.minRowBytes());
-  // share memory, don't copy
-  bitmap_.setImmutable();
-}
-
-TileBuffer::Tile::~Tile() {
-  free(pixels_);
 }
 
 }  // namespace electron::office

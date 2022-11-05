@@ -68,16 +68,19 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   gfx::Size DocumentSizeTwips();
 
   // returns the view ID associated with the mount
-  int Mount(v8::Isolate *isolate);
+  int Mount(v8::Isolate* isolate);
   // returns if the view was unmounted, if false could be due to one view
   // left/never mounted
   // bool Unmount();
 
+  void SetZoom(float zoom);
+
+  // The total scale applying the browser zoom and document zoom
+  inline float TotalScale() const { return zoom_ * view_zoom_; };
+
   // Plugin Engine {
-  void PageOffsetUpdated(const gfx::Vector2d& page_offset);
-  void PluginSizeUpdated(const gfx::Size& size);
   int GetNumberOfPages() const;
-  gfx::Rect GetPageScreenRect(int page_index) const;
+
   void BrowserZoomUpdated(double new_zoom_level);
   // }
 
@@ -94,7 +97,6 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   base::WeakPtr<DocumentClient> GetWeakPtr();
 
  private:
-
   void HandleStateChange(std::string payload);
   void HandleDocSizeChanged(std::string payload);
   void HandleInvalidate(std::string payload);
@@ -107,12 +109,11 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   int view_id_ = -1;
   LibreOfficeKitTileMode tile_mode_;
 
+  float view_zoom_ = 1.0;
   float zoom_ = 1.0;
   long document_height_in_twips_;
   long document_width_in_twips_;
   gfx::SizeF document_size_px_;
-  gfx::Size visible_area_;
-  gfx::Vector2d page_offest_;
 
   std::vector<gfx::Rect> page_rects_;
   std::unordered_map<std::string, std::string> uno_state_;

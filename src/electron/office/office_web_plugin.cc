@@ -31,6 +31,7 @@
 #include "office/document_client.h"
 #include "office/event_bus.h"
 #include "office/lok_callback.h"
+#include "office/lok_tilebuffer.h"
 #include "office/office_client.h"
 #include "office/office_keys.h"
 #include "shell/common/gin_converters/gfx_converter.h"
@@ -115,7 +116,7 @@ v8::Local<v8::Object> OfficeWebPlugin::V8ScriptableObject(
                  base::BindRepeating(&OfficeWebPlugin::RenderDocument,
                                      base::Unretained(this)));
   dict.SetMethod("updateScroll",
-                 base::BindRepeating(&OfficeWebPlugin::UpdateScroll,
+                 base::BindRepeating(&OfficeWebPlugin::UpdateScrollInTask,
                                      base::Unretained(this)));
   return dict.GetHandle();
 }
@@ -245,7 +246,8 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
   blink::WebInputEvent::Type type = event.GetType();
 
   // supress scroll event for any containers when pressing space
-  if (type == blink::WebInputEvent::Type::kChar && event.dom_code == office::DomCode::SPACE) {
+  if (type == blink::WebInputEvent::Type::kChar &&
+      event.dom_code == office::DomCode::SPACE) {
     return blink::WebInputEventResult::kHandledSuppressed;
   }
 
@@ -308,14 +310,18 @@ bool OfficeWebPlugin::HandleMouseEvent(blink::WebInputEvent::Type type,
       return false;
   }
 
-  // TODO: handle offsets
-  gfx::Point pos = gfx::ToRoundedPoint(
-      gfx::ScalePoint(position, office::lok_callback::kTwipPerPx));
-
   // allow focus even if not in area
-  if (!available_area_twips_.Contains(pos)) {
+  if (!available_area_.Contains(gfx::ToCeiledPoint(position))) {
     return event_type == LOK_MOUSEEVENT_MOUSEBUTTONDOWN;
   }
+
+  // offset by the scroll position
+  position.Offset(scroll_position_.x(), scroll_position_.y());
+
+  // TODO: handle offsets
+  gfx::Point pos = gfx::ToRoundedPoint(gfx::ScalePoint(
+      position,
+      office::lok_callback::kTwipPerPx / document_client_->TotalScale()));
 
   int buttons = 0;
   if (modifiers & blink::WebInputEvent::kLeftButtonDown)
@@ -485,13 +491,42 @@ void OfficeWebPlugin::OnGeometryChanged(double old_zoom,
   RecalculateAreas(old_zoom, old_device_scale);
 }
 
+namespace {
+void ResetTileBuffers(std::vector<office::TileBuffer>& buffers,
+                      lok::Document* document,
+                      int parts,
+                      float scale) {
+  // TODO: handle case where buffer exceeds the number of parts
+  int missing = parts - buffers.size();
+  if (missing < 0)
+    missing = 0;
+
+  for (int part = 0; part < missing; ++part) {
+    buffers.emplace_back(document, scale, part);
+  }
+
+  parts -= missing;
+  for (int part = 0; part < parts; ++part) {
+    buffers[part] = std::move(office::TileBuffer(document, scale, part));
+    LOG(ERROR) << "BUFFER RESET SCALE" << scale;
+  }
+}
+}  // namespace
+
 void OfficeWebPlugin::RecalculateAreas(double old_zoom,
                                        float old_device_scale) {
   if (!document_client_)
     return;
 
-  if (zoom_ != old_zoom || device_scale_ != old_device_scale)
+  if (zoom_ != old_zoom || device_scale_ != old_device_scale) {
     document_client_->BrowserZoomUpdated(zoom_ * device_scale_);
+    ResetTileBuffers(part_tile_buffer_, document_,
+                     // there is only one tile buffer for text documents
+                     document_->getDocumentType() == LOK_DOCTYPE_TEXT
+                         ? 1
+                         : document_->getParts(),
+                     document_client_->TotalScale());
+  }
 
   available_area_ = gfx::Rect(plugin_rect_.size());
   gfx::Size doc_size = GetDocumentPixelSize();
@@ -509,9 +544,6 @@ void OfficeWebPlugin::RecalculateAreas(double old_zoom,
       available_area_, office::lok_callback::kTwipPerPx);
 
   CalculateBackgroundParts();
-
-  document_client_->PageOffsetUpdated(available_area_.OffsetFromOrigin());
-  document_client_->PluginSizeUpdated(available_area_.size());
 }
 
 void OfficeWebPlugin::CalculateBackgroundParts() {
@@ -664,22 +696,28 @@ void OfficeWebPlugin::HandleInvalidateTiles(std::string payload) {
     TriggerFullRerender();
   } else if (!dirty_rect.IsEmpty()) {
     part_tile_buffer_.at(0).InvalidateTilesInTwipRect(dirty_rect);
-    Invalidate(gfx::ScaleToEnclosingRect(
-        dirty_rect, 1.0f / office::lok_callback::kTwipPerPx));
+    auto scaled_rect = gfx::ScaleToEnclosingRect(
+        dirty_rect,
+        document_client_->TotalScale() / office::lok_callback::kTwipPerPx);
+    scaled_rect.Offset(-scroll_position_.x(), -scroll_position_.y());
+    Invalidate(scaled_rect);
   }
 }
 
 void OfficeWebPlugin::HandleDocumentSizeChanged(std::string payload) {
-  // todo: handle scale/zoom
-  part_tile_buffer_.clear();
-  // there is only one tile buffer for text documents
-  if (document_->getDocumentType() == LOK_DOCTYPE_TEXT) {
-    part_tile_buffer_.emplace_back(document_);
-  } else {
-    int parts = document_->getParts();
-    for (int part = 0; part < parts; ++part)
-      part_tile_buffer_.emplace_back(document_, part);
-  }
+  ResetTileBuffers(part_tile_buffer_, document_,
+                   // there is only one tile buffer for text documents
+                   document_->getDocumentType() == LOK_DOCTYPE_TEXT
+                       ? 1
+                       : document_->getParts(),
+                   document_client_->TotalScale());
+}
+
+void OfficeWebPlugin::UpdateScrollInTask(const gfx::PointF& scroll_position) {
+  if (task_runner_)
+    task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&OfficeWebPlugin::UpdateScroll,
+                                  base::Unretained(this), scroll_position));
 }
 
 void OfficeWebPlugin::UpdateScroll(const gfx::PointF& scroll_position) {
@@ -720,7 +758,8 @@ bool OfficeWebPlugin::RenderDocument(
   document_ = client->GetDocument();
   document_client_ = client.get();
   view_id_ = client->Mount(isolate);
-  part_tile_buffer_.emplace_back(document_);
+  document_client_->BrowserZoomUpdated(zoom_ * device_scale_);
+  part_tile_buffer_.emplace_back(document_, document_client_->TotalScale());
 
   document_->setViewLanguage(view_id_, "en-US");
   document_->setView(view_id_);

@@ -98,7 +98,8 @@ bool DocumentClient::IsReady() const {
 
 std::vector<gfx::Rect> DocumentClient::PageRects() const {
   std::vector<gfx::Rect> result;
-  float zoom = zoom_;
+  float zoom = zoom_;  // want CSS pixels, which are already scaled to the
+                       // device, so don't use TotalScale
   std::transform(page_rects_.begin(), page_rects_.end(),
                  std::back_inserter(result), [zoom](const gfx::Rect& rect) {
                    float scale = zoom / lok_callback::kTwipPerPx;
@@ -113,6 +114,7 @@ gfx::Size DocumentClient::Size() const {
   return gfx::ToCeiledSize(document_size_px_);
 }
 
+// actually TwipTo_CSS_Px, since the pixels are device-indpendent
 float DocumentClient::TwipToPx(float in) const {
   return lok_callback::TwipToPixel(in, zoom_);
 }
@@ -190,23 +192,14 @@ void DocumentClient::Unmount() {
 }
 
 // Plugin Engine {
-void DocumentClient::PageOffsetUpdated(const gfx::Vector2d& page_offset) {
-  page_offest_ = page_offset;
-}
-void DocumentClient::PluginSizeUpdated(const gfx::Size& size) {
-  visible_area_ = size;
+void DocumentClient::BrowserZoomUpdated(double new_zoom_level) {
+  view_zoom_ = new_zoom_level;
+  RefreshSize();
 }
 
 int DocumentClient::GetNumberOfPages() const {
   return document_->getParts();
 }
-gfx::Rect DocumentClient::GetPageScreenRect(int page_index) const {
-  if ((size_t)page_index >= page_rects_.size())
-    return gfx::Rect();
-
-  return page_rects_[page_index];
-}
-void DocumentClient::BrowserZoomUpdated(double new_zoom_level) {}
 //}
 
 // Editing State {
