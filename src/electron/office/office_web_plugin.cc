@@ -563,7 +563,8 @@ void OfficeWebPlugin::CalculateBackgroundParts() {
     part.set_x(page_rect.x());
     part.SetVerticalBounds(previous_part_rect.bottom(), page_rect.y());
     if (!part.IsEmpty())
-      background_parts_.emplace_back(part);
+      background_parts_.emplace_back(
+          gfx::ScaleToEnclosingRect(part, device_scale_ * zoom_));
     previous_part_rect = page_rect;
   }
 }
@@ -723,12 +724,13 @@ void OfficeWebPlugin::UpdateScroll(const gfx::PointF& scroll_position) {
   if (!document_client_ || stop_scrolling_)
     return;
 
-  float max_x = std::max(
-      document_client_->DocumentSizePx().width() - plugin_dip_size_.width(),
-      0.0f);
-  float max_y = std::max(
-      document_client_->DocumentSizePx().height() - plugin_dip_size_.height(),
-      0.0f);
+  // TODO: fix plugin_dip_size, this isn't correct
+  float max_x = std::max(document_client_->DocumentSizePx().width() -
+                             plugin_dip_size_.width() / device_scale_,
+                         0.0f);
+  float max_y = std::max(document_client_->DocumentSizePx().height() -
+                             plugin_dip_size_.height() / device_scale_,
+                         0.0f);
 
   gfx::PointF scaled_scroll_position(
       base::clamp(scroll_position.x(), 0.0f, max_x),
