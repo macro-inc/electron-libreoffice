@@ -25,7 +25,7 @@ TileBuffer::TileBuffer(lok::Document* document, float scale, int part)
   doc_width_scaled_px_ = lok_callback::TwipToPixel(doc_width_twips_, scale_);
   doc_height_scaled_px_ = lok_callback::TwipToPixel(doc_height_twips_, scale_);
 
-  tile_size_scaled_px_ = kTileSizePx * scale_;
+  tile_size_scaled_px_ = kTileSizePx;
 
   LibreOfficeKitTileMode tile_mode =
       static_cast<LibreOfficeKitTileMode>(document_->getTileMode());
@@ -68,10 +68,12 @@ void TileBuffer::PaintTile(uint8_t* buffer, int column, int row) {
   DCHECK(document_);
   int index = CoordToIndex(column, row);
 
-  document_->paintPartTile(buffer, part_, tile_size_scaled_px_,
-                           tile_size_scaled_px_, kTileSizeTwips * column,
-                           kTileSizeTwips * row, kTileSizeTwips,
-                           kTileSizeTwips);
+  document_->paintPartTile(
+      buffer, part_, tile_size_scaled_px_, tile_size_scaled_px_,
+      lok_callback::PixelToTwip(kTileSizePx * column, scale_),
+      lok_callback::PixelToTwip(kTileSizePx * row, scale_),
+      lok_callback::PixelToTwip(kTileSizePx, scale_),
+      lok_callback::PixelToTwip(kTileSizePx, scale_));
 
   valid_tile_.emplace(index);
 }
@@ -106,9 +108,9 @@ void TileBuffer::InvalidateTilesInRect(const gfx::RectF& rect) {
 }
 
 void TileBuffer::InvalidateTilesInTwipRect(const gfx::Rect& rect_twips) {
-  auto tile_rect =
-      TileRect(std::move(gfx::RectF(rect_twips)), doc_width_twips_,
-               doc_height_twips_, kTileSizePx * lok_callback::kTwipPerPx);
+  auto tile_rect = TileRect(std::move(gfx::RectF(rect_twips)), doc_width_twips_,
+                            doc_height_twips_,
+                            lok_callback::PixelToTwip(kTileSizePx, scale_));
   DCHECK(tile_rect.right() <= columns_);
   DCHECK(tile_rect.bottom() <= rows_);
 
