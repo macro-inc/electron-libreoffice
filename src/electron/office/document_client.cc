@@ -154,9 +154,10 @@ void SaveBackup(const std::string& path) {
   base::Time::Exploded exploded;
   now.UTCExplode(&exploded);
   // ex: .bak.2022-11-07-154601
-  auto backup_suffix = base::StringPrintf(
-      ".bak.%04d-%02d-%02d-%02d%02d%02d", exploded.year, exploded.month,
-      exploded.day_of_month, exploded.hour, exploded.minute, exploded.second);
+  auto backup_suffix =
+      base::StringPrintf(FILE_PATH_LITERAL(".bak.%04d-%02d-%02d-%02d%02d%02d"),
+                         exploded.year, exploded.month, exploded.day_of_month,
+                         exploded.hour, exploded.minute, exploded.second);
 
   base::FilePath backup_path = file_path.InsertBeforeExtension(backup_suffix);
 
