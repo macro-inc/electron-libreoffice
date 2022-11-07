@@ -78,11 +78,13 @@ echo "Running $1 for $OS"
 case "$1" in
   sync)
     cd "$BASE_PATH"
-    # Move misbehaving git files to their proper places
-    mv src/{.git,.gitignore}{.bak,} || true
+    # Move misbehaving git files to their proper places, temporarily
+    mv src/.git{.bak,} || true
+    mv src/.gitignore{.bak,} || true
     ELECTRON_USE_THREE_WAY_MERGE_FOR_PATCHES=1 gclient sync --no-history --with_branch_heads --with_tags -v -v "${@:2}"
     # Move misbehaving git files out of the way
-    mv src/{.git,.gitignore}{,.bak} || true
+    mv src/.git{,.bak} || true
+    mv src/.gitignore{,.bak} || true
     ;;
   build)
     # Mostly pulled from src/electron/.circleci/config/base.yml -- MIT LICENSE Copyright (c) Electron contributors Copyright (c) 2013-2020 GitHub Inc.
