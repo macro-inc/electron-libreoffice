@@ -56,6 +56,7 @@ const styleCSS = css`
   .pages .page {
     position: absolute;
     border: 1px solid red;
+    margin: -1px 0 0 -1px;
   }
   .page .overlay {
     position: absolute;
