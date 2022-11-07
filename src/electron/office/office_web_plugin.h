@@ -287,9 +287,6 @@ class OfficeWebPlugin : public blink::WebPlugin,
   // The UI direction.
   // base::i18n::TextDirection ui_direction_ = base::i18n::UNKNOWN_DIRECTION;
 
-  // The scroll position for the last raster in CSS pixels, before any
-  // transformations are applied.
-  gfx::PointF scroll_position_at_last_raster_;
   // The scroll position in CSS pixels, before any transformations are applied.
   gfx::PointF scroll_position_;
   // If this is true, then don't scroll the plugin in response to calls to

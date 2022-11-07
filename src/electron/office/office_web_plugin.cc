@@ -437,7 +437,7 @@ void OfficeWebPlugin::DoPaint(const std::vector<gfx::Rect>& paint_rects,
       image_data_.erase(background_color_, gfx::RectToSkIRect(dirty_rect));
       callback_ready.emplace_back(dirty_rect);
 
-      // pain the absolute rect to the tile buffer
+      // paint the absolute rect to the tile buffer
       dirty_rect.Offset(scroll_position_.x(), scroll_position_.y());
       // TODO: handle current part for non-text documents
       part_tile_buffer_.at(0).PaintInvalidTiles(
@@ -735,16 +735,15 @@ void OfficeWebPlugin::UpdateScroll(const gfx::PointF& scroll_position) {
       base::clamp(scroll_position.x(), 0.0f, max_x),
       base::clamp(scroll_position.y(), 0.0f, max_y));
   scaled_scroll_position.Scale(device_scale_);
-  scroll_position_ = scaled_scroll_position;
 
   // needs_reraster_ = true;
   // paint manager requires that the x and y axis are updated separately
-  gfx::Vector2d diff_x(
-      scroll_position_at_last_raster_.x() - scaled_scroll_position.x(), 0);
-  gfx::Vector2d diff_y(
-      0, scroll_position_at_last_raster_.y() - scaled_scroll_position.y());
+  gfx::Vector2d diff_x(scroll_position_.x() - scaled_scroll_position.x(), 0);
+  gfx::Vector2d diff_y(0, scroll_position_.y() - scaled_scroll_position.y());
 
   paint_manager_.ScrollRect(available_area_, diff_y);
+
+  scroll_position_ = scaled_scroll_position;
 }
 
 bool OfficeWebPlugin::RenderDocument(
