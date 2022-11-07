@@ -9,7 +9,9 @@
 #include <vector>
 #include "base/bind.h"
 #include "base/callback_forward.h"
+#include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/strings/stringprintf.h"
 #include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -21,6 +23,7 @@
 #include "include/core/SkColor.h"
 #include "include/core/SkColorType.h"
 #include "include/core/SkPaint.h"
+#include "net/base/filename_util.h"
 #include "office/event_bus.h"
 #include "office/lok_callback.h"
 #include "office/office_client.h"
@@ -36,6 +39,7 @@
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/skia_conversions.h"
+#include "url/gurl.h"
 #include "v8/include/v8-container.h"
 #include "v8/include/v8-context.h"
 #include "v8/include/v8-isolate.h"
@@ -131,6 +135,35 @@ gfx::SizeF DocumentClient::DocumentSizePx() {
   return document_size_px_;
 }
 
+namespace {
+void SaveBackup(const std::string& path) {
+  GURL url(path);
+  base::FilePath file_path;
+  if (!url.SchemeIsFile()) {
+    LOG(ERROR) << "Unable to make backup. Expected a URL as a path, but got: "
+               << path;
+    return;
+  }
+  if (!net::FileURLToFilePath(url, &file_path)) {
+    LOG(ERROR) << "Unable to make backup. Unable to make file URL into path: "
+               << path;
+    return;
+  }
+
+  auto now = base::Time::Now();
+  base::Time::Exploded exploded;
+  now.UTCExplode(&exploded);
+  // ex: .bak.2022-11-07-154601
+  auto backup_suffix = base::StringPrintf(
+      ".bak.%04d-%02d-%02d-%02d%02d%02d", exploded.year, exploded.month,
+      exploded.day_of_month, exploded.hour, exploded.minute, exploded.second);
+
+  base::FilePath backup_path = file_path.InsertBeforeExtension(backup_suffix);
+
+  base::CopyFile(file_path, backup_path);
+}
+}  // namespace
+
 int DocumentClient::Mount(v8::Isolate* isolate) {
   if (view_id_ != -1) {
     return view_id_;
@@ -171,6 +204,9 @@ int DocumentClient::Mount(v8::Isolate* isolate) {
 
     state_change_buffer_.clear();
   }
+
+  // save a backup before we continue
+  SaveBackup(path_);
 
   event_bus_->Emit("ready", ready_value);
 
