@@ -4,6 +4,7 @@
 
 #include "office/office_web_plugin.h"
 
+#include <chrono>
 #include <memory>
 
 #include "base/auto_reset.h"
@@ -160,6 +161,27 @@ void OfficeWebPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
     canvas->scale(snapshot_scale_, snapshot_scale_);
 
   canvas->drawImage(snapshot_, 0, 0);
+
+  // Ensure the background parts are cleared after scrolling
+  // TODO: Handle during scrolling,
+  // TODO: Clear top and bottom gap consistently, or just crop to page size and
+  // pad in HTML
+  cc::PaintFlags flags;
+  flags.setBlendMode(SkBlendMode::kSrc);
+  flags.setColor(SK_ColorTRANSPARENT);
+
+  for (const gfx::Rect& background_part : background_parts_) {
+    gfx::Rect offset_rect = gfx::Rect(rect);
+    offset_rect.Offset(scroll_position_.x() - available_area_.x(),
+                       scroll_position_.y());
+
+    if (background_part.Intersects(offset_rect)) {
+      auto clear_rect = gfx::Rect(background_part);
+      clear_rect.Offset(-scroll_position_.x() - available_area_.x(),
+                        -scroll_position_.y());
+      canvas->drawRect(gfx::RectToSkRect(clear_rect), flags);
+    }
+  }
 }
 
 void OfficeWebPlugin::UpdateGeometry(const gfx::Rect& window_rect,
@@ -382,13 +404,6 @@ void OfficeWebPlugin::OnPaint(const std::vector<gfx::Rect>& paint_rects,
   DoPaint(paint_rects, ready, pending);
 }
 
-gfx::PointF OfficeWebPlugin::GetScrollPositionFromOffset(
-    const gfx::Vector2dF& scroll_offset) const {
-  gfx::PointF scroll_origin;
-
-  return scroll_origin + scroll_offset;
-}
-
 void OfficeWebPlugin::DoPaint(const std::vector<gfx::Rect>& paint_rects,
                               std::vector<chrome_pdf::PaintReadyRect>& ready,
                               std::vector<gfx::Rect>& pending) {
@@ -407,9 +422,10 @@ void OfficeWebPlugin::DoPaint(const std::vector<gfx::Rect>& paint_rects,
   if (!needs_reraster_)
     return;
 
-  scroll_position_at_last_raster_ = scroll_position_;
-
   DCHECK(document_);
+
+  // start measuring render time
+  auto start = std::chrono::steady_clock::now();
   document_->setView(view_id_);
 
   std::vector<gfx::Rect> ready_rects;
@@ -433,34 +449,22 @@ void OfficeWebPlugin::DoPaint(const std::vector<gfx::Rect>& paint_rects,
       std::vector<gfx::Rect> callback_pending;
       dirty_rect.Offset(-available_area_.x(), 0);
 
-      // pages have transparent gaps, so erase the dirty area
-      image_data_.erase(background_color_, gfx::RectToSkIRect(dirty_rect));
-      callback_ready.emplace_back(dirty_rect);
-
       // paint the absolute rect to the tile buffer
       dirty_rect.Offset(scroll_position_.x(), scroll_position_.y());
       // TODO: handle current part for non-text documents
       part_tile_buffer_.at(0).PaintInvalidTiles(
-          canvas, std::move(gfx::RectF(dirty_rect)));
+          canvas, dirty_rect, start, callback_ready, callback_pending);
+
       for (gfx::Rect& ready_rect : callback_ready) {
         ready_rect.Offset(available_area_.OffsetFromOrigin());
+        ready_rect.Offset(-scroll_position_.x(), -scroll_position_.y());
+
         ready_rects.push_back(ready_rect);
       }
       for (gfx::Rect& pending_rect : callback_pending) {
         pending_rect.Offset(available_area_.OffsetFromOrigin());
+        pending_rect.Offset(-scroll_position_.x(), -scroll_position_.y());
         pending.push_back(pending_rect);
-      }
-    }
-
-    // TODO: this is probably wrong
-    // Ensure the background parts are filled.
-    for (const BackgroundPart& background_part : background_parts_) {
-      gfx::Rect intersection =
-          gfx::IntersectRects(background_part.location, rect);
-      if (!intersection.IsEmpty()) {
-        image_data_.erase(background_part.color,
-                          gfx::RectToSkIRect(intersection));
-        ready_rects.push_back(intersection);
       }
     }
   }
@@ -548,25 +552,20 @@ void OfficeWebPlugin::RecalculateAreas(double old_zoom,
 
 void OfficeWebPlugin::CalculateBackgroundParts() {
   background_parts_.clear();
-  int left_width = available_area_.x();
-  int right_start = available_area_.right();
-  int right_width = std::abs(plugin_rect_.width() - available_area_.right());
-  int bottom = std::min(available_area_.bottom(), plugin_rect_.height());
 
-  BackgroundPart part = {gfx::Rect(left_width, bottom), background_color_};
-  if (!part.location.IsEmpty())
-    background_parts_.push_back(part);
-
-  // Add the right rectangle.
-  part.location = gfx::Rect(right_start, 0, right_width, bottom);
-  if (!part.location.IsEmpty())
-    background_parts_.push_back(part);
-
-  // Add the bottom rectangle.
-  part.location = gfx::Rect(0, bottom, plugin_rect_.width(),
-                            plugin_rect_.height() - bottom);
-  if (!part.location.IsEmpty())
-    background_parts_.push_back(part);
+  // Add the gaps
+  auto part = gfx::Rect();
+  gfx::Rect empty_rect = gfx::Rect();
+  gfx::Rect& previous_part_rect = empty_rect;
+  std::vector<gfx::Rect> page_rects = document_client_->PageRects();
+  for (gfx::Rect& page_rect : page_rects) {
+    part.set_width(page_rect.width());
+    part.set_x(page_rect.x());
+    part.SetVerticalBounds(previous_part_rect.bottom(), page_rect.y());
+    if (!part.IsEmpty())
+      background_parts_.emplace_back(part);
+    previous_part_rect = page_rect;
+  }
 }
 
 gfx::Size OfficeWebPlugin::GetDocumentPixelSize() const {

@@ -5,18 +5,22 @@
 #ifndef OFFICE_LOK_TILEBUFFER_H_
 #define OFFICE_LOK_TILEBUFFER_H_
 
+#include <chrono>
 #include <map>
 #include <unordered_set>
 #include "office/lok_callback.h"
 #include "third_party/libreofficekit/LibreOfficeKit.hxx"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 
 namespace electron::office {
 class TileBuffer {
  public:
+  // aim for 60fps (~16.67ms per frame)
+  static constexpr std::chrono::milliseconds kFrameDeadline{16};
   static constexpr int kTileSizePx = 256;
   static constexpr int kTileSizeTwips = kTileSizePx * lok_callback::kTwipPerPx;
   explicit TileBuffer(lok::Document* document,
@@ -30,7 +34,11 @@ class TileBuffer {
   void InvalidateTilesInRect(const gfx::RectF& rect);
   void InvalidateTilesInTwipRect(const gfx::Rect& rect_twips);
   void InvalidateAllTiles();
-  void PaintInvalidTiles(SkCanvas& canvas, const gfx::RectF& rect);
+  void PaintInvalidTiles(SkCanvas& canvas,
+                         const gfx::Rect& rect,
+                         std::chrono::steady_clock::time_point start,
+                         std::vector<gfx::Rect>& ready,
+                         std::vector<gfx::Rect>& pending);
 
  private:
   void PaintTile(uint8_t* buffer, int column, int row);
@@ -53,13 +61,15 @@ class TileBuffer {
   // returns true if the tile resides in the pool, false otherwise
   inline bool TileToPoolIndex(int tile_index, size_t* pool_index) {
     size_t result = *pool_index = tile_index_to_pool_index_[tile_index];
-    return result < pool_size_ && tile_index != -1 && pool_index_to_tile_index_[result] == tile_index;
+    return result < pool_size_ && tile_index != -1 &&
+           pool_index_to_tile_index_[result] == tile_index;
   }
 
   lok::Document* document_;
   std::unordered_set<int> valid_tile_;
 
-  // may be invalid value, need to validate by checking bounds and pool_index_to_tile_index_ value
+  // may be invalid value, need to validate by checking bounds and
+  // pool_index_to_tile_index_ value
   std::map<int, size_t> tile_index_to_pool_index_;
   int columns_;
   int rows_;
@@ -81,7 +91,7 @@ class TileBuffer {
   // 256MiB should be sufficient to display an 8K display twice, so should be
   // fine for now?
   static constexpr size_t kPoolAllocatedSize = 256 * 1024 * 1024;
- 
+
   std::shared_ptr<uint8_t[]> pool_buffer_ = nullptr;
   size_t pool_buffer_stride_;
   size_t pool_size_;

@@ -8,6 +8,7 @@
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkRect.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/rect_f.h"
 
@@ -122,9 +123,13 @@ void TileBuffer::InvalidateAllTiles() {
   valid_tile_.clear();
 }
 
-void TileBuffer::PaintInvalidTiles(SkCanvas& canvas, const gfx::RectF& rect) {
-  auto tile_rect = TileRect(rect, doc_width_scaled_px_, doc_height_scaled_px_,
-                            tile_size_scaled_px_);
+void TileBuffer::PaintInvalidTiles(SkCanvas& canvas,
+                                   const gfx::Rect& rect,
+                                   std::chrono::steady_clock::time_point start,
+                                   std::vector<gfx::Rect>& ready,
+                                   std::vector<gfx::Rect>& pending) {
+  auto tile_rect = TileRect(std::move(gfx::RectF(rect)), doc_width_scaled_px_,
+                            doc_height_scaled_px_, tile_size_scaled_px_);
   DCHECK(tile_rect.right() <= columns_);
   DCHECK(tile_rect.bottom() <= rows_);
 
@@ -148,6 +153,58 @@ void TileBuffer::PaintInvalidTiles(SkCanvas& canvas, const gfx::RectF& rect) {
       canvas.drawImage(pool_bitmaps_[pool_index].asImage(),
                        tile_size_scaled_px_ * column,
                        tile_size_scaled_px_ * row);
+
+      /*
+        NOTE: ready and pending must always be a two rectangles or set of
+        L-shapes that compose into a rectangle.
+
+        0         column      tile_rect.width()
+        |           |                 |
+
+        -------------------------------   -- 0
+        |          ready_top          |
+        -------------------------------   -- row
+        | ready_mid |   pending_mid   |
+        -------------------------------   -- row + 1
+        |       remaining_bottom      |
+        -------------------------------   -- tile_rect.height()
+      */
+      // missed deadline, push ready and pending rect
+      /* TODO: Re-enable once scrolling is handled properly
+            if (std::chrono::steady_clock::now() - start > kFrameDeadline) {
+              gfx::Rect ready_top = gfx::Rect(0, 0, tile_rect.width(), row);
+              gfx::Rect ready_mid = gfx::Rect(0, row, column, 1);
+
+              gfx::Rect pending_mid = gfx::Rect(
+                  column, row, tile_rect.width() - column, tile_rect.height());
+              pending_mid.Subtract(ready_top);
+
+              gfx::Rect remaining_bottom = gfx::Rect(tile_rect);
+              remaining_bottom.Subtract(ready_top);
+              remaining_bottom.Subtract(ready_mid);
+              remaining_bottom.Subtract(pending_mid);
+
+              ready_top.set_origin(tile_rect.origin());
+              ready_mid.set_origin(tile_rect.origin());
+              pending_mid.set_origin(tile_rect.origin());
+              remaining_bottom.set_origin(tile_rect.origin());
+
+              if (!ready_top.IsEmpty())
+                ready.push_back(
+                    gfx::ScaleToEnclosingRect(ready_top, tile_size_scaled_px_));
+              if (!ready_mid.IsEmpty())
+                ready.push_back(
+                    gfx::ScaleToEnclosingRect(ready_mid, tile_size_scaled_px_));
+              if (!pending_mid.IsEmpty())
+                pending.push_back(
+                    gfx::ScaleToEnclosingRect(pending_mid,
+         tile_size_scaled_px_)); if (!remaining_bottom.IsEmpty())
+                pending.push_back(gfx::ScaleToEnclosingRect(remaining_bottom,
+                                                            tile_size_scaled_px_));
+              return;
+            }
+      */
+
 #ifdef TILEBUFFER_DEBUG_PAINT
       SkPaint debugPaint;
       debugPaint.setARGB(255, 255, 64, 0);
@@ -163,6 +220,9 @@ void TileBuffer::PaintInvalidTiles(SkCanvas& canvas, const gfx::RectF& rect) {
 #endif
     }
   }
+
+  // finished everything
+  ready.emplace_back(gfx::ScaleToEnclosedRect(tile_rect, tile_size_scaled_px_));
 }
 
 }  // namespace electron::office

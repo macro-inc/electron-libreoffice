@@ -178,12 +178,6 @@ class OfficeWebPlugin : public blink::WebPlugin,
   void UpdateLayerTransform(float scale,
                             const gfx::Vector2dF& translate) override;
 
-  // Converts a scroll offset (which is relative to a UI direction-dependent
-  // scroll origin) to a scroll position (which is always relative to the
-  // top-left corner).
-  gfx::PointF GetScrollPositionFromOffset(
-      const gfx::Vector2dF& scroll_offset) const;
-
   // PaintManager::Client::OnPaint() should be its only caller.
   void DoPaint(const std::vector<gfx::Rect>& paint_rects,
                std::vector<chrome_pdf::PaintReadyRect>& ready,
@@ -277,11 +271,7 @@ class OfficeWebPlugin : public blink::WebPlugin,
   // bool last_bitmap_smaller_ = false;
   // True if we request a new bitmap rendering.
   bool needs_reraster_ = true;
-  struct BackgroundPart {
-    gfx::Rect location;
-    uint32_t color;
-  };
-  std::vector<BackgroundPart> background_parts_;
+  std::vector<gfx::Rect> background_parts_;
   // Deferred invalidates while `in_paint_` is true.
   std::vector<gfx::Rect> deferred_invalidates_;
   // The UI direction.
