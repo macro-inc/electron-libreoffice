@@ -49,17 +49,24 @@ class OfficeClient : public gin::Wrappable<OfficeClient> {
       v8::Isolate* isolate) override;
   const char* GetTypeName() override;
 
+  // v8 EventBus
+  void On(const std::string& event_name,
+          v8::Local<v8::Function> listener_callback);
+  void Off(const std::string& event_name,
+           v8::Local<v8::Function> listener_callback);
+  void Emit(const std::string& event_name, v8::Local<v8::Value> data);
+
   lok::Office* GetOffice();
   lok::Document* GetDocument(const std::string& path);
   lok::Document* InitializeOnce();
 
   bool MarkMounted(lok::Document* document);
+  bool CloseDocument(const std::string& path);
 
  protected:
   std::string GetLastError();
   v8::Local<v8::Value> LoadDocument(v8::Isolate* isolate,
                                     const std::string& path);
-  bool CloseDocument(const std::string& path);
 
  private:
   OfficeClient();

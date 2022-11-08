@@ -754,6 +754,17 @@ bool OfficeWebPlugin::RenderDocument(
     LOG(ERROR) << "invalid document client";
     return false;
   }
+  office::OfficeClient* office = office::OfficeClient::GetInstance();
+
+  // TODO: honestly, this is terrible, need to do this properly
+  // already mounted
+  bool needs_reset = view_id_ != -1;
+  if (needs_reset) {
+    part_tile_buffer_.clear();
+    office->CloseDocument(document_client_->Path());
+    document_client_->Unmount();
+    delete document_;
+  }
 
   document_ = client->GetDocument();
   document_client_ = client.get();
@@ -761,11 +772,17 @@ bool OfficeWebPlugin::RenderDocument(
   document_client_->BrowserZoomUpdated(zoom_ * device_scale_);
   part_tile_buffer_.emplace_back(document_, document_client_->TotalScale());
 
+  if (needs_reset) {
+    // this is an awful hack
+    auto device_scale = device_scale_;
+    device_scale_ = 0;
+    OnViewportChanged(css_plugin_rect_, device_scale);
+  }
+
   document_->setViewLanguage(view_id_, "en-US");
   document_->setView(view_id_);
   document_->resetSelection();
 
-  office::OfficeClient* office = office::OfficeClient::GetInstance();
   office->HandleDocumentEvent(
       document_, LOK_CALLBACK_INVALIDATE_TILES,
       base::BindRepeating(&OfficeWebPlugin::HandleInvalidateTiles,

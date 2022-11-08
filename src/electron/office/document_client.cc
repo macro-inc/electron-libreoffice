@@ -83,9 +83,11 @@ gin::ObjectTemplateBuilder DocumentClient::GetObjectTemplateBuilder(
     constructor->ReadOnlyPrototype();
     data->SetFunctionTemplate(&kWrapperInfo, constructor);
   }
-  return event_bus_
-      ->Extend(gin::ObjectTemplateBuilder(isolate, GetTypeName(),
-                                          constructor->InstanceTemplate()))
+  return gin::ObjectTemplateBuilder(isolate, GetTypeName(),
+                                    constructor->InstanceTemplate())
+      .SetMethod("on", &DocumentClient::On)
+      .SetMethod("off", &DocumentClient::Off)
+      .SetMethod("emit", &DocumentClient::Emit)
       .SetMethod("twipToPx", &DocumentClient::TwipToPx)
       .SetLazyDataProperty("pageRects", &DocumentClient::PageRects)
       .SetLazyDataProperty("size", &DocumentClient::Size)
@@ -306,6 +308,25 @@ void DocumentClient::RefreshSize() {
   // TODO: is there a better way, like updating a page only when it changes?
   page_rects_ =
       lok_callback::ParseMultipleRects(start, page_rect_sv.end(), new_size);
+}
+
+std::string DocumentClient::Path() {
+  return path_;
+}
+
+void DocumentClient::On(const std::string& event_name,
+                        v8::Local<v8::Function> listener_callback) {
+  event_bus_->On(event_name, listener_callback);
+}
+
+void DocumentClient::Off(const std::string& event_name,
+                         v8::Local<v8::Function> listener_callback) {
+  event_bus_->Off(event_name, listener_callback);
+}
+
+void DocumentClient::Emit(const std::string& event_name,
+                          v8::Local<v8::Value> data) {
+  event_bus_->Emit(event_name, data);
 }
 
 DocumentClient::DocumentClient() = default;

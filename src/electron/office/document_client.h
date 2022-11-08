@@ -54,6 +54,13 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
       v8::Isolate* isolate) override;
   const char* GetTypeName() override;
 
+  // v8 EventBus
+  void On(const std::string& event_name,
+          v8::Local<v8::Function> listener_callback);
+  void Off(const std::string& event_name,
+           v8::Local<v8::Function> listener_callback);
+  void Emit(const std::string& event_name, v8::Local<v8::Value> data);
+
   // Exposed to v8 {
   // Loaded and capable of receiving events
   bool IsReady() const;
@@ -91,6 +98,8 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   bool CanEditText();
   bool HasEditableText();
   // }
+
+  std::string Path();
 
   void Unmount();
 

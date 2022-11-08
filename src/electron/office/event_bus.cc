@@ -27,26 +27,6 @@ namespace electron::office {
 EventBus::EventBus() = default;
 EventBus::~EventBus() = default;
 
-gin::WrapperInfo EventBus::kWrapperInfo = {gin::kEmbedderNativeGin};
-
-gin::ObjectTemplateBuilder EventBus::GetObjectTemplateBuilder(
-    v8::Isolate* isolate) {
-  gin::PerIsolateData* data = gin::PerIsolateData::From(isolate);
-  v8::Local<v8::FunctionTemplate> constructor =
-      data->GetFunctionTemplate(&this->kWrapperInfo);
-  if (constructor.IsEmpty()) {
-    constructor = v8::FunctionTemplate::New(isolate);
-    constructor->SetClassName(gin::StringToV8(isolate, GetTypeName()));
-    data->SetFunctionTemplate(&this->kWrapperInfo, constructor);
-  }
-  return Extend(gin::ObjectTemplateBuilder(isolate, GetTypeName(),
-                                           constructor->InstanceTemplate()));
-}
-
-const char* EventBus::GetTypeName() {
-  return "EventBus";
-}
-
 void EventBus::On(const std::string& event_name,
                   v8::Local<v8::Function> listener_callback) {
   if (listener_callback.IsEmpty())
@@ -138,17 +118,6 @@ void EventBus::EmitLibreOfficeEvent(int type, std::string payload) {
 
 base::WeakPtr<EventBus> EventBus::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
-}
-
-gin::ObjectTemplateBuilder EventBus::Extend(
-    gin::ObjectTemplateBuilder builder) {
-  return builder
-      .SetMethod("on",
-                 base::BindRepeating(&EventBus::On, base::Unretained(this)))
-      .SetMethod("off",
-                 base::BindRepeating(&EventBus::Off, base::Unretained(this)))
-      .SetMethod("emit",
-                 base::BindRepeating(&EventBus::Emit, base::Unretained(this)));
 }
 
 void EventBus::SetContext(v8::Isolate* isolate,

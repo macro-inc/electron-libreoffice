@@ -129,9 +129,11 @@ gin::ObjectTemplateBuilder OfficeClient::GetObjectTemplateBuilder(
     constructor->ReadOnlyPrototype();
     data->SetFunctionTemplate(&this->kWrapperInfo, constructor);
   }
-  return event_bus_
-      .Extend(gin::ObjectTemplateBuilder(isolate, GetTypeName(),
-                                         constructor->InstanceTemplate()))
+  return gin::ObjectTemplateBuilder(isolate, GetTypeName(),
+                                    constructor->InstanceTemplate())
+      .SetMethod("on", &OfficeClient::On)
+      .SetMethod("off", &OfficeClient::Off)
+      .SetMethod("emit", &OfficeClient::Emit)
       .SetMethod("loadDocument", &OfficeClient::LoadDocument);
 }
 
@@ -204,7 +206,7 @@ v8::Local<v8::Value> OfficeClient::LoadDocument(v8::Isolate* isolate,
       }
     })");
 
-    GetInstance()->document_event_router_[doc] = new EventBus();
+    document_event_router_[doc] = new EventBus();
 
     doc->registerCallback(OfficeClient::HandleDocumentCallback, doc);
   }
@@ -215,12 +217,29 @@ v8::Local<v8::Value> OfficeClient::LoadDocument(v8::Isolate* isolate,
 }
 
 bool OfficeClient::CloseDocument(const std::string& path) {
+  lok::Document* doc = document_map_[path];
+  document_event_router_.erase(doc);
   return document_map_.erase(path) == 1;
 }
 
 void OfficeClient::EmitLibreOfficeEvent(int type, const char* payload) {
   event_bus_.EmitLibreOfficeEvent(
       type, payload ? std::string(payload) : std::string());
+}
+
+void OfficeClient::On(const std::string& event_name,
+                      v8::Local<v8::Function> listener_callback) {
+  event_bus_.On(event_name, listener_callback);
+}
+
+void OfficeClient::Off(const std::string& event_name,
+                       v8::Local<v8::Function> listener_callback) {
+  event_bus_.Off(event_name, listener_callback);
+}
+
+void OfficeClient::Emit(const std::string& event_name,
+                        v8::Local<v8::Value> data) {
+  event_bus_.Emit(event_name, data);
 }
 
 }  // namespace electron::office

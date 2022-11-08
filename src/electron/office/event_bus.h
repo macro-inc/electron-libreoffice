@@ -14,47 +14,48 @@
 #include "gin/wrappable.h"
 #include "third_party/libreofficekit/LibreOfficeKitEnums.h"
 #include "v8/include/v8-context.h"
-#include "v8/include/v8-persistent-handle.h"
 #include "v8/include/v8-function.h"
 #include "v8/include/v8-isolate.h"
 #include "v8/include/v8-object.h"
+#include "v8/include/v8-persistent-handle.h"
 
 namespace electron::office {
 
-class DocumentClient;
-
-class EventBus : public gin::Wrappable<EventBus> {
+class EventBus {
  public:
   EventBus();
-  ~EventBus() override;
+  ~EventBus();
 
   // disable copy
   EventBus(const EventBus&) = delete;
   EventBus& operator=(const EventBus&) = delete;
 
-  // gin::Wrappable
-  static gin::WrapperInfo kWrapperInfo;
-  gin::ObjectTemplateBuilder GetObjectTemplateBuilder(
-      v8::Isolate* isolate) override;
-  const char* GetTypeName() override;
-
   typedef base::RepeatingCallback<void(std::string payload)> EventCallback;
 
-  void On(const std::string& event_name,
-          v8::Local<v8::Function> listener_callback);
-  void Off(const std::string& event_name,
-           v8::Local<v8::Function> listener_callback);
   void Handle(LibreOfficeKitCallbackType type, EventCallback callback);
-
-  void Emit(const std::string& event_name, v8::Local<v8::Value> data);
 
   void EmitLibreOfficeEvent(int type, std::string payload);
 
   base::WeakPtr<EventBus> GetWeakPtr();
 
-  gin::ObjectTemplateBuilder Extend(gin::ObjectTemplateBuilder builder);
-
   void SetContext(v8::Isolate* isolate, v8::Local<v8::Context> context);
+
+  // v8 methods
+  void On(const std::string& event_name,
+          v8::Local<v8::Function> listener_callback);
+  void Off(const std::string& event_name,
+           v8::Local<v8::Function> listener_callback);
+  void Emit(const std::string& event_name, v8::Local<v8::Value> data);
+
+  class Client {
+   public:
+    virtual base::WeakPtr<EventBus> GetEventBus() = 0;
+    void On(const std::string& event_name,
+            v8::Local<v8::Function> listener_callback);
+    void Off(const std::string& event_name,
+             v8::Local<v8::Function> listener_callback);
+    void Emit(const std::string& event_name, v8::Local<v8::Value> data);
+  };
 
  private:
   typedef v8::Global<v8::Function> PersistedFn;
