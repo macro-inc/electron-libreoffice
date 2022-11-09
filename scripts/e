@@ -257,4 +257,27 @@ case "$1" in
     scripts/e build
     "$BASE_PATH/src/tools/clang/scripts/generate_compdb.py" -p "src/$OUT_DIR" > "$BASE_PATH/compile_commands.json"
     ;;
+  gen_vs)
+    cd "$BASE_PATH/src"
+    OUT_DIR="out/$ELECTRON_OUT_DIR"
+    gn gen "$OUT_DIR" --args="import(\"$GN_CONFIG\") import(\"$GN_GOMA_FILE\") $GN_EXTRA_ARGS $GN_BUILDFLAG_ARGS" --ide=vs --filters="//chrome;//electron" --no-deps
+    ;;
+  vs_devenv)
+    # It's safe to assume that if opened in Visual Studio, we're debugging
+    export IS_DEBUG=true
+    scripts/e gen_vs
+
+    # Start goma, since it needs to be running while VS compiles using GN/ninja
+    cd "$BASE_PATH/src"
+    OUT_DIR="out/$ELECTRON_OUT_DIR"
+    export NUMBER_OF_NINJA_PROCESSES=${2:-200}
+    export GOMA_START_COMPILER_PROXY=true
+    goma.sh start
+
+    # Get the Visual Studio devenv.exe path
+    DEV_ENV="$(cygpath "$(/c/Program\ Files\ \(x86\)/Microsoft\ Visual\ Studio/Installer/vswhere.exe -property productPath -format value)")"
+
+    # Open the generated solution
+    "$DEV_ENV" "$OUT_DIR/all.sln"
+    ;;
 esac
