@@ -6,9 +6,6 @@ const ELECTRON_D_TS_PATH = `${NPM_PACKAGE_PATH}/electron.d.ts`;
 
 module.exports = async ({github}) => {
   const {VERSION} = process.env;
-  // Get the release by version. This will give us the asset ids
-
-  // TODO: Download electron.d.ts from release and move into npm
   const result = await github.rest.repos.getReleaseByTag({
     owner: 'coparse-inc',
     repo: 'electron-libreoffice',
@@ -21,7 +18,7 @@ module.exports = async ({github}) => {
   }
 
   const decoder = new TextDecoder('utf-8');
-  // For each asset id if its a sha256sum we want to download the file contents and store it
+
   for (const asset of result.data.assets) {
     if (asset.name === 'electron.d.ts') {
       const electronDTsData = await downloadFile(github, asset.id, decoder);
