@@ -1,0 +1,39 @@
+name: Publish
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+    secrets:
+      NPM_AUTH:
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Setup Node
+        uses: actions/setup-node@v2
+        with:
+          node-version: '16.x'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Update electron package
+        uses: actions/github-script@v6
+        env:
+          VERSION: ${{ inputs.version }}
+        with:
+          script: |
+            const script = require('./ci/updatePackageForRelease.js')
+            await script({github})
+      - name: Attach License
+        run: |
+          cp ./LICENSE ./src/electron/npm
+      - name: Publish package on NPM
+        run: |
+          cd src/electron/npm
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_AUTH }}
