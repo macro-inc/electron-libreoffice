@@ -270,7 +270,7 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
   // supress scroll event for any containers when pressing space
   if (type == blink::WebInputEvent::Type::kChar &&
       event.dom_code == office::DomCode::SPACE) {
-    return blink::WebInputEventResult::kHandledSuppressed;
+    return blink::WebInputEventResult::kHandledApplication;
   }
 
   // only handle provided key events
