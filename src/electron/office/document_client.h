@@ -13,6 +13,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "gin/arguments.h"
+#include "gin/dictionary.h"
 #include "gin/handle.h"
 #include "gin/wrappable.h"
 #include "office/event_bus.h"
@@ -24,7 +26,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/size_f.h"
-#include "v8-persistent-handle.h"
+#include "v8/include/v8-persistent-handle.h"
 
 namespace base {
 class SequencedTaskRunner;
@@ -67,6 +69,34 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   std::vector<gfx::Rect> PageRects() const;
   gfx::Size Size() const;
   float TwipToPx(float in) const;
+  void PostUnoCommand(const std::string& command, gin::Arguments* args);
+  std::vector<std::string> GetTextSelection(const std::string& mime_type,
+                                            gin::Arguments* args);
+  void SetTextSelection(int n_type, int n_x, int n_y);
+  std::string GetPartName(int n_part);
+  std::string GetPartHash(int n_part);
+  void SendDialogEvent(u_int64_t n_window_id, gin::Arguments* args);
+  std::vector<std::string> GetSelectionTypeAndText(const std::string& mime_type,
+                                                   gin::Arguments* args);
+  v8::Local<v8::Value> GetClipboard(const std::vector<std::string>& mime_types,
+                                    gin::Arguments* args);
+  bool SetClipboard(std::vector<v8::Local<v8::Object>> clipboard_data,
+                    gin::Arguments* args);
+  bool Paste(const std::string& mime_type,
+             const std::string& data,
+             gin::Arguments* args);
+  void SetGraphicSelection(int n_type, int n_x, int n_y);
+  void ResetSelection();
+  v8::Local<v8::Value> GetCommandValues(const std::string& command,
+                                        gin::Arguments* args);
+  void SetOutlineState(bool column, int level, int index, bool hidden);
+  void SetViewLanguage(int id, const std::string& language);
+  void SelectPart(int part, int select);
+  void MoveSelectedParts(int position, bool duplicate);
+  void RemoveTextContext(unsigned window_id, int before, int after);
+  void CompleteFunction(const std::string& function_name);
+  void SendFormFieldEvent(const std::string& arguments);
+  void SendContentControlEvent(const v8::Local<v8::Object>& arguments,gin::Arguments* args);
   // }
 
   lok::Document* GetDocument();
