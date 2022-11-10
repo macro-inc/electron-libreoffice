@@ -291,7 +291,7 @@ void DocumentClient::HandleInvalidate(std::string payload) {
 
 void DocumentClient::RefreshSize() {
   // not mounted
-  if (view_id_ == -1 || !is_ready_)
+  if (view_id_ == -1)
     return;
 
   document_->getDocumentSize(&document_width_in_twips_,
