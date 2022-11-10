@@ -171,11 +171,11 @@ void OfficeWebPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
   flags.setColor(SK_ColorTRANSPARENT);
 
   for (const gfx::Rect& background_part : background_parts_) {
-    gfx::Rect offset_rect = gfx::Rect(rect);
+    gfx::Rect offset_rect = gfx::Rect(available_area_);
     offset_rect.Offset(scroll_position_.x() - available_area_.x(),
                        scroll_position_.y());
 
-    if (background_part.Intersects(offset_rect)) {
+    if (offset_rect.InclusiveIntersect(background_part)) {
       auto clear_rect = gfx::Rect(background_part);
       clear_rect.Offset(-scroll_position_.x() - available_area_.x(),
                         -scroll_position_.y());
@@ -566,6 +566,13 @@ void OfficeWebPlugin::CalculateBackgroundParts() {
       background_parts_.emplace_back(
           gfx::ScaleToEnclosingRect(part, device_scale_ * zoom_));
     previous_part_rect = page_rect;
+
+    // Add the bottom gap for last rect
+    if (page_rect == page_rects.back()) {
+      part.SetVerticalBounds(page_rect.bottom(), document_client_->DocumentSizePx().height());
+      background_parts_.emplace_back(
+          gfx::ScaleToEnclosingRect(part, device_scale_ * zoom_));
+    }
   }
 }
 
