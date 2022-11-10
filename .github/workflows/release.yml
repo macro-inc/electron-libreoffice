@@ -54,3 +54,11 @@ jobs:
     uses: ./.github/workflows/generate-sha.yml
     with:
       version: ${{ needs.check_version.outputs.version }}
+  publish:
+    name: Publish Electron to NPM Registry
+    needs: [check_version, generate_sha]
+    uses: ./.github/workflows/publish.yml
+    with:
+      version: ${{ needs.check_version.outputs.version }}
+    secrets:
+      NPM_AUTH: ${{ secrets.NPM_AUTH }}

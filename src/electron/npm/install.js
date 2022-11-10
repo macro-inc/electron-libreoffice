@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 
-const { version } = require('./package');
+const {version} = require('./package');
 
 const childProcess = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const extract = require('extract-zip');
-const { downloadArtifact } = require('@electron/get');
+const {downloadArtifact} = require('@electron/get');
 
 if (process.env.ELECTRON_SKIP_BINARY_DOWNLOAD) {
   process.exit(0);
@@ -22,8 +22,12 @@ if (isInstalled()) {
 const platform = process.env.npm_config_platform || process.platform;
 let arch = process.env.npm_config_arch || process.arch;
 
-if (platform === 'darwin' && process.platform === 'darwin' && arch === 'x64' &&
-    process.env.npm_config_arch === undefined) {
+if (
+  platform === 'darwin' &&
+  process.platform === 'darwin' &&
+  arch === 'x64' &&
+  process.env.npm_config_arch === undefined
+) {
   // When downloading for macOS ON macOS and we think we need x64 we should
   // check if we're running under rosetta and download the arm64 version if appropriate
   try {
@@ -36,44 +40,76 @@ if (platform === 'darwin' && process.platform === 'darwin' && arch === 'x64' &&
   }
 }
 
-// downloads if not cached
-downloadArtifact({
-  version,
-  artifactName: 'electron',
-  force: process.env.force_no_cache === 'true',
-  cacheRoot: process.env.electron_config_cache,
-  checksums: process.env.electron_use_remote_checksums ? undefined : require('./checksums.json'),
-  platform,
-  arch
-}).then(extractFile).catch(err => {
-  console.error(err.stack);
-  process.exit(1);
-});
+if (process.platform !== 'darwin') {
+  downloadArtifact({
+    version,
+    artifactName: 'electron',
+    force: process.env.force_no_cache === 'true',
+    cacheRoot: process.env.electron_config_cache,
+    platform,
+    arch,
+    mirrorOptions: {
+      mirror:
+        'https://github.com/coparse-inc/electron-libreoffice/releases/download/',
+      customDir: version,
+    },
+  })
+    .then(extractFile)
+    .catch((err) => {
+      console.error(err.stack);
+      process.exit(1);
+    });
+} else {
+  // downloads if not cached
+  downloadArtifact({
+    version: '20.3.0',
+    artifactName: 'electron',
+    force: process.env.force_no_cache === 'true',
+    cacheRoot: process.env.electron_config_cache,
+    platform,
+    arch,
+  })
+    .then(extractFile)
+    .catch((err) => {
+      console.error(err.stack);
+      process.exit(1);
+    });
+}
 
-function isInstalled () {
+function isInstalled() {
   try {
-    if (fs.readFileSync(path.join(__dirname, 'dist', 'version'), 'utf-8').replace(/^v/, '') !== version) {
+    if (
+      fs
+        .readFileSync(path.join(__dirname, 'dist', 'version'), 'utf-8')
+        .replace(/^v/, '') !== version
+    ) {
       return false;
     }
 
-    if (fs.readFileSync(path.join(__dirname, 'path.txt'), 'utf-8') !== platformPath) {
+    if (
+      fs.readFileSync(path.join(__dirname, 'path.txt'), 'utf-8') !==
+      platformPath
+    ) {
       return false;
     }
   } catch (ignored) {
     return false;
   }
 
-  const electronPath = process.env.ELECTRON_OVERRIDE_DIST_PATH || path.join(__dirname, 'dist', platformPath);
+  const electronPath =
+    process.env.ELECTRON_OVERRIDE_DIST_PATH ||
+    path.join(__dirname, 'dist', platformPath);
 
   return fs.existsSync(electronPath);
 }
 
 // unzips and makes path.txt point at the correct executable
-function extractFile (zipPath) {
+function extractFile(zipPath) {
   return new Promise((resolve, reject) => {
-    const distPath = process.env.ELECTRON_OVERRIDE_DIST_PATH || path.join(__dirname, 'dist');
+    const distPath =
+      process.env.ELECTRON_OVERRIDE_DIST_PATH || path.join(__dirname, 'dist');
 
-    extract(zipPath, { dir: path.join(__dirname, 'dist') })
+    extract(zipPath, {dir: path.join(__dirname, 'dist')})
       .then(() => {
         // If the zip contains an "electron.d.ts" file,
         // move that up
@@ -90,13 +126,16 @@ function extractFile (zipPath) {
         }
 
         // Write a "path.txt" file.
-        return fs.promises.writeFile(path.join(__dirname, 'path.txt'), platformPath);
+        return fs.promises.writeFile(
+          path.join(__dirname, 'path.txt'),
+          platformPath,
+        );
       })
       .catch((err) => reject(err));
   });
 }
 
-function getPlatformPath () {
+function getPlatformPath() {
   const platform = process.env.npm_config_platform || os.platform();
 
   switch (platform) {
@@ -110,6 +149,8 @@ function getPlatformPath () {
     case 'win32':
       return 'electron.exe';
     default:
-      throw new Error('Electron builds are not available on platform: ' + platform);
+      throw new Error(
+        'Electron builds are not available on platform: ' + platform,
+      );
   }
 }
