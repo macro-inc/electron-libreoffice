@@ -1418,6 +1418,9 @@ dist_zip("electron_dist_zip") {
   if (is_linux) {
     data_deps += [ "//sandbox/linux:chrome_sandbox" ]
   }
+  if (enable_office) {
+    data_deps += [ "//electron/office:copy_libreofficekit" ]
+  }
   deps = data_deps
   outputs = [ "$root_build_dir/dist.zip" ]
 }
