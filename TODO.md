@@ -24,8 +24,8 @@
 
 ## OfficeClient
 
-- [ ] getFilterTypes
-- [ ] setDocumentPassword
-- [ ] getVersionInfo
-- [ ] runDocument
-- [ ] sendDialogEvent
+- [x] getFilterTypes
+- [x] setDocumentPassword
+- [x] getVersionInfo
+- [ ] runDocument (Could not find an event called runDocument)
+- [x] sendDialogEvent
