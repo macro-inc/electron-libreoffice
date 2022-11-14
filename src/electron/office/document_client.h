@@ -76,8 +76,8 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   std::string GetPartName(int n_part);
   std::string GetPartHash(int n_part);
   void SendDialogEvent(u_int64_t n_window_id, gin::Arguments* args);
-  std::vector<std::string> GetSelectionTypeAndText(const std::string& mime_type,
-                                                   gin::Arguments* args);
+  v8::Local<v8::Value> GetSelectionTypeAndText(const std::string& mime_type,
+                                               gin::Arguments* args);
   v8::Local<v8::Value> GetClipboard(const std::vector<std::string>& mime_types,
                                     gin::Arguments* args);
   bool SetClipboard(std::vector<v8::Local<v8::Object>> clipboard_data,
@@ -96,7 +96,8 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   void RemoveTextContext(unsigned window_id, int before, int after);
   void CompleteFunction(const std::string& function_name);
   void SendFormFieldEvent(const std::string& arguments);
-  void SendContentControlEvent(const v8::Local<v8::Object>& arguments,gin::Arguments* args);
+  void SendContentControlEvent(const v8::Local<v8::Object>& arguments,
+                               gin::Arguments* args);
   // }
 
   lok::Document* GetDocument();

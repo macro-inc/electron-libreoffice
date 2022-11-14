@@ -427,11 +427,7 @@ void DocumentClient::SendDialogEvent(u_int64_t n_window_id,
   document_->sendDialogEvent(n_window_id, p_arguments);
 }
 
-/*
- * Since there are 3 things we need to return of varying types I cast the int
- * returned to a string [selection_type,p_text,used_mime_type]
- */
-std::vector<std::string> DocumentClient::GetSelectionTypeAndText(
+v8::Local<v8::Value> DocumentClient::GetSelectionTypeAndText(
     const std::string& mime_type,
     gin::Arguments* args) {
   char* used_mime_type;
@@ -440,7 +436,16 @@ std::vector<std::string> DocumentClient::GetSelectionTypeAndText(
   int selection_type = document_->getSelectionTypeAndText(
       mime_type.c_str(), &p_text_char, &used_mime_type);
 
-  return {std::to_string(selection_type), p_text_char, used_mime_type};
+  v8::Isolate* isolate = args->isolate();
+
+  v8::Local<v8::Name> names[3] = {gin::StringToV8(isolate, "selectionType"),
+                                  gin::StringToV8(isolate, "text"),
+                                  gin::StringToV8(isolate, "usedMimeType")};
+  v8::Local<v8::Value> values[3] = {gin::StringToV8(isolate, p_text_char),
+                                    gin::ConvertToV8(isolate, selection_type),
+                                    gin::StringToV8(isolate, used_mime_type)};
+
+  return v8::Object::New(isolate, v8::Null(isolate), names, values, 2);
 }
 
 v8::Local<v8::Value> DocumentClient::GetClipboard(
