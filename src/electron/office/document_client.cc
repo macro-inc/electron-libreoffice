@@ -451,11 +451,15 @@ v8::Local<v8::Value> DocumentClient::GetSelectionTypeAndText(
 v8::Local<v8::Value> DocumentClient::GetClipboard(
     const std::vector<std::string>& mime_types,
     gin::Arguments* args) {
+  LOG(ERROR) << "Getting clipboard";
   std::vector<const char*> mime_c_str;
-  for (const std::string& str : mime_types) {
+
+  for (const std::string& mime_type : mime_types) {
     // c_str() gaurantees that the string is null-terminated, data() does not
-    mime_c_str.push_back(str.c_str());
+    LOG(ERROR) << "Mime_Type: " << mime_type;
+    mime_c_str.push_back(mime_type.c_str());
   }
+
   // add the nullptr terminator to the list of null-terminated strings
   mime_c_str.push_back(nullptr);
 
@@ -469,6 +473,8 @@ v8::Local<v8::Value> DocumentClient::GetClipboard(
 
   bool success = document_->getClipboard(
       mime_c_str.data(), &out_count, &out_mime_types, &out_sizes, &out_streams);
+
+  LOG(ERROR) << "SUCCESS OF GET CLIPBOARD: " << success;
 
   // we'll be refrencing this and the context frequently inside of the loop
   v8::Isolate* isolate = args->isolate();
@@ -484,6 +490,7 @@ v8::Local<v8::Value> DocumentClient::GetClipboard(
 
   for (size_t i = 0; i < out_count; ++i) {
     size_t buffer_size = out_sizes[i];
+
     // allocate a new ArrayBuffer and copy the stream to the backing store
     v8::Local<v8::ArrayBuffer> buffer =
         v8::ArrayBuffer::New(isolate, buffer_size);
@@ -500,6 +507,8 @@ v8::Local<v8::Value> DocumentClient::GetClipboard(
     std::ignore = result->Set(context, i, object);
   }
 
+  LOG(ERROR) << "RETURNING GET CLIPBOARD RESULT";
+
   return result;
 }
 
@@ -514,8 +523,8 @@ bool DocumentClient::SetClipboard(
     return false;
   }
 
+  std::vector<const char*> mime_c_str;
   size_t in_sizes[entries];
-  const char* mime_types[entries];
   const char* streams[entries];
 
   v8::Isolate* isolate = args->isolate();
@@ -529,11 +538,14 @@ bool DocumentClient::SetClipboard(
     dictionary.Get<v8::Local<v8::ArrayBuffer>>("buffer", &buffer);
 
     in_sizes[i] = buffer->ByteLength();
-    mime_types[i] = mime_type.c_str();
+    mime_c_str.push_back(const_cast<const std::string&>(mime_type).c_str());
     streams[i] = static_cast<char*>(buffer->GetBackingStore()->Data());
   }
 
-  return document_->setClipboard(entries, mime_types, in_sizes, streams);
+  // add the nullptr terminator to the list of null-terminated strings
+  mime_c_str.push_back(nullptr);
+
+  return document_->setClipboard(entries, mime_c_str.data(), in_sizes, streams);
 }
 
 bool DocumentClient::Paste(const std::string& mime_type,
