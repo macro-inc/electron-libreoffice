@@ -68,6 +68,7 @@ class OfficeClient : public gin::Wrappable<OfficeClient> {
   void SetDocumentPassword(const std::string& url, const std::string& password);
   v8::Local<v8::Value> GetVersionInfo(gin::Arguments* args);
   void SendDialogEvent(u_int64_t window_id, gin::Arguments* args);
+  bool RunMacro(const std::string& url);
   // }
 
  protected:

@@ -138,7 +138,7 @@ gin::ObjectTemplateBuilder OfficeClient::GetObjectTemplateBuilder(
       .SetMethod("getFilterTypes", &OfficeClient::GetFilterTypes)
       .SetMethod("setDocumentPassword", &OfficeClient::SetDocumentPassword)
       .SetMethod("getVersionInfo", &OfficeClient::GetVersionInfo)
-      /* .SetMethod("runDocument", &OfficeClient::RunDocument) */
+      .SetMethod("runMacro", &OfficeClient::RunMacro)
       .SetMethod("sendDialogEvent", &OfficeClient::SendDialogEvent)
       .SetMethod("loadDocument", &OfficeClient::LoadDocument);
 }
@@ -314,5 +314,9 @@ void OfficeClient::SendDialogEvent(u_int64_t window_id, gin::Arguments* args) {
     }
   }
   office_->sendDialogEvent(window_id, p_arguments);
+}
+
+bool OfficeClient::RunMacro(const std::string& url) {
+  return office_->runMacro(url.c_str());
 }
 }  // namespace electron::office

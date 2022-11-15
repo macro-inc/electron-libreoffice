@@ -38,11 +38,11 @@ export namespace LibreOffice {
     emit(eventName: string, callback: () => void): void;
 
     /**
-     * @description TODO: FILL ME IN
-     * @param {number} incAmount - TODO: FILL ME IN
-     * @returns {number} TODO: FILL ME IN
+     * @description converts twip to a css px
+     * @param {number} input - twip
+     * @returns {number} css px
      */
-    twipToPx(incAmount: number): number;
+    twipToPx(input: number): number;
 
     /**
      * @description posts a UNO command to the document
@@ -294,10 +294,17 @@ export namespace LibreOffice {
     sendDialogEvent(windowId: number, args: string): void;
 
     /**
-     * @description Loads a given document
+     * @description loads a given document
      * @param {string} path - the document path
      * @returns {DocumentClient} a handle to the document client
      */
     loadDocument(path: string): DocumentClient;
+
+    /**
+     * @description run a macro
+     * @param {string} url - the url for the macro (macro:// URI format)
+     * @returns {boolean} success
+     */
+    runMacro(url: string): boolean;
   }
 }
