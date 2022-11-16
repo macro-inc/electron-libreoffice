@@ -538,7 +538,7 @@ bool DocumentClient::SetClipboard(
     dictionary.Get<v8::Local<v8::ArrayBuffer>>("buffer", &buffer);
 
     in_sizes[i] = buffer->ByteLength();
-    mime_c_str.push_back(const_cast<const std::string&>(mime_type).c_str());
+    mime_c_str.push_back(mime_type.c_str());
     streams[i] = static_cast<char*>(buffer->GetBackingStore()->Data());
   }
 
