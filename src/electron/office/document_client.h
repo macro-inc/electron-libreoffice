@@ -78,8 +78,7 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   void SendDialogEvent(u_int64_t n_window_id, gin::Arguments* args);
   v8::Local<v8::Value> GetSelectionTypeAndText(const std::string& mime_type,
                                                gin::Arguments* args);
-  v8::Local<v8::Value> GetClipboard(const std::vector<std::string>& mime_types,
-                                    gin::Arguments* args);
+  v8::Local<v8::Value> GetClipboard(gin::Arguments* args);
   bool SetClipboard(std::vector<v8::Local<v8::Object>> clipboard_data,
                     gin::Arguments* args);
   bool Paste(const std::string& mime_type,

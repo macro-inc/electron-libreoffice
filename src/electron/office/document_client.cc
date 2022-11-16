@@ -448,21 +448,19 @@ v8::Local<v8::Value> DocumentClient::GetSelectionTypeAndText(
   return v8::Object::New(isolate, v8::Null(isolate), names, values, 2);
 }
 
-v8::Local<v8::Value> DocumentClient::GetClipboard(
-    const std::vector<std::string>& mime_types,
-    gin::Arguments* args) {
-  LOG(ERROR) << "Getting clipboard";
+v8::Local<v8::Value> DocumentClient::GetClipboard(gin::Arguments* args) {
+  std::vector<std::string> mime_types;
   std::vector<const char*> mime_c_str;
 
-  for (const std::string& mime_type : mime_types) {
-    // c_str() gaurantees that the string is null-terminated, data() does not
-    LOG(ERROR) << "Mime_Type: " << mime_type;
-    mime_c_str.push_back(mime_type.c_str());
+  if (args->GetNext(&mime_types)) {
+    for (const std::string& mime_type : mime_types) {
+      // c_str() gaurantees that the string is null-terminated, data() does not
+      mime_c_str.push_back(mime_type.c_str());
+    }
+
+    // add the nullptr terminator to the list of null-terminated strings
+    mime_c_str.push_back(nullptr);
   }
-
-  // add the nullptr terminator to the list of null-terminated strings
-  mime_c_str.push_back(nullptr);
-
   size_t out_count;
 
   // these are arrays of out_count size, variable size arrays in C are simply
@@ -472,9 +470,8 @@ v8::Local<v8::Value> DocumentClient::GetClipboard(
   char** out_streams = nullptr;
 
   bool success = document_->getClipboard(
-      mime_c_str.data(), &out_count, &out_mime_types, &out_sizes, &out_streams);
-
-  LOG(ERROR) << "SUCCESS OF GET CLIPBOARD: " << success;
+      mime_types.size() ? mime_c_str.data() : nullptr, &out_count,
+      &out_mime_types, &out_sizes, &out_streams);
 
   // we'll be refrencing this and the context frequently inside of the loop
   v8::Isolate* isolate = args->isolate();
@@ -506,8 +503,6 @@ v8::Local<v8::Value> DocumentClient::GetClipboard(
         v8::Object::New(isolate, v8::Null(isolate), names, values, 2);
     std::ignore = result->Set(context, i, object);
   }
-
-  LOG(ERROR) << "RETURNING GET CLIPBOARD RESULT";
 
   return result;
 }
