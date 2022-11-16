@@ -104,10 +104,10 @@ export namespace LibreOffice {
     /**
      * @description gets the content on the clipboard for the current view as a series of
      * binary streams
-     * @param{string[]} mimeTypes - the array of mimeTypes corresponding to each item in the clipboard
+     * @param [string[]] mimeTypes - the array of mimeTypes corresponding to each item in the clipboard
      * @returns {ClipboardItem[]} an array of clipboard items
      */
-    getClipboard(mimeTypes: string[]): ClipboardItem[];
+    getClipboard(mimeTypes?: string[]): ClipboardItem[];
 
     /**
      * @description populates the clipboard for this view with multiple types of content
