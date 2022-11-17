@@ -410,7 +410,7 @@ std::string DocumentClient::GetPartHash(int n_part) {
 }
 
 // TODO: Investigate correct type of args here
-void DocumentClient::SendDialogEvent(u_int64_t n_window_id,
+void DocumentClient::SendDialogEvent(uint64_t n_window_id,
                                      gin::Arguments* args) {
   v8::Local<v8::Value> arguments;
   v8::MaybeLocal<v8::String> maybe_arguments_str;

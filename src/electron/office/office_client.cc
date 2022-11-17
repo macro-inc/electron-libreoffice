@@ -299,7 +299,7 @@ v8::Local<v8::Value> OfficeClient::GetVersionInfo(gin::Arguments* args) {
 }
 
 // TODO: Investigate correct type of args here
-void OfficeClient::SendDialogEvent(u_int64_t window_id, gin::Arguments* args) {
+void OfficeClient::SendDialogEvent(uint64_t window_id, gin::Arguments* args) {
   v8::Local<v8::Value> arguments;
   v8::MaybeLocal<v8::String> maybe_arguments_str;
 
