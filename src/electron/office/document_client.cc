@@ -614,7 +614,7 @@ void DocumentClient::SendFormFieldEvent(const std::string& arguments) {
   document_->sendFormFieldEvent(arguments.c_str());
 }
 
-void DocumentClient::SendContentControlEvent(
+bool DocumentClient::SendContentControlEvent(
     const v8::Local<v8::Object>& arguments,
     gin::Arguments* args) {
   v8::Isolate* isolate = args->isolate();
@@ -624,7 +624,7 @@ void DocumentClient::SendContentControlEvent(
       v8::JSON::Stringify(args->GetHolderCreationContext(), arguments);
 
   if (str_object.IsEmpty()) {
-    return;
+    return false;
   }
 
   v8::String::Utf8Value object_as_utf8_str =
@@ -633,5 +633,7 @@ void DocumentClient::SendContentControlEvent(
   std::string object_as_str(*object_as_utf8_str);
 
   document_->sendContentControlEvent(object_as_str.c_str());
+
+  return true;
 }
 }  // namespace electron::office

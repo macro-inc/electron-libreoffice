@@ -208,8 +208,9 @@ export namespace LibreOffice {
     /**
      * @description posts an event for the content control at the cursor position
      * @param arguments - the arguments for the event
+     * @returns whether sending the event was successful
      */
-    sendContentControlEvent(arguments: {[name: string]: any}): void;
+    sendContentControlEvent(arguments: {[name: string]: any}): boolean;
 
     /**
      * @description gets the page rect objects for the document

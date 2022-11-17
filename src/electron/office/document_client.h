@@ -95,7 +95,7 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   void RemoveTextContext(unsigned window_id, int before, int after);
   void CompleteFunction(const std::string& function_name);
   void SendFormFieldEvent(const std::string& arguments);
-  void SendContentControlEvent(const v8::Local<v8::Object>& arguments,
+  bool SendContentControlEvent(const v8::Local<v8::Object>& arguments,
                                gin::Arguments* args);
   // }
 
