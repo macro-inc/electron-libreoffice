@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "office/document_client.h"
+#include <sys/types.h>
 
 #include <iterator>
 #include <string_view>
@@ -15,6 +16,8 @@
 #include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/sequenced_task_runner_handle.h"
+#include "gin/converter.h"
+#include "gin/dictionary.h"
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
 #include "gin/per_isolate_data.h"
@@ -40,9 +43,11 @@
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "url/gurl.h"
+#include "v8-array-buffer.h"
 #include "v8/include/v8-container.h"
 #include "v8/include/v8-context.h"
 #include "v8/include/v8-isolate.h"
+#include "v8/include/v8-json.h"
 #include "v8/include/v8-local-handle.h"
 #include "v8/include/v8-primitive.h"
 
@@ -89,6 +94,29 @@ gin::ObjectTemplateBuilder DocumentClient::GetObjectTemplateBuilder(
       .SetMethod("off", &DocumentClient::Off)
       .SetMethod("emit", &DocumentClient::Emit)
       .SetMethod("twipToPx", &DocumentClient::TwipToPx)
+      .SetMethod("postUnoCommand", &DocumentClient::PostUnoCommand)
+      .SetMethod("getTextSelection", &DocumentClient::GetTextSelection)
+      .SetMethod("setTextSelection", &DocumentClient::SetTextSelection)
+      .SetMethod("sendDialogEvent", &DocumentClient::SendDialogEvent)
+      .SetMethod("getPartName", &DocumentClient::GetPartName)
+      .SetMethod("getPartHash", &DocumentClient::GetPartHash)
+      .SetMethod("getSelectionTypeAndText",
+                 &DocumentClient::GetSelectionTypeAndText)
+      .SetMethod("getClipboard", &DocumentClient::GetClipboard)
+      .SetMethod("setClipboard", &DocumentClient::SetClipboard)
+      .SetMethod("paste", &DocumentClient::Paste)
+      .SetMethod("setGraphicSelection", &DocumentClient::SetGraphicSelection)
+      .SetMethod("resetSelection", &DocumentClient::ResetSelection)
+      .SetMethod("getCommandValues", &DocumentClient::GetCommandValues)
+      .SetMethod("setOutlineState", &DocumentClient::SetOutlineState)
+      .SetMethod("setViewLanguage", &DocumentClient::SetViewLanguage)
+      .SetMethod("selectPart", &DocumentClient::SelectPart)
+      .SetMethod("moveSelectedParts", &DocumentClient::MoveSelectedParts)
+      .SetMethod("removeTextContext", &DocumentClient::RemoveTextContext)
+      .SetMethod("completeFunction", &DocumentClient::CompleteFunction)
+      .SetMethod("sendFormFieldEvent", &DocumentClient::SendFormFieldEvent)
+      .SetMethod("sendContentControlEvent",
+                 &DocumentClient::SendContentControlEvent)
       .SetLazyDataProperty("pageRects", &DocumentClient::PageRects)
       .SetLazyDataProperty("size", &DocumentClient::Size)
       .SetLazyDataProperty("isReady", &DocumentClient::IsReady);
@@ -330,4 +358,282 @@ void DocumentClient::Emit(const std::string& event_name,
 }
 
 DocumentClient::DocumentClient() = default;
+
+void DocumentClient::PostUnoCommand(const std::string& command,
+                                    gin::Arguments* args) {
+  v8::Local<v8::Value> arguments;
+  v8::MaybeLocal<v8::String> maybe_args_json;
+  char* args_json = nullptr;
+
+  bool notifyWhenFinished;
+  if (args->GetNext(&arguments)) {
+    maybe_args_json =
+        v8::JSON::Stringify(args->GetHolderCreationContext(), arguments);
+    if (!maybe_args_json.IsEmpty()) {
+      v8::String::Utf8Value args_json_utf8(args->isolate(),
+                                           maybe_args_json.ToLocalChecked());
+      args_json = *args_json_utf8;
+    }
+  }
+  args->GetNext(&notifyWhenFinished);
+
+  document_->postUnoCommand(command.c_str(), args_json, notifyWhenFinished);
+}
+
+std::vector<std::string> DocumentClient::GetTextSelection(
+    const std::string& mime_type,
+    gin::Arguments* args) {
+  char* used_mime_type;
+  char* text_selection;
+  text_selection =
+      document_->getTextSelection(mime_type.c_str(), &used_mime_type);
+
+  return {text_selection, used_mime_type};
+}
+
+void DocumentClient::SetTextSelection(int n_type, int n_x, int n_y) {
+  document_->setTextSelection(n_type, n_x, n_y);
+}
+
+std::string DocumentClient::GetPartName(int n_part) {
+  char* part_name = document_->getPartName(n_part);
+  std::string str_part_name = std::string(part_name);
+
+  return str_part_name;
+}
+
+std::string DocumentClient::GetPartHash(int n_part) {
+  char* part_hash = document_->getPartHash(n_part);
+  std::string str_part_hash = std::string(part_hash);
+
+  return str_part_hash;
+}
+
+// TODO: Investigate correct type of args here
+void DocumentClient::SendDialogEvent(u_int64_t n_window_id,
+                                     gin::Arguments* args) {
+  v8::Local<v8::Value> arguments;
+  v8::MaybeLocal<v8::String> maybe_arguments_str;
+  char* p_arguments = nullptr;
+
+  if (args->GetNext(&arguments)) {
+    maybe_arguments_str = arguments->ToString(args->GetHolderCreationContext());
+    if (!maybe_arguments_str.IsEmpty()) {
+      v8::String::Utf8Value p_arguments_utf8(
+          args->isolate(), maybe_arguments_str.ToLocalChecked());
+      p_arguments = *p_arguments_utf8;
+    }
+  }
+  document_->sendDialogEvent(n_window_id, p_arguments);
+}
+
+v8::Local<v8::Value> DocumentClient::GetSelectionTypeAndText(
+    const std::string& mime_type,
+    gin::Arguments* args) {
+  char* used_mime_type;
+  char* p_text_char;
+
+  int selection_type = document_->getSelectionTypeAndText(
+      mime_type.c_str(), &p_text_char, &used_mime_type);
+
+  v8::Isolate* isolate = args->isolate();
+
+  v8::Local<v8::Name> names[3] = {gin::StringToV8(isolate, "selectionType"),
+                                  gin::StringToV8(isolate, "text"),
+                                  gin::StringToV8(isolate, "usedMimeType")};
+  v8::Local<v8::Value> values[3] = {gin::StringToV8(isolate, p_text_char),
+                                    gin::ConvertToV8(isolate, selection_type),
+                                    gin::StringToV8(isolate, used_mime_type)};
+
+  return v8::Object::New(isolate, v8::Null(isolate), names, values, 2);
+}
+
+v8::Local<v8::Value> DocumentClient::GetClipboard(gin::Arguments* args) {
+  std::vector<std::string> mime_types;
+  std::vector<const char*> mime_c_str;
+
+  if (args->GetNext(&mime_types)) {
+    for (const std::string& mime_type : mime_types) {
+      // c_str() gaurantees that the string is null-terminated, data() does not
+      mime_c_str.push_back(mime_type.c_str());
+    }
+
+    // add the nullptr terminator to the list of null-terminated strings
+    mime_c_str.push_back(nullptr);
+  }
+  size_t out_count;
+
+  // these are arrays of out_count size, variable size arrays in C are simply
+  // pointers to the first element
+  char** out_mime_types = nullptr;
+  size_t* out_sizes = nullptr;
+  char** out_streams = nullptr;
+
+  bool success = document_->getClipboard(
+      mime_types.size() ? mime_c_str.data() : nullptr, &out_count,
+      &out_mime_types, &out_sizes, &out_streams);
+
+  // we'll be refrencing this and the context frequently inside of the loop
+  v8::Isolate* isolate = args->isolate();
+
+  // return an empty array if we failed
+  if (!success)
+    return v8::Array::New(isolate, 0);
+
+  // an array of n=out_count array buffers
+  v8::Local<v8::Array> result = v8::Array::New(isolate, out_count);
+  // we pull out the context once outside of the array
+  v8::Local<v8::Context> context = args->GetHolderCreationContext();
+
+  for (size_t i = 0; i < out_count; ++i) {
+    size_t buffer_size = out_sizes[i];
+
+    // allocate a new ArrayBuffer and copy the stream to the backing store
+    v8::Local<v8::ArrayBuffer> buffer =
+        v8::ArrayBuffer::New(isolate, buffer_size);
+    std::memcpy(buffer->GetBackingStore()->Data(), out_streams[i], buffer_size);
+
+    v8::Local<v8::Name> names[2] = {gin::StringToV8(isolate, "mimeType"),
+                                    gin::StringToV8(isolate, "buffer")};
+    v8::Local<v8::Value> values[2] = {
+        gin::StringToV8(isolate, out_mime_types[i]),
+        gin::ConvertToV8(isolate, buffer)};
+
+    v8::Local<v8::Value> object =
+        v8::Object::New(isolate, v8::Null(isolate), names, values, 2);
+    std::ignore = result->Set(context, i, object);
+  }
+
+  return result;
+}
+
+bool DocumentClient::SetClipboard(
+    std::vector<v8::Local<v8::Object>> clipboard_data,
+    gin::Arguments* args) {
+  // entries in clipboard_data
+  const size_t entries = clipboard_data.size();
+
+  // No entries in clipboard_data
+  if (entries == 0) {
+    return false;
+  }
+
+  std::vector<const char*> mime_c_str;
+  size_t in_sizes[entries];
+  const char* streams[entries];
+
+  v8::Isolate* isolate = args->isolate();
+  for (size_t i = 0; i < entries; ++i) {
+    gin::Dictionary dictionary(isolate, clipboard_data[i]);
+
+    std::string mime_type;
+    dictionary.Get<std::string>("mimeType", &mime_type);
+
+    v8::Local<v8::ArrayBuffer> buffer;
+    dictionary.Get<v8::Local<v8::ArrayBuffer>>("buffer", &buffer);
+
+    in_sizes[i] = buffer->ByteLength();
+    mime_c_str.push_back(mime_type.c_str());
+    streams[i] = static_cast<char*>(buffer->GetBackingStore()->Data());
+  }
+
+  // add the nullptr terminator to the list of null-terminated strings
+  mime_c_str.push_back(nullptr);
+
+  return document_->setClipboard(entries, mime_c_str.data(), in_sizes, streams);
+}
+
+bool DocumentClient::Paste(const std::string& mime_type,
+                           const std::string& data,
+                           gin::Arguments* args) {
+  return document_->paste(mime_type.c_str(), data.c_str(), data.size());
+}
+
+void DocumentClient::SetGraphicSelection(int n_type, int n_x, int n_y) {
+  document_->setGraphicSelection(n_type, n_x, n_y);
+}
+
+void DocumentClient::ResetSelection() {
+  document_->resetSelection();
+}
+
+v8::Local<v8::Value> DocumentClient::GetCommandValues(
+    const std::string& command,
+    gin::Arguments* args) {
+  char* result = document_->getCommandValues(command.c_str());
+
+  v8::Isolate* isolate = args->isolate();
+
+  v8::MaybeLocal<v8::String> maybe_res_json_str =
+      v8::String::NewFromUtf8(isolate, result);
+
+  if (maybe_res_json_str.IsEmpty()) {
+    return v8::Undefined(isolate);
+  }
+
+  v8::MaybeLocal<v8::Value> res = v8::JSON::Parse(
+      args->GetHolderCreationContext(), maybe_res_json_str.ToLocalChecked());
+
+  if (res.IsEmpty()) {
+    return v8::Undefined(isolate);
+  }
+
+  return res.ToLocalChecked();
+}
+
+void DocumentClient::SetOutlineState(bool column,
+                                     int level,
+                                     int index,
+                                     bool hidden) {
+  document_->setOutlineState(column, level, index, hidden);
+}
+
+void DocumentClient::SetViewLanguage(int id, const std::string& language) {
+  document_->setViewLanguage(id, language.c_str());
+}
+
+void DocumentClient::SelectPart(int part, int select) {
+  document_->selectPart(part, select);
+}
+
+void DocumentClient::MoveSelectedParts(int position, bool duplicate) {
+  document_->moveSelectedParts(position, duplicate);
+}
+
+void DocumentClient::RemoveTextContext(unsigned window_id,
+                                       int before,
+                                       int after) {
+  document_->removeTextContext(window_id, before, after);
+}
+
+void DocumentClient::CompleteFunction(const std::string& function_name) {
+  document_->completeFunction(function_name.c_str());
+}
+
+void DocumentClient::SendFormFieldEvent(const std::string& arguments) {
+  document_->sendFormFieldEvent(arguments.c_str());
+}
+
+bool DocumentClient::SendContentControlEvent(
+    const v8::Local<v8::Object>& arguments,
+    gin::Arguments* args) {
+  v8::Isolate* isolate = args->isolate();
+
+  // Object -> JSON string -> string
+  v8::MaybeLocal<v8::String> str_object =
+      v8::JSON::Stringify(args->GetHolderCreationContext(), arguments);
+
+  if (str_object.IsEmpty()) {
+    return false;
+  }
+
+  v8::String::Utf8Value object_as_utf8_str =
+      v8::String::Utf8Value(isolate, str_object.ToLocalChecked());
+
+  std::string object_as_str(*object_as_utf8_str);
+
+  document_->sendContentControlEvent(object_as_str.c_str());
+
+  return true;
+}
 }  // namespace electron::office

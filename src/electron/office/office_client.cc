@@ -30,6 +30,7 @@
 #include "shell/common/gin_converters/std_converter.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/libreofficekit/LibreOfficeKit.hxx"
+#include "v8-json.h"
 #include "v8/include/v8-function.h"
 #include "v8/include/v8-isolate.h"
 #include "v8/include/v8-local-handle.h"
@@ -134,6 +135,11 @@ gin::ObjectTemplateBuilder OfficeClient::GetObjectTemplateBuilder(
       .SetMethod("on", &OfficeClient::On)
       .SetMethod("off", &OfficeClient::Off)
       .SetMethod("emit", &OfficeClient::Emit)
+      .SetMethod("getFilterTypes", &OfficeClient::GetFilterTypes)
+      .SetMethod("setDocumentPassword", &OfficeClient::SetDocumentPassword)
+      .SetMethod("getVersionInfo", &OfficeClient::GetVersionInfo)
+      .SetMethod("runMacro", &OfficeClient::RunMacro)
+      .SetMethod("sendDialogEvent", &OfficeClient::SendDialogEvent)
       .SetMethod("loadDocument", &OfficeClient::LoadDocument);
 }
 
@@ -241,5 +247,76 @@ void OfficeClient::Emit(const std::string& event_name,
                         v8::Local<v8::Value> data) {
   event_bus_.Emit(event_name, data);
 }
+v8::Local<v8::Value> OfficeClient::GetFilterTypes(gin::Arguments* args) {
+  v8::Isolate* isolate = args->isolate();
 
+  char* filter_types = office_->getFilterTypes();
+
+  v8::MaybeLocal<v8::String> maybe_filter_types_str =
+      v8::String::NewFromUtf8(isolate, filter_types);
+
+  if (maybe_filter_types_str.IsEmpty()) {
+    return v8::Undefined(isolate);
+  }
+
+  v8::MaybeLocal<v8::Value> res =
+      v8::JSON::Parse(args->GetHolderCreationContext(),
+                      maybe_filter_types_str.ToLocalChecked());
+
+  if (res.IsEmpty()) {
+    return v8::Undefined(isolate);
+  }
+
+  return res.ToLocalChecked();
+}
+
+void OfficeClient::SetDocumentPassword(const std::string& url,
+                                       const std::string& password) {
+  office_->setDocumentPassword(url.c_str(), password.c_str());
+}
+
+v8::Local<v8::Value> OfficeClient::GetVersionInfo(gin::Arguments* args) {
+  v8::Isolate* isolate = args->isolate();
+
+  char* version_info = office_->getVersionInfo();
+
+  v8::MaybeLocal<v8::String> maybe_version_info_str =
+      v8::String::NewFromUtf8(isolate, version_info);
+
+  if (maybe_version_info_str.IsEmpty()) {
+    return v8::Undefined(isolate);
+  }
+
+  v8::MaybeLocal<v8::Value> res =
+      v8::JSON::Parse(args->GetHolderCreationContext(),
+                      maybe_version_info_str.ToLocalChecked());
+
+  if (res.IsEmpty()) {
+    return v8::Undefined(isolate);
+  }
+
+  return res.ToLocalChecked();
+}
+
+// TODO: Investigate correct type of args here
+void OfficeClient::SendDialogEvent(u_int64_t window_id, gin::Arguments* args) {
+  v8::Local<v8::Value> arguments;
+  v8::MaybeLocal<v8::String> maybe_arguments_str;
+
+  char* p_arguments = nullptr;
+
+  if (args->GetNext(&arguments)) {
+    maybe_arguments_str = arguments->ToString(args->GetHolderCreationContext());
+    if (!maybe_arguments_str.IsEmpty()) {
+      v8::String::Utf8Value p_arguments_utf8(
+          args->isolate(), maybe_arguments_str.ToLocalChecked());
+      p_arguments = *p_arguments_utf8;
+    }
+  }
+  office_->sendDialogEvent(window_id, p_arguments);
+}
+
+bool OfficeClient::RunMacro(const std::string& url) {
+  return office_->runMacro(url.c_str());
+}
 }  // namespace electron::office
