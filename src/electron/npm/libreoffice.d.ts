@@ -103,6 +103,7 @@ export namespace LibreOffice {
      * @description gets the content on the clipboard for the current view as a series of
      * binary streams
      * @param mimeTypes - the array of mimeTypes corresponding to each item in the clipboard
+     * the mimeTypes should include the charset if you are going to pass them in for filtering the clipboard data ex.) text/plain;charset=utf-8
      * @returns an array of clipboard items
      */
     getClipboard(mimeTypes?: string[]): ClipboardItem[];
@@ -110,6 +111,7 @@ export namespace LibreOffice {
     /**
      * @description populates the clipboard for this view with multiple types of content
      * @param clipboardData - array of clipboard items used to populate the clipboard
+     * for setting the clipboard data you will NOT want to include the charset in the mimeType. ex.) text/plain
      * @returns whether the operation was successful
      */
     setClipboard(clipboardData: ClipboardItem[]): boolean;

@@ -624,6 +624,7 @@ void DocumentClient::SendContentControlEvent(
       v8::JSON::Stringify(args->GetHolderCreationContext(), arguments);
 
   if (str_object.IsEmpty()) {
+    return;
   }
 
   v8::String::Utf8Value object_as_utf8_str =
