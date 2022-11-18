@@ -1,5 +1,5 @@
-declare interface Window {
-  libreoffice: LibreOffice.OfficeClient;
+declare global {
+  const libreoffice: LibreOffice.OfficeClient;
 }
 
 export namespace LibreOffice {
