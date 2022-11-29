@@ -20,6 +20,8 @@
       accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     />
 
+    <button type="button" onclick="fontChanger()">Font Changer</button>
+    <button type="button" onclick="fontBolder()">Font Bolder</button>
     <script src="wrapper.js"></script>
     <office-doc id="el-embed" />
     <script>
@@ -30,6 +32,7 @@
         console.log(x);
       });
 
+      let globalDoc;
       picker.onchange = () => {
         if (picker.files.length === 1) {
           const uri = encodeURI(
@@ -37,6 +40,7 @@
           );
           const doc = libreoffice.loadDocument(uri);
           doc.on('ready', (x) => {
+            globalDoc = doc;
             console.log('Document Ready', x);
 
             const encodedData = new TextEncoder().encode(
@@ -64,6 +68,16 @@
           embed.focus();
         }
       };
+      // Tests uno command with an argument body
+      function fontChanger() {
+        globalDoc.postUnoCommand('.uno:FontColor', {
+          FontColor: {type: 'long', value: 15028078},
+        });
+      }
+      // Tests uno command without an argument body
+      function fontBolder() {
+        globalDoc.postUnoCommand('.uno:Bold');
+      }
     </script>
   </body>
 </html>

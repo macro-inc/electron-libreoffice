@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 
 function css(x) {
   return x;
@@ -75,35 +75,35 @@ class OfficeDoc extends HTMLElement {
   constructor() {
     super();
 
-    const shadow = this.attachShadow({ mode: "open" });
-    const style = document.createElement("style");
+    const shadow = this.attachShadow({mode: 'open'});
+    const style = document.createElement('style');
     style.textContent = styleCSS;
-    const container = document.createElement("div");
-    container.className = "container";
+    const container = document.createElement('div');
+    container.className = 'container';
 
-    this.embed = document.createElement("embed");
-    this.embed.setAttribute("type", "application/x-libreoffice");
-    this.embed.style.display = "none";
+    this.embed = document.createElement('embed');
+    this.embed.setAttribute('type', 'application/x-libreoffice');
+    this.embed.style.display = 'none';
 
-    this.sizer = document.createElement("div");
-    this.sizer.className = "sizer";
+    this.sizer = document.createElement('div');
+    this.sizer.className = 'sizer';
 
-    this.scroller = document.createElement("div");
-    this.scroller.className = "scroll";
+    this.scroller = document.createElement('div');
+    this.scroller.className = 'scroll';
 
-    this.pages = document.createElement("div");
-    this.pages.className = "pages";
+    this.pages = document.createElement('div');
+    this.pages.className = 'pages';
 
-    this.cursor = document.createElement("div");
-    this.cursor.className = "cursor";
+    this.cursor = document.createElement('div');
+    this.cursor.className = 'cursor';
     this.sizer.appendChild(this.cursor);
 
     this.scroller.appendChild(this.sizer);
     this.scroller.appendChild(this.embed);
     this.scroller.appendChild(this.pages);
 
-    this.scroller.addEventListener("scroll", this._handleScroll.bind(this), {
-      passive: true
+    this.scroller.addEventListener('scroll', this._handleScroll.bind(this), {
+      passive: true,
     });
 
     container.appendChild(this.scroller);
@@ -123,14 +123,18 @@ class OfficeDoc extends HTMLElement {
    * @param {any} doc DocumentClient object to render
    */
   renderDocument(doc) {
-    this.embed.style.display = "block";
+    this.embed.style.display = 'block';
     this.embed.renderDocument(doc);
     this.doc = doc;
     this._refreshSize();
     doc.on('document_size_changed', this._refreshSize);
-    const logit = (x) => {console.log(x)};
+    const logit = (x) => {
+      console.log(x);
+    };
     doc.on('invalidate_visible_cursor', ({payload}) => {
-      const [x,y,width,height] = payload.map(n => Math.max(doc.twipToPx(n), 1));
+      const [x, y, width, height] = payload.map((n) =>
+        Math.max(doc.twipToPx(n), 1),
+      );
       this.cursor.style.transform = `translate(${x + 1.067}px, ${y}px)`;
       this.cursor.style.width = `${width}px`;
       this.cursor.style.height = `${height}px`;
@@ -142,6 +146,7 @@ class OfficeDoc extends HTMLElement {
     doc.on('hyperlink_clicked', logit);
     doc.on('cursor_visible', logit);
     doc.on('set_part', logit);
+    doc.on('state_changed', logit);
   }
 
   focus() {
@@ -149,20 +154,23 @@ class OfficeDoc extends HTMLElement {
   }
 
   _handleScroll() {
-    this.embed.updateScroll({x: this.scroller.scrollLeft, y: this.scroller.scrollTop});
+    this.embed.updateScroll({
+      x: this.scroller.scrollLeft,
+      y: this.scroller.scrollTop,
+    });
   }
 
   _refreshSize = () => {
     if (!this.doc) {
-      console.error('Doc is not set!')
+      console.error('Doc is not set!');
       return;
     }
     const doc = this.doc;
-    const { width, height } = doc.size;
+    const {width, height} = doc.size;
     this._setDimensions(width, height);
 
     this._pageRects = doc.pageRects;
-    this._pageNodes = this._pageRects.map(rect => {
+    this._pageNodes = this._pageRects.map((rect) => {
       const node = document.createElement('div');
       node.className = 'page';
       node.style.top = `${rect.y}px`;
@@ -173,16 +181,16 @@ class OfficeDoc extends HTMLElement {
       return node;
     });
     this.pages.replaceChildren(...this._pageNodes);
-  }
+  };
 
   _scrollToPage(index) {
     if (!this.doc || !this._pageRects) {
-      console.error('Doc is not set!')
+      console.error('Doc is not set!');
       return;
     }
 
     if (this._pageRects.length < index) {
-      console.error('Invalid page index!')
+      console.error('Invalid page index!');
       return;
     }
 
@@ -202,5 +210,5 @@ class OfficeDoc extends HTMLElement {
   }
 }
 
-if (!customElements.get("office-doc"))
-  customElements.define("office-doc", OfficeDoc);
+if (!customElements.get('office-doc'))
+  customElements.define('office-doc', OfficeDoc);
