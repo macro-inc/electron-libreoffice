@@ -20,8 +20,14 @@
       accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     />
 
-    <button type="button" onclick="fontChanger()">Font Changer</button>
-    <button type="button" onclick="fontBolder()">Font Bolder</button>
+    <button type="button" onclick="trackChangesWindow()">
+      Track Changes Window
+    </button>
+    <button type="button" onclick="toggleTrackChanges()">
+      TOGGLE TRACK CHANGES
+    </button>
+    <button type="button" onclick="acceptTrackChange()">Accept TC</button>
+    <button type="button" onclick="rejectTrackChange()">Reject TC</button>
     <script src="wrapper.js"></script>
     <office-doc id="el-embed" />
     <script>
@@ -30,6 +36,14 @@
 
       libreoffice.on('status_indicator_set_value', (x) => {
         console.log(x);
+      });
+
+      libreoffice.on('status_changed', (x) => {
+        console.log('lo', x);
+      });
+
+      libreoffice.on('window', (x) => {
+        console.log('lo', x);
       });
 
       let globalDoc;
@@ -54,29 +68,28 @@
               },
             ];
 
-            doc.setClipboard(clipboardData);
-
             console.log(
-              'Clipboard (list)',
-              doc.getClipboard(['text/plain;charset=utf-8']),
+              doc.getCommandValues('.uno:ViewTrackChangesInformation'),
             );
-            console.log('Clipboard (empty list)', doc.getClipboard([]));
-            console.log('Clipboard (no list)', doc.getClipboard());
+            console.log(doc.getCommandValues('.uno:ViewAnnotations'));
           });
 
           embed.renderDocument(doc);
           embed.focus();
         }
       };
-      // Tests uno command with an argument body
-      function fontChanger() {
-        globalDoc.postUnoCommand('.uno:FontColor', {
-          FontColor: {type: 'long', value: 15028078},
-        });
+      function trackChangesWindow() {
+        globalDoc.postUnoCommand('.uno:AcceptTrackedChanges');
       }
-      // Tests uno command without an argument body
-      function fontBolder() {
-        globalDoc.postUnoCommand('.uno:Bold');
+
+      function toggleTrackChanges() {
+        globalDoc.postUnoCommand('.uno:TrackChanges');
+      }
+      function acceptTrackChange() {
+        globalDoc.postUnoCommand('.uno:AcceptTrackedChange');
+      }
+      function rejectTrackChange() {
+        globalDoc.postUnoCommand('.uno:RejectTrackedChange');
       }
     </script>
   </body>

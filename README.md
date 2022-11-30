@@ -1,12 +1,14 @@
 ## What is this?
+
 This project embeds LibreOfficeKit into Electron as a Blink WebPlugin
 
 ## How do I set this up locally?
+
 Install the [Electron prerequisites](https://www.electronjs.org/docs/latest/development/build-instructions-gn#platform-prerequisites) for your operating system
 
 Sync the code (including the git cache, uses ~42 GiB of space):
 
-``` bash
+```bash
 git clone https://github.com/coparse-inc/electron-libreoffice
 cd electron-libreoffice
 scripts/e sync
@@ -22,7 +24,7 @@ For compiling for Apple Silicon: `FOR_APPLE_SILICON=true scripts/e build`
 
 ## How do I run this build?
 
-``` bash
+```bash
 # To run with the included manual QA page, use:
 scripts/e run
 
@@ -58,3 +60,7 @@ scripts/e vs_devenv
 ## How do I pull the upstream changes from Electron?
 
 Run `scripts/pull-upstream-changes.sh`
+
+## How do I update LibreOfficeKit after compiling it locally?
+
+Run `scripts/local-lok.sh`
