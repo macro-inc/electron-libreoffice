@@ -362,19 +362,26 @@ DocumentClient::DocumentClient() = default;
 void DocumentClient::PostUnoCommand(const std::string& command,
                                     gin::Arguments* args) {
   v8::Local<v8::Value> arguments;
+  std::string arguments_str;
   v8::MaybeLocal<v8::String> maybe_args_json;
-  char* args_json = nullptr;
+  const char* args_json = nullptr;
 
   bool notifyWhenFinished;
   if (args->GetNext(&arguments)) {
+    // Convert JSON object into stringifed JSON
     maybe_args_json =
         v8::JSON::Stringify(args->GetHolderCreationContext(), arguments);
+
     if (!maybe_args_json.IsEmpty()) {
+      // If the conversion is successful we need to convert the v8 string to a
+      // std::string
       v8::String::Utf8Value args_json_utf8(args->isolate(),
                                            maybe_args_json.ToLocalChecked());
-      args_json = *args_json_utf8;
+      arguments_str = *args_json_utf8;
+      args_json = arguments_str.c_str();
     }
   }
+
   args->GetNext(&notifyWhenFinished);
 
   document_->postUnoCommand(command.c_str(), args_json, notifyWhenFinished);
