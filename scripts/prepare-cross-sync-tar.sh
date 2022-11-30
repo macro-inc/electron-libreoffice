@@ -22,8 +22,8 @@ scripts/cross-sync/linux.sh
 tar --zstd -cf base.tzstd --anchored --exclude-from="$SCRIPT_DIR/tar_excludes_base.txt" src
 
 # Dereference and repack angle and dawn git to not use the cache
-(cd src/third_party/angle; git repack -a -d; rm .git/objects/info/alternates)
-(cd src/third_party/dawn; git repack -a -d; rm .git/objects/info/alternates)
+(cd src/third_party/angle; git repack -a -d; rm -f .git/objects/info/alternates)
+(cd src/third_party/dawn; git repack -a -d; rm -f .git/objects/info/alternates)
 
 # Build the dawn/angle tarball (it needs the .git directories without )
 tar --zstd -cf dawn-angle.tzstd --anchored --exclude="src/third_party/angle/third_party/VK_GL-CTS/src" src/third_party/dawn src/third_party/angle

@@ -19,6 +19,7 @@ else
 fi
 # By default, gclient's git usage isn't optimal, fix that
 git apply "$SCRIPT_DIR/gclient-fix.patch"
+git apply "$SCRIPT_DIR/override-ninja-win-path.patch"
 
 # Don't trust the system Python
 ln -s vpython3 python3

@@ -1,0 +1,12 @@
+diff --git a/autoninja.py b/autoninja.py
+index 539ee2ae..cb8d935b 100755
+--- a/autoninja.py
++++ b/autoninja.py
+@@ -22,6 +22,7 @@ import sys
+ 
+ SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
+ 
++print("SCRIPT_DIR", SCRIPT_DIR)
+ 
+ def main(args):
+   # The -t tools are incompatible with -j
