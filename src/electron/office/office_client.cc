@@ -30,6 +30,7 @@
 #include "shell/common/gin_converters/std_converter.h"
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/libreofficekit/LibreOfficeKit.hxx"
+#include "third_party/libreofficekit/LibreOfficeKitEnums.h"
 #include "v8-json.h"
 #include "v8/include/v8-function.h"
 #include "v8/include/v8-isolate.h"
@@ -176,6 +177,9 @@ std::string OfficeClient::GetLastError() {
 
 v8::Local<v8::Value> OfficeClient::LoadDocument(v8::Isolate* isolate,
                                                 const std::string& path) {
+   office_->setOptionalFeatures(
+      LibreOfficeKitOptionalFeatures::LOK_FEATURE_NO_TILED_ANNOTATIONS);
+
   lok::Document* doc = GetDocument(path);
 
   if (!doc) {
