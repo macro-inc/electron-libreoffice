@@ -63,4 +63,8 @@ Run `scripts/pull-upstream-changes.sh`
 
 ## How do I update LibreOfficeKit after compiling it locally?
 
-Run `scripts/local-lok.sh`
+**run from the root of this repo**
+
+- run `scripts/update-local-lok.sh LOK_PATH`
+  - `LOK_PATH` defaults to ../libreofficekit
+  - example: `scripts/update-local-lok.sh ../../lok`
