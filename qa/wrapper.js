@@ -147,6 +147,8 @@ class OfficeDoc extends HTMLElement {
     doc.on('cursor_visible', logit);
     doc.on('set_part', logit);
     doc.on('state_changed', logit);
+    doc.on('window', logit);
+    doc.on('jsdialog', logit);
   }
 
   focus() {

@@ -11,7 +11,7 @@ vars = {
     '0e5d146ba13101a1302d59ea6e6e0b3cace4ae38',
 
   'pyyaml_version': '3.12',
-  'libreofficekit_version': 'v0.0.2',
+  'libreofficekit_version': 'v0.0.3',
 
   'chromium_git': 'https://chromium.googlesource.com',
   'electron_git': 'https://github.com/electron',
