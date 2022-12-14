@@ -179,7 +179,7 @@ v8::Local<v8::Value> OfficeClient::LoadDocument(v8::Isolate* isolate,
   lok::Document* doc = GetDocument(path);
 
   if (!doc) {
-    doc = office_->documentLoad(path.c_str(), "en-US");
+    doc = office_->documentLoad(path.c_str(), "Language=en-US");
 
     if (!doc) {
       LOG(ERROR) << "Unable to load '" << path << "': " << office_->getError();
