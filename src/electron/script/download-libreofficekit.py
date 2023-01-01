@@ -8,6 +8,7 @@ import shutil
 import sys
 import tarfile
 import time
+import platform
 
 def download(url, path):
     with urllib.request.urlopen(url) as response, open(path, 'wb') as f:
@@ -64,7 +65,7 @@ def main():
     parser.add_argument(
         "--os",
         required=True,
-        choices=['win', 'linux', 'mac-x64', 'mac-arm'],
+        choices=['win', 'linux', 'mac'],
         help="Target operating system"
     )
     parser.add_argument(
@@ -85,6 +86,10 @@ def main():
         parser.error("--output-dir must end with libreofficekit: {}".format(
                          args.output_dir))
 
+    # macs support more than one architecture, since DEPS does not support
+    # target_arch assume it is the host's arch
+    if args.os == 'mac':
+        args.os = 'mac-' + platform.machine()
     filename = 'libreofficekit-' + args.os + '.tar.xz'
     url = args.base_url + '/' + args.version + '/' + filename
     checksum = retrieve_checksum_with_retry(url)
