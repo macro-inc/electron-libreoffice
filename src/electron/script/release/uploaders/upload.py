@@ -146,8 +146,9 @@ def main():
         os.path.join(OUT_DIR, 'windows_toolchain_profile.json'),
         'toolchain_profile.json')
     upload_electron(release, toolchain_profile_zip, args)
-
-  print('::set-output name=target_uploads::' + ','.join(target_uploads))
+  gh_out = os.getenv("GITHUB_OUTPUT")
+  with open(gh_out, 'a') as f:
+    f.write('target_uploads=' + ','.join(target_uploads))
 
   return 0
 
