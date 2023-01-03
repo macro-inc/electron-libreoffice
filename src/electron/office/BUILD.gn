@@ -20,7 +20,7 @@ copy("copy_libreofficekit") {
   if (is_mac) {
     sources = []
     if (target_cpu == "x64") {
-      sources = [ "//third_party/libreofficekit/instdir/x86_64" ]
+      sources = [ "//third_party/libreofficekit/instdir/x64" ]
     } else if (target_cpu == "arm64" ) {
       sources = [ "//third_party/libreofficekit/instdir/aarch64" ]
     }
