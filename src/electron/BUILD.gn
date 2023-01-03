@@ -838,6 +838,20 @@ if (is_mac) {
     }
   }
 
+  if (enable_office) {
+    bundle_data("electron_libreofficekit_binaries") {
+      sources = [ "$root_out_dir/libreofficekit" ]
+      outputs = [ "{{bundle_contents_dir}}/libreofficekit" ]
+      public_deps = [ "//electron/office:copy_libreofficekit"]
+    }
+  }
+
+  group("electron_libreoffice_library") {
+    if (enable_office) {
+      deps = [ ":electron_libreofficekit_binaries" ]
+    }
+  }
+
   bundle_data("electron_crashpad_helper") {
     sources = [ "$root_out_dir/chrome_crashpad_handler" ]
 
@@ -871,6 +885,7 @@ if (is_mac) {
       ":electron_framework_libraries",
       ":electron_framework_resources",
       ":electron_swiftshader_library",
+      ":electron_libreoffice_library",
       ":electron_xibs",
     ]
     if (!is_mas_build) {

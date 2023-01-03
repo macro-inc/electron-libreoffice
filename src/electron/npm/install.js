@@ -40,41 +40,23 @@ if (
   }
 }
 
-if (process.platform !== 'darwin') {
-  downloadArtifact({
-    version,
-    artifactName: 'electron',
-    force: process.env.force_no_cache === 'true',
-    cacheRoot: process.env.electron_config_cache,
-    platform,
-    arch,
-    mirrorOptions: {
-      mirror:
-        'https://github.com/coparse-inc/electron-libreoffice/releases/download/',
-      customDir: version,
-    },
-  })
-    .then(extractFile)
-    .catch((err) => {
-      console.error(err.stack);
-      process.exit(1);
-    });
-} else {
-  // downloads if not cached
-  downloadArtifact({
-    version: '20.3.0',
-    artifactName: 'electron',
-    force: process.env.force_no_cache === 'true',
-    cacheRoot: process.env.electron_config_cache,
-    platform,
-    arch,
-  })
-    .then(extractFile)
-    .catch((err) => {
-      console.error(err.stack);
-      process.exit(1);
-    });
-}
+downloadArtifact({
+  version,
+  artifactName: 'electron',
+  force: process.env.force_no_cache === 'true',
+  cacheRoot: process.env.electron_config_cache,
+  platform,
+  arch,
+  mirrorOptions: {
+    mirror:
+      'https://github.com/coparse-inc/electron-libreoffice/releases/download/',
+  },
+})
+  .then(extractFile)
+  .catch((err) => {
+    console.error(err.stack);
+    process.exit(1);
+  });
 
 function isInstalled() {
   try {

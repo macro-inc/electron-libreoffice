@@ -16,6 +16,16 @@ assert(enable_office)
 
 copy("copy_libreofficekit") {
   sources = [ "//third_party/libreofficekit/instdir" ]
+
+  if (is_mac) {
+    sources = []
+    if (target_cpu == "x64") {
+      sources = [ "//third_party/libreofficekit/instdir/x86_64" ]
+    } else if (target_cpu == "arm64" ) {
+      sources = [ "//third_party/libreofficekit/instdir/aarch64" ]
+    }
+  }
+
   outputs = [ "$root_out_dir/libreofficekit" ]
 }
 

@@ -277,8 +277,8 @@ jobs:
           artifacts: ${{ steps.build.outputs.target_uploads }}
           allowUpdates: true
           artifactErrorsFailBuild: true
-          name: ${{ inputs.version }}
-          tag: ${{ inputs.version }}
+          name: v${{ inputs.version }}
+          tag: v${{ inputs.version }}
           body: |
             This is an automated release built from the `main` branch.
             For changes, please review the commit log.
