@@ -6,7 +6,7 @@ module.exports = async ({github}) => {
   const result = await github.rest.repos.getReleaseByTag({
     owner: 'coparse-inc',
     repo: 'electron-libreoffice',
-    tag: VERSION,
+    tag: 'v' + VERSION,
   });
 
   if (!result?.data?.assets) {
