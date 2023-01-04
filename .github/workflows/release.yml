@@ -68,7 +68,7 @@ jobs:
         run: |
           echo '${{ secrets[matrix.key] }}' > buddykey
           chmod 500 buddykey
-          ssh -o LogLevel=ERROR -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i buddykey ${{ secrets[matrix.userhost] }} v${{ needs.check_version.outputs.version }} electron-libreoffice $GITHUB_SHA
+          ssh -t -o TCPKeepAlive=yes -o ServerAliveInterval=15 -o LogLevel=ERROR -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i buddykey ${{ secrets[matrix.userhost] }} v${{ needs.check_version.outputs.version }} electron-libreoffice $GITHUB_SHA
   generate_sha:
     name: Generate SHA
     needs: [check_version, build_release, build_release_mac]
