@@ -248,13 +248,16 @@ case "$1" in
     if [ "$OS" = "win" ]; then
       EXE_SUFFIX=".exe"
     fi
+    if [ "$OS" = "mac" ]; then
+      MAC_SUFFIX=".app/Contents/MacOS/Electron"
+    fi
 
     # By default, open the QA file
     ARGS=("qa/index.html")
     if [ ${#@} -gt 1 ]; then
       ARGS=("${@:2}")
     fi
-    "$BASE_PATH/src/$OUT_DIR/electron$EXE_SUFFIX" --no-sandbox "${ARGS[@]}"
+    "$BASE_PATH/src/$OUT_DIR/electron$MAC_SUFFIX$EXE_SUFFIX" --no-sandbox "${ARGS[@]}"
     ;;
   gen_clangd)
     OUT_DIR="out/$ELECTRON_OUT_DIR"
@@ -291,7 +294,7 @@ case "$1" in
 
     LOK_PATH="${LOK_PATH:-../libreofficekit}"
     echo "LOK_PATH is set to $LOK_PATH"
-    
+
     echo "Removing existing libreofficekit"
     rm -rf "$OUT_DIR/libreofficekit"
     mkdir "$OUT_DIR/libreofficekit"
