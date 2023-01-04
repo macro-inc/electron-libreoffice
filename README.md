@@ -4,11 +4,11 @@ This project embeds LibreOfficeKit into Electron as a Blink WebPlugin
 
 ## How do I set this up locally?
 
-Install the [Electron prerequisites](https://www.electronjs.org/docs/latest/development/build-instructions-gn#platform-prerequisites) for your operating system
+Setup [the prerequisites](PREREQUISITES.md)
 
 Sync the code (including the git cache, uses ~42 GiB of space):
 
-```bash
+```shell
 git clone https://github.com/coparse-inc/electron-libreoffice
 cd electron-libreoffice
 scripts/e sync
@@ -20,15 +20,15 @@ For local testing: `scripts/e build`
 
 For release builds: `IS_RELEASE=true scripts/e build`
 
-For compiling for Apple Silicon: `FOR_APPLE_SILICON=true scripts/e build`
+For cross-compiling for Apple Silicon from an Intel Mac: `FOR_APPLE_SILICON=true scripts/e build`
 
 ## How do I run this build?
 
-```bash
-# To run with the included manual QA page, use:
+```shell
+# To build and run with the included manual QA page (qa/index.html), use:
 scripts/e run
 
-# To run with another file use scripts/e run ..., just as you would use `electron` normally
+# To build and run with another file use scripts/e run ..., just as you would use `electron` normally
 # For example:
 scripts/e run ~/my-electron-libreoffice-app/index.html
 ```
@@ -39,7 +39,7 @@ This basically runs `src/out/Default/electron` with the `--no-sandbox` flag.
 
 ## How do I debug it?
 
-```bash
+```shell
 # Build with debug symbols (uses an additional ~20 GiB!) and run the QA testing ground
 IS_DEBUG=true scripts/e run --renderer-startup-dialog qa/index.html
 
@@ -63,6 +63,10 @@ Run `scripts/pull-upstream-changes.sh`
 
 ## How do I update LibreOfficeKit after compiling it locally?
 
-- Run `LOK_PATH=relative_path_to_lok scripts/e update_local_lok`
+- After running a build of electron-libreoffice, link the libreofficekit build directory to the electron-libreoffice build directory:
+
+  - `ln -s ../libreofficekit/libreoffice-core/instdir src/out/Default/libreofficekit`
+
+- Alternatively, run `LOK_PATH=relative_path_to_lok scripts/e update_local_lok`
   - `LOK_PATH` defaults to ../libreofficekit
   - example: `LOK_PATH=../../lok scripts/e update_local_lok`
