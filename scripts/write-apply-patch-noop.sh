@@ -1,5 +1,5 @@
 #!/bin/bash
-SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE:-$0}")" &> /dev/null && pwd)
 BASE_PATH="$(dirname -- "$SCRIPT_DIR")"
 
 cat >"$BASE_PATH/src/electron/script/apply_all_patches.py" <<EOF

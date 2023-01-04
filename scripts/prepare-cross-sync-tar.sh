@@ -2,10 +2,9 @@
 
 set -e
 
-SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE:-$0}")" &> /dev/null && pwd)
 BASE_PATH="$(dirname -- "$SCRIPT_DIR")"
 DEPOT_TOOLS_PATH="$BASE_PATH/depot_tools"
-BUILD_TOOLS_PATH="$BASE_PATH/build-tools"
 export PATH="$DEPOT_TOOLS_PATH:$SCRIPT_DIR:$PATH"
 
 cd "$BASE_PATH"

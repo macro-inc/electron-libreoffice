@@ -2,7 +2,7 @@
 
 set -e
 
-SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE:-$0}")" &> /dev/null && pwd)
 BASE_PATH="$(dirname -- "$SCRIPT_DIR")"
 DEPOT_TOOLS_PATH="$BASE_PATH/depot_tools"
 BUILD_TOOLS_PATH="$BASE_PATH/build-tools"
@@ -23,7 +23,12 @@ if [ ! -d "$DEPOT_TOOLS_PATH" ]; then
   fetch-depot-tools.sh
   update_depot_tools
 fi
-test ! -d "$BUILD_TOOLS_PATH" && fetch-electron-build-tools.sh
+if [ ! -d "$BUILD_TOOLS_PATH" ]; then
+  fetch-electron-build-tools.sh
+
+  # Fix non-super user check for goma.ipc
+  patch -N -d "$BUILD_TOOLS_PATH/third_party/goma" -i "$SCRIPT_DIR/goma_ctl_fix.patch"
+fi
 
 GN_CONFIG=//electron/build/args/testing.gn
 GN_GOMA_FILE="$BUILD_TOOLS_PATH/third_party/goma.gn"
@@ -288,11 +293,11 @@ case "$1" in
     echo "LOK_PATH is set to $LOK_PATH"
     
     echo "Removing existing libreofficekit"
-    rm -rf $OUT_DIR/libreofficekit
-    mkdir $OUT_DIR/libreofficekit
+    rm -rf "$OUT_DIR/libreofficekit"
+    mkdir "$OUT_DIR/libreofficekit"
 
     echo "Bringing over local libreofficekit"
-    cp -rf $LOK_PATH/libreoffice-core/instdir/* $OUT_DIR/libreofficekit/
+    cp -rf "$LOK_PATH/libreoffice-core/instdir/*" "$OUT_DIR/libreofficekit/"
 
     echo "Complete"
     ;;

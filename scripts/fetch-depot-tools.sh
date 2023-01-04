@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE:-$0}")" &> /dev/null && pwd)
 BASE_PATH="$(dirname -- "$SCRIPT_DIR")"
 DEPOT_TOOLS_PATH="$BASE_PATH/depot_tools"
 
@@ -11,7 +11,7 @@ git clone --depth=1 https://chromium.googlesource.com/chromium/tools/depot_tools
 
 echo "Installing depot-tools"
 cd "$DEPOT_TOOLS_PATH"
-if [ "`uname`" == "Darwin" ]; then
+if [ "$(uname)" == "Darwin" ]; then
   # remove ninjalog_uploader_wrapper.py from autoninja since we don't use it and it causes problems
   sed -i '' '/ninjalog_uploader_wrapper.py/d' ./autoninja
 else

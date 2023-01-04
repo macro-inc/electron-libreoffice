@@ -1,0 +1,13 @@
+diff --git a/goma_ctl.py b/goma_ctl.py
+index 6c96603..8148de7
+--- a/goma_ctl.py
++++ b/goma_ctl.py
+@@ -2436,7 +2436,7 @@ class GomaEnvPosix(GomaEnv):
+         pids = self._FUSER_PID_PATTERN.findall(out)
+         usernames = self._FUSER_USERNAME_PATTERN.findall(err)
+         if pids and usernames:
+-          uids = [int(self._pwd.getpwnam(x).pw_uid) for x in usernames]
++          uids = [int(self._pwd.getpwnam(x).pw_uid) for x in usernames if x and x != 'unset']
+           return [{'pid': x[0], 'uid': x[1], 'resource': name}
+                   for x in zip(pids, uids)]
+ 
