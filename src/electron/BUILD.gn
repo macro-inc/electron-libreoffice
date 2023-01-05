@@ -1433,7 +1433,7 @@ dist_zip("electron_dist_zip") {
   if (is_linux) {
     data_deps += [ "//sandbox/linux:chrome_sandbox" ]
   }
-  if (enable_office) {
+  if (enable_office && !is_mac) {
     data_deps += [ "//electron/office:copy_libreofficekit" ]
   }
   deps = data_deps
