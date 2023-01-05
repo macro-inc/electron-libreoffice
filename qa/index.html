@@ -31,47 +31,44 @@
     <script src="wrapper.js"></script>
     <office-doc id="el-embed" />
     <script>
-      const picker = document.getElementById('el-picker');
-      const embed = document.getElementById('el-embed');
+      const picker = document.getElementById("el-picker");
+      const embed = document.getElementById("el-embed");
 
-      libreoffice.on('status_indicator_set_value', (x) => {
+      libreoffice.on("status_indicator_set_value", (x) => {
         console.log(x);
       });
 
-      libreoffice.on('status_changed', (x) => {
-        console.log('lo', x);
+      libreoffice.on("status_changed", (x) => {
+        console.log("lo", x);
       });
 
-      libreoffice.on('window', (x) => {
-        console.log('lo', x);
+      libreoffice.on("window", (x) => {
+        console.log("lo", x);
       });
 
       let globalDoc;
       picker.onchange = () => {
         if (picker.files.length === 1) {
           const uri = encodeURI(
-            'file:///' + picker.files[0].path.replace(/\\/g, '/'),
+            "file:///" + picker.files[0].path.replace(/\\/g, "/")
           );
           const doc = libreoffice.loadDocument(uri);
-          doc.on('ready', (x) => {
+          doc.on("ready", (x) => {
             globalDoc = doc;
-            console.log('Document Ready', x);
+            console.log("Document Ready", x);
 
             const encodedData = new TextEncoder().encode(
-              'testing 123, will is cool',
+              "testing 123, will is cool"
             );
 
             const clipboardData = [
               {
-                mimeType: 'text/plain',
+                mimeType: "text/plain",
                 buffer: encodedData.buffer,
               },
             ];
 
-            console.log(
-              doc.getCommandValues('.uno:ViewTrackChangesInformation'),
-            );
-            console.log(doc.getCommandValues('.uno:ViewAnnotations'));
+            console.log("OUTLINE", doc.getCommandValues(".uno:GetOutline"));
           });
 
           embed.renderDocument(doc);
@@ -79,17 +76,17 @@
         }
       };
       function trackChangesWindow() {
-        globalDoc.postUnoCommand('.uno:AcceptTrackedChanges');
+        globalDoc.postUnoCommand(".uno:AcceptTrackedChanges");
       }
 
       function toggleTrackChanges() {
-        globalDoc.postUnoCommand('.uno:TrackChanges');
+        globalDoc.postUnoCommand(".uno:TrackChanges");
       }
       function acceptTrackChange() {
-        globalDoc.postUnoCommand('.uno:AcceptTrackedChange');
+        globalDoc.postUnoCommand(".uno:AcceptTrackedChange");
       }
       function rejectTrackChange() {
-        globalDoc.postUnoCommand('.uno:RejectTrackedChange');
+        globalDoc.postUnoCommand(".uno:RejectTrackedChange");
       }
     </script>
   </body>
