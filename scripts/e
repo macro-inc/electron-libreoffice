@@ -300,7 +300,14 @@ case "$1" in
     mkdir "$OUT_DIR/libreofficekit"
 
     echo "Bringing over local libreofficekit"
-    cp -rf "$LOK_PATH/libreoffice-core/instdir/*" "$OUT_DIR/libreofficekit/"
+
+    if [ "$OS" = "mac" ]; then
+      if [[ $(uname -m) == 'arm64' ]]; then
+        MAC_AARCH="aarch64/"
+      fi
+    fi
+
+    cp -rf $LOK_PATH/libreoffice-core/instdir/$MAC_AARCH* $OUT_DIR/libreofficekit
 
     echo "Complete"
     ;;
