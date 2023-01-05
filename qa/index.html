@@ -68,7 +68,12 @@
               },
             ];
 
-            console.log("OUTLINE", doc.getCommandValues(".uno:GetOutline"));
+            const outline = doc.getCommandValues(".uno:GetOutline");
+
+            if(outline.outline) {
+              console.log("OUTLINE", outline);
+              console.log("extra data", outline.outline[outline.outline.length - 1]);
+            }
           });
 
           embed.renderDocument(doc);
