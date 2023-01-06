@@ -362,9 +362,8 @@ DocumentClient::DocumentClient() = default;
 void DocumentClient::PostUnoCommand(const std::string& command,
                                     gin::Arguments* args) {
   v8::Local<v8::Value> arguments;
-  std::string arguments_str;
   v8::MaybeLocal<v8::String> maybe_args_json;
-  const char* args_json = nullptr;
+  char* json_buffer = nullptr;
 
   bool notifyWhenFinished;
   if (args->GetNext(&arguments)) {
@@ -373,18 +372,19 @@ void DocumentClient::PostUnoCommand(const std::string& command,
         v8::JSON::Stringify(args->GetHolderCreationContext(), arguments);
 
     if (!maybe_args_json.IsEmpty()) {
-      // If the conversion is successful we need to convert the v8 string to a
-      // std::string
-      v8::String::Utf8Value args_json_utf8(args->isolate(),
-                                           maybe_args_json.ToLocalChecked());
-      arguments_str = *args_json_utf8;
-      args_json = arguments_str.c_str();
+      auto args_json = maybe_args_json.ToLocalChecked();
+      uint32_t len = args_json->Utf8Length(args->isolate());
+      json_buffer = new char[len];
+      args_json->WriteUtf8(args->isolate(), json_buffer);
     }
   }
 
   args->GetNext(&notifyWhenFinished);
 
-  document_->postUnoCommand(command.c_str(), args_json, notifyWhenFinished);
+  document_->postUnoCommand(command.c_str(), json_buffer, notifyWhenFinished);
+
+  if (json_buffer)
+    delete[] json_buffer;
 }
 
 std::vector<std::string> DocumentClient::GetTextSelection(
@@ -402,18 +402,22 @@ void DocumentClient::SetTextSelection(int n_type, int n_x, int n_y) {
   document_->setTextSelection(n_type, n_x, n_y);
 }
 
-std::string DocumentClient::GetPartName(int n_part) {
+v8::Local<v8::Value> DocumentClient::GetPartName(int n_part,
+                                                 gin::Arguments* args) {
   char* part_name = document_->getPartName(n_part);
-  std::string str_part_name = std::string(part_name);
+  if (!part_name)
+    return v8::Undefined(args->isolate());
 
-  return str_part_name;
+  return gin::StringToV8(args->isolate(), part_name);
 }
 
-std::string DocumentClient::GetPartHash(int n_part) {
+v8::Local<v8::Value> DocumentClient::GetPartHash(int n_part,
+                                                 gin::Arguments* args) {
   char* part_hash = document_->getPartHash(n_part);
-  std::string str_part_hash = std::string(part_hash);
+  if (!part_hash)
+    return v8::Undefined(args->isolate());
 
-  return str_part_hash;
+  return gin::StringToV8(args->isolate(), part_hash);
 }
 
 // TODO: Investigate correct type of args here
@@ -444,6 +448,8 @@ v8::Local<v8::Value> DocumentClient::GetSelectionTypeAndText(
       mime_type.c_str(), &p_text_char, &used_mime_type);
 
   v8::Isolate* isolate = args->isolate();
+  if (!p_text_char || !used_mime_type)
+    return v8::Undefined(isolate);
 
   v8::Local<v8::Name> names[3] = {gin::StringToV8(isolate, "selectionType"),
                                   gin::StringToV8(isolate, "text"),
@@ -571,6 +577,10 @@ v8::Local<v8::Value> DocumentClient::GetCommandValues(
 
   v8::Isolate* isolate = args->isolate();
 
+  if (!result) {
+    return v8::Undefined(isolate);
+  }
+
   v8::MaybeLocal<v8::String> maybe_res_json_str =
       v8::String::NewFromUtf8(isolate, result);
 
@@ -624,22 +634,23 @@ void DocumentClient::SendFormFieldEvent(const std::string& arguments) {
 bool DocumentClient::SendContentControlEvent(
     const v8::Local<v8::Object>& arguments,
     gin::Arguments* args) {
-  v8::Isolate* isolate = args->isolate();
 
-  // Object -> JSON string -> string
-  v8::MaybeLocal<v8::String> str_object =
+  v8::MaybeLocal<v8::String> maybe_str_object =
       v8::JSON::Stringify(args->GetHolderCreationContext(), arguments);
 
-  if (str_object.IsEmpty()) {
+  if (maybe_str_object.IsEmpty()) {
     return false;
   }
 
-  v8::String::Utf8Value object_as_utf8_str =
-      v8::String::Utf8Value(isolate, str_object.ToLocalChecked());
+  v8::Local<v8::String> str_object = maybe_str_object.ToLocalChecked();
 
-  std::string object_as_str(*object_as_utf8_str);
+  uint32_t len = str_object->Utf8Length(args->isolate());
+  char* json_buffer = new char[len];
+  str_object->WriteUtf8(args->isolate(), json_buffer);
 
-  document_->sendContentControlEvent(object_as_str.c_str());
+  document_->sendContentControlEvent(json_buffer);
+
+  delete[] json_buffer;
 
   return true;
 }
