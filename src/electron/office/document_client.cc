@@ -95,6 +95,7 @@ gin::ObjectTemplateBuilder DocumentClient::GetObjectTemplateBuilder(
       .SetMethod("emit", &DocumentClient::Emit)
       .SetMethod("twipToPx", &DocumentClient::TwipToPx)
       .SetMethod("postUnoCommand", &DocumentClient::PostUnoCommand)
+      .SetMethod("gotoOutline", &DocumentClient::GotoOutline)
       .SetMethod("getTextSelection", &DocumentClient::GetTextSelection)
       .SetMethod("setTextSelection", &DocumentClient::SetTextSelection)
       .SetMethod("sendDialogEvent", &DocumentClient::SendDialogEvent)
@@ -358,6 +359,10 @@ void DocumentClient::Emit(const std::string& event_name,
 }
 
 DocumentClient::DocumentClient() = default;
+
+bool DocumentClient::GotoOutline(int idx, gin::Arguments* args) {
+  return document_->gotoOutline(idx);
+}
 
 void DocumentClient::PostUnoCommand(const std::string& command,
                                     gin::Arguments* args) {

@@ -20,14 +20,12 @@
       accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     />
 
-    <button type="button" onclick="trackChangesWindow()">
-      Track Changes Window
-    </button>
     <button type="button" onclick="toggleTrackChanges()">
       TOGGLE TRACK CHANGES
     </button>
     <button type="button" onclick="acceptTrackChange()">Accept TC</button>
     <button type="button" onclick="rejectTrackChange()">Reject TC</button>
+    <button type="button" onclick="gotoOutline()">Goto Outline</button>
     <script src="wrapper.js"></script>
     <office-doc id="el-embed" />
     <script>
@@ -76,6 +74,9 @@
             }
           });
 
+          console.log('PREEE')
+
+          console.log('POST')
           embed.renderDocument(doc);
           embed.focus();
         }
@@ -92,6 +93,9 @@
       }
       function rejectTrackChange() {
         globalDoc.postUnoCommand(".uno:RejectTrackedChange");
+      }
+      function gotoOutline() {
+        console.log('OUTLINE', globalDoc.gotoOutline(1));
       }
     </script>
   </body>

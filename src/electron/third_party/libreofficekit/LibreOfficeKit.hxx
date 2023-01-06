@@ -333,6 +333,10 @@ class Document {
                                   bNotifyWhenFinished);
   }
 
+  bool gotoOutline(int idx) {
+    return mpDoc->pClass->gotoOutline(mpDoc, idx);
+  }
+
   /**
    * Sets the start or end of a text selection.
    *
