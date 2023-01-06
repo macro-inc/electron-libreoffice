@@ -240,6 +240,10 @@ struct _LibreOfficeKitDocumentClass {
   char* (*getCommandValues)(LibreOfficeKitDocument* pThis,
                             const char* pCommand);
 
+  /// @see lok::Document::gotoOutline().
+  int (*gotoOutline)(LibreOfficeKitDocument* pThis,
+                            int idx);
+
   /// @see lok::Document::setClientZoom().
   void (*setClientZoom)(LibreOfficeKitDocument* pThis,
                         int nTilePixelWidth,
