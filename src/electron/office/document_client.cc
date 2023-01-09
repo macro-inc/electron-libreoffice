@@ -360,8 +360,25 @@ void DocumentClient::Emit(const std::string& event_name,
 
 DocumentClient::DocumentClient() = default;
 
-bool DocumentClient::GotoOutline(int idx, gin::Arguments* args) {
-  return document_->gotoOutline(idx);
+v8::Local<v8::Value> DocumentClient::GotoOutline(int idx, gin::Arguments* args) {
+  char* result = document_->gotoOutline(idx);
+  v8::Isolate* isolate = args->isolate();
+
+  v8::MaybeLocal<v8::String> maybe_res_json_str =
+      v8::String::NewFromUtf8(isolate, result);
+
+  if (maybe_res_json_str.IsEmpty()) {
+    return v8::Undefined(isolate);
+  }
+
+  v8::MaybeLocal<v8::Value> res = v8::JSON::Parse(
+      args->GetHolderCreationContext(), maybe_res_json_str.ToLocalChecked());
+
+  if (res.IsEmpty()) {
+    return v8::Undefined(isolate);
+  }
+
+  return res.ToLocalChecked();
 }
 
 void DocumentClient::PostUnoCommand(const std::string& command,
