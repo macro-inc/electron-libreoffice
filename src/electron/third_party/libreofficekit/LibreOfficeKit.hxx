@@ -333,7 +333,7 @@ class Document {
                                   bNotifyWhenFinished);
   }
 
-  bool gotoOutline(int idx) {
+  char* gotoOutline(int idx) {
     return mpDoc->pClass->gotoOutline(mpDoc, idx);
   }
 

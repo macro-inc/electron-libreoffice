@@ -70,7 +70,7 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   gfx::Size Size() const;
   float TwipToPx(float in) const;
   void PostUnoCommand(const std::string& command, gin::Arguments* args);
-  bool GotoOutline(int idx, gin::Arguments* args);
+  v8::Local<v8::Value> GotoOutline(int idx, gin::Arguments* args);
   std::vector<std::string> GetTextSelection(const std::string& mime_type,
                                             gin::Arguments* args);
   void SetTextSelection(int n_type, int n_x, int n_y);
