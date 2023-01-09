@@ -68,15 +68,11 @@
 
             const outline = doc.getCommandValues(".uno:GetOutline");
 
-            if(outline.outline) {
+            if (outline.outline) {
               console.log("OUTLINE", outline);
-              console.log("extra data", outline.outline[outline.outline.length - 1]);
             }
           });
 
-          console.log('PREEE')
-
-          console.log('POST')
           embed.renderDocument(doc);
           embed.focus();
         }
@@ -95,7 +91,7 @@
         globalDoc.postUnoCommand(".uno:RejectTrackedChange");
       }
       function gotoOutline() {
-        console.log('OUTLINE', globalDoc.gotoOutline(1));
+        console.log("OUTLINE", globalDoc.gotoOutline(1));
       }
     </script>
   </body>
