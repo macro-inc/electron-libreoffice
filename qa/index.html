@@ -25,7 +25,8 @@
     </button>
     <button type="button" onclick="acceptTrackChange()">Accept TC</button>
     <button type="button" onclick="rejectTrackChange()">Reject TC</button>
-    <button type="button" onclick="gotoOutline()">Goto Outline</button>
+    <!-- <button type="button" onclick="gotoOutline()">Goto Outline</button> -->
+    <button type="button" onclick="testButton()">Test</button>
     <script src="wrapper.js"></script>
     <office-doc id="el-embed" />
     <script>
@@ -69,7 +70,11 @@
             const outline = doc.getCommandValues('.uno:GetOutline');
 
             if (outline.outline) {
-              console.log('OUTLINE', outline);
+              // CONSTRUCT Tree for bookmarks
+              console.log(
+                'Outline tree',
+                constructBookmarkTree(outline.outline)
+              );
             }
           });
 
@@ -77,10 +82,25 @@
           embed.focus();
         }
       };
+
+      // Used as POC to show how to structure outline data
+      function constructBookmarkTree(outline) {
+        const outlineTree = {};
+        attachChildrenToNodes(outline, outlineTree);
+        return outlineTree;
+      }
+
+      function attachChildrenToNodes(outline, outlineTree) {
+        for (const node of outline) {
+          outlineTree[node.id] = node;
+          const children = outline.filter((o) => o.parent === node.id);
+          outlineTree[node.id].children = children;
+        }
+      }
+
       function trackChangesWindow() {
         globalDoc.postUnoCommand('.uno:AcceptTrackedChanges');
       }
-
       function toggleTrackChanges() {
         globalDoc.postUnoCommand('.uno:TrackChanges');
       }
@@ -92,6 +112,12 @@
       }
       function gotoOutline() {
         console.log('OUTLINE', globalDoc.gotoOutline(1));
+      }
+      function testButton() {
+        globalDoc.postUnoCommand('.uno:CreateTable', {
+          Row: { value: 4, type: 'long' },
+          Col: { value: 3, type: 'long' },
+        });
       }
     </script>
   </body>
