@@ -75,7 +75,7 @@ class OfficeDoc extends HTMLElement {
   constructor() {
     super();
 
-    const shadow = this.attachShadow({mode: 'open'});
+    const shadow = this.attachShadow({ mode: 'open' });
     const style = document.createElement('style');
     style.textContent = styleCSS;
     const container = document.createElement('div');
@@ -131,9 +131,9 @@ class OfficeDoc extends HTMLElement {
     const logit = (x) => {
       console.log(x);
     };
-    doc.on('invalidate_visible_cursor', ({payload}) => {
+    doc.on('invalidate_visible_cursor', ({ payload }) => {
       const [x, y, width, height] = payload.map((n) =>
-        Math.max(doc.twipToPx(n), 1),
+        Math.max(doc.twipToPx(n), 1)
       );
       this.cursor.style.transform = `translate(${x + 1.067}px, ${y}px)`;
       this.cursor.style.width = `${width}px`;
@@ -168,7 +168,7 @@ class OfficeDoc extends HTMLElement {
       return;
     }
     const doc = this.doc;
-    const {width, height} = doc.size;
+    const { width, height } = doc.size;
     this._setDimensions(width, height);
 
     this._pageRects = doc.pageRects;
