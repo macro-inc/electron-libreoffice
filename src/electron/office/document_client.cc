@@ -364,6 +364,10 @@ v8::Local<v8::Value> DocumentClient::GotoOutline(int idx, gin::Arguments* args) 
   char* result = document_->gotoOutline(idx);
   v8::Isolate* isolate = args->isolate();
 
+  if (!result) {
+    return v8::Undefined(isolate);
+  }
+
   v8::MaybeLocal<v8::String> maybe_res_json_str =
       v8::String::NewFromUtf8(isolate, result);
 
