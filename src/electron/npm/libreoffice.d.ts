@@ -50,7 +50,7 @@ export namespace LibreOffice {
      * @param command - the uno command to be posted
      * @param args - arguments for the uno command
      */
-    postUnoCommand(command: string, args?: {[name: string]: any}): void;
+    postUnoCommand(command: string, args?: { [name: string]: any }): void;
 
     /**
      * @description get the current parts name
@@ -146,7 +146,16 @@ export namespace LibreOffice {
      */
     getCommandValues(command: string): {
       commandName: string;
-      commandValues: {[name: string]: any};
+      commandValues: { [name: string]: any };
+    };
+
+    /**
+     * @description sets the cursor to a given outline node
+     * @param id - the id of the node to go to
+     * @returns the rect of the node where the cursor is brought to
+     */
+    gotoOutline(id: number): {
+      destRect: string;
     };
 
     /**
@@ -160,7 +169,7 @@ export namespace LibreOffice {
       column: boolean,
       level: number,
       index: number,
-      hidden: boolean,
+      hidden: boolean
     ): void;
 
     /**
@@ -210,7 +219,7 @@ export namespace LibreOffice {
      * @param arguments - the arguments for the event
      * @returns whether sending the event was successful
      */
-    sendContentControlEvent(arguments: {[name: string]: any}): boolean;
+    sendContentControlEvent(arguments: { [name: string]: any }): boolean;
 
     /**
      * @description gets the page rect objects for the document
@@ -257,7 +266,7 @@ export namespace LibreOffice {
      * @description returns details of filter types
      * @returns the details of the filter types
      */
-    getFilterTypes(): {[name: string]: {[name: string]: string}};
+    getFilterTypes(): { [name: string]: { [name: string]: string } };
 
     /**
      * @description set password required for loading or editing a document
@@ -270,7 +279,7 @@ export namespace LibreOffice {
      * @description get version information of the LOKit process
      * @returns the version info in JSON format
      */
-    getVersionInfo(): {[name: string]: any};
+    getVersionInfo(): { [name: string]: any };
 
     /**
      * @description posts a dialog event for the window with given id
