@@ -294,8 +294,6 @@ class OfficeWebPlugin : public blink::WebPlugin,
 
   // owned by
   content::RenderFrame* render_frame_ = nullptr;
-  lok::Office* office_ = nullptr;
-  office::OfficeClient* office_client_ = nullptr;
 
   // maybe has a
   lok::Document* document_ = nullptr;

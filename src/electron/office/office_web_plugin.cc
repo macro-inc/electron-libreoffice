@@ -83,14 +83,7 @@ OfficeWebPlugin::OfficeWebPlugin(blink::WebPluginParams params,
                                  content::RenderFrame* render_frame)
     : render_frame_(render_frame),
       task_runner_(render_frame->GetTaskRunner(
-          blink::TaskType::kInternalMediaRealTime)) {
-  office_client_ = office::OfficeClient::GetInstance();
-  office_ = office_client_->GetOffice();
-
-  // auto* frame = render_frame->GetWebFrame();
-  // v8::Local<v8::Context> main_context = frame->MainWorldScriptContext();
-  // v8::Isolate* isolate = main_context->GetIsolate();
-};
+          blink::TaskType::kInternalMediaRealTime)){};
 
 // blink::WebPlugin {
 bool OfficeWebPlugin::Initialize(blink::WebPluginContainer* container) {
@@ -569,7 +562,8 @@ void OfficeWebPlugin::CalculateBackgroundParts() {
 
     // Add the bottom gap for last rect
     if (page_rect == page_rects.back()) {
-      part.SetVerticalBounds(page_rect.bottom(), document_client_->DocumentSizePx().height());
+      part.SetVerticalBounds(page_rect.bottom(),
+                             document_client_->DocumentSizePx().height());
       background_parts_.emplace_back(
           gfx::ScaleToEnclosingRect(part, device_scale_ * zoom_));
     }
