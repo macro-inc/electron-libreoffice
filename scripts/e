@@ -21,7 +21,7 @@ fi
 
 if [ ! -d "$DEPOT_TOOLS_PATH" ]; then
   fetch-depot-tools.sh
-  update_depot_tools
+  # update_depot_tools
 fi
 if [ ! -d "$BUILD_TOOLS_PATH" ]; then
   fetch-electron-build-tools.sh

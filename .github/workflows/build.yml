@@ -228,9 +228,11 @@ jobs:
         if: ${{ runner.os == 'Windows' }}
         run: |
           Set-Location R:\el
-          $env:PATH = 'R:\el\depot_tools;' + $env:PATH
-          & cmd /c call depot_tools\vpython3.bat src\tools\clang\scripts\update.py
-          & cmd /c call depot_tools\vpython3.bat src/third_party/depot_tools/download_from_google_storage.py --no_resume --no_auth --bucket chromium-browser-clang/rc -s src/build/toolchain/win/rc/win/rc.exe.sha1
+          $env:PATH = 'R:\el\src\third_party\depot_tools;' + $env:PATH
+          & cmd /c call src\third_party\depot_tools\cipd_bin_setup.bat
+          & cmd /c call src\third_party\depot_tools\bootstrap\win_tools.bat
+          & cmd /c call src\third_party\depot_tools\vpython3.bat src\tools\clang\scripts\update.py
+          & cmd /c call src\third_party\depot_tools\vpython3.bat src/third_party/depot_tools/download_from_google_storage.py --no_resume --no_auth --bucket chromium-browser-clang/rc -s src/build/toolchain/win/rc/win/rc.exe.sha1
         shell: powershell
       - name: Build
         id: build
