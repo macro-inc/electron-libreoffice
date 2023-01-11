@@ -31,12 +31,12 @@
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/libreofficekit/LibreOfficeKit.hxx"
 #include "third_party/libreofficekit/LibreOfficeKitEnums.h"
-#include "v8/include/v8-json.h"
-#include "v8/include/v8-persistent-handle.h"
 #include "v8/include/v8-function.h"
 #include "v8/include/v8-isolate.h"
+#include "v8/include/v8-json.h"
 #include "v8/include/v8-local-handle.h"
 #include "v8/include/v8-object.h"
+#include "v8/include/v8-persistent-handle.h"
 #include "v8/include/v8-primitive.h"
 
 namespace electron::office {
@@ -89,7 +89,8 @@ v8::Local<v8::Object> OfficeClient::GetHandle(v8::Isolate* isolate) {
   inst->renderer_task_runner_ = base::SequencedTaskRunnerHandle::Get();
 
   if (eternal_.IsEmpty()) {
-    eternal_.Set(isolate, gin::CreateHandle(isolate, inst).ToV8().As<v8::Object>());
+    eternal_.Set(isolate,
+                 gin::CreateHandle(isolate, inst).ToV8().As<v8::Object>());
   }
 
   return eternal_.Get(isolate);
@@ -226,7 +227,6 @@ v8::Local<v8::Value> OfficeClient::LoadDocument(v8::Isolate* isolate,
     document_event_router_[doc] = new EventBus();
 
     doc->registerCallback(OfficeClient::HandleDocumentCallback, doc);
-
   }
 
   DocumentClient* doc_client =
