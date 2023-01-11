@@ -14,6 +14,7 @@
 #include "content/public/renderer/render_view.h"
 #include "electron/buildflags/buildflags.h"
 #include "electron/shell/common/api/api.mojom.h"
+#include "gin/converter.h"
 #include "ipc/ipc_message_macros.h"
 #include "net/base/net_module.h"
 #include "net/grit/net_resources.h"
@@ -34,6 +35,8 @@
 #include "third_party/blink/public/web/web_script_source.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"  // nogncheck
 #include "ui/base/resource/resource_bundle.h"
+#include "v8/include/v8-function-callback.h"
+#include "v8/include/v8-primitive.h"
 
 namespace electron {
 
@@ -77,6 +80,16 @@ void ElectronRenderFrameObserver::DidClearWindowObject() {
   }
 
   renderer_client_->DidClearWindowObject(render_frame_);
+}
+
+static void GetOfficeHandle(v8::Local<v8::Name> name,
+                            const v8::PropertyCallbackInfo<v8::Value>& info) {
+  v8::ReturnValue<v8::Value> ret = info.GetReturnValue();
+  if (office::OfficeClient::IsValid()) {
+    ret.Set(office::OfficeClient::GetHandle(info.GetIsolate()));
+  } else {
+    ret.Set(v8::Undefined(info.GetIsolate()));
+  }
 }
 
 void ElectronRenderFrameObserver::DidInstallConditionalFeatures(
@@ -132,13 +145,15 @@ void ElectronRenderFrameObserver::DidInstallConditionalFeatures(
       (is_main_frame || allow_node_in_sub_frames);
 
 #if BUILDFLAG(ENABLE_OFFICE)
-  if (is_main_world && office::OfficeClient::IsValid()) {
+  if (is_main_world) {
     v8::HandleScope handle_scope(isolate);
     v8::Context::Scope context_scope(context);
     auto source_context = web_frame->MainWorldScriptContext();
-    gin_helper::Dictionary global(isolate, source_context->Global());
-    global.SetReadOnlyNonConfigurable(office::OfficeClient::kGlobalEntry,
-                                      office::OfficeClient::GetHandle(isolate));
+    std::ignore = source_context->Global()->SetNativeDataProperty(
+        source_context,
+        gin::StringToV8(source_context->GetIsolate(),
+                        office::OfficeClient::kGlobalEntry),
+        GetOfficeHandle);
   }
 #endif
 

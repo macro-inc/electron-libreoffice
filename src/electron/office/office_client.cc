@@ -31,16 +31,19 @@
 #include "third_party/blink/public/web/blink.h"
 #include "third_party/libreofficekit/LibreOfficeKit.hxx"
 #include "third_party/libreofficekit/LibreOfficeKitEnums.h"
-#include "v8-json.h"
 #include "v8/include/v8-function.h"
 #include "v8/include/v8-isolate.h"
+#include "v8/include/v8-json.h"
 #include "v8/include/v8-local-handle.h"
 #include "v8/include/v8-object.h"
+#include "v8/include/v8-persistent-handle.h"
 #include "v8/include/v8-primitive.h"
 
 namespace electron::office {
 
 gin::WrapperInfo OfficeClient::kWrapperInfo = {gin::kEmbedderNativeGin};
+
+static v8::Eternal<v8::Object> eternal_;
 
 OfficeClient* OfficeClient::GetInstance() {
   return base::Singleton<OfficeClient>::get();
@@ -78,14 +81,19 @@ void OfficeClient::HandleDocumentEvent(lok::Document* document,
   event_router->Handle(type, std::move(callback));
 }
 
-gin::Handle<OfficeClient> OfficeClient::GetHandle(v8::Isolate* isolate) {
+v8::Local<v8::Object> OfficeClient::GetHandle(v8::Isolate* isolate) {
   // TODO: this should probably be per-isolate data, or at least the runner
   // should be passed to the document callback
   OfficeClient* inst = GetInstance();
   inst->event_bus_.SetContext(isolate, isolate->GetCurrentContext());
   inst->renderer_task_runner_ = base::SequencedTaskRunnerHandle::Get();
 
-  return gin::CreateHandle(isolate, inst);
+  if (eternal_.IsEmpty()) {
+    eternal_.Set(isolate,
+                 gin::CreateHandle(isolate, inst).ToV8().As<v8::Object>());
+  }
+
+  return eternal_.Get(isolate);
 }
 
 // instance
@@ -219,7 +227,6 @@ v8::Local<v8::Value> OfficeClient::LoadDocument(v8::Isolate* isolate,
     document_event_router_[doc] = new EventBus();
 
     doc->registerCallback(OfficeClient::HandleDocumentCallback, doc);
-
   }
 
   DocumentClient* doc_client =

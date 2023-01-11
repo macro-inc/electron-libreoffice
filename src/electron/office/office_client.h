@@ -36,7 +36,7 @@ class OfficeClient : public gin::Wrappable<OfficeClient> {
   void HandleDocumentEvent(lok::Document* document,
                            LibreOfficeKitCallbackType type,
                            EventBus::EventCallback callback);
-  static gin::Handle<OfficeClient> GetHandle(v8::Isolate* isolate);
+  static v8::Local<v8::Object> GetHandle(v8::Isolate* isolate);
   static bool IsValid();
 
   // disable copy
