@@ -301,5 +301,7 @@ export namespace LibreOffice {
      * @returns success
      */
     runMacro(url: string): boolean;
+
+    api: typeof import('./lok_api');
   }
 }

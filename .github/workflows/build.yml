@@ -273,6 +273,14 @@ jobs:
           if [ "${{ runner.os }}" = "Linux" ]; then
             cp -f ${{ inputs.working_dir }}/src/electron/{electron-api.json,electron.d.ts}{,.sha256sum} .
           fi
+      - name: Linux - Store LOK TypeScript bindings as artifact
+        if: ${{ runner.os == 'Linux' }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: lok-ts
+          path: src/third_party/libreofficekit/instdir/sdk/typescript/
+          retention-days: 1
+          if-no-files-found: error
       - name: Create release
         uses: ncipollo/release-action@v1
         with:

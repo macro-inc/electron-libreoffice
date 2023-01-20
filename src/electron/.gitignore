@@ -63,3 +63,6 @@ spec/fixtures/logo.png
 !.vscode/extensions.json
 !.vscode/tasks.json
 !.vscode/cpp.code-snippets
+
+# Generated LOK API
+npm/lok_api
