@@ -12,10 +12,6 @@ on:
         required: false
         default: '/r/el'
         type: string
-      for_apple_silicon:
-        required: false
-        default: false
-        type: boolean
     secrets:
       EC2_RUNNER_AWS_ID:
         required: true
@@ -52,7 +48,6 @@ jobs:
       run:
         shell: bash
     env:
-      FOR_APPLE_SILICON: ${{ inputs.for_apple_silicon }}
       IS_RELEASE: true
       DEPOT_TOOLS_WIN_TOOLCHAIN: 0
       GOMA_START_COMPILER_PROXY: true
@@ -77,10 +72,6 @@ jobs:
           sudo rm -rf /r || true
           sudo mkdir /r
           sudo mount -t tmpfs -o size=128g tmpfs /r
-      - name: macOS - Select Xcode v13.3
-        if: ${{ runner.os == 'macOS' }}
-        run: |
-          sudo xcode-select -s "/Applications/Xcode_13.3.1.app"
       - name: Linux - Setup working dir
         if: ${{ runner.os == 'Linux' }}
         working-directory: /
@@ -88,11 +79,6 @@ jobs:
           UID_GID="$(id -u):$(id -g)"
           sudo mkdir ${{ inputs.working_dir }}
           sudo chown $UID_GID ${{ inputs.working_dir }}
-      - name: macOS - Setup working dir
-        working-directory: /Users/runner
-        if: ${{ runner.os == 'macOS' }}
-        run: |
-          mkdir ${{ inputs.working_dir }}
       - name: Windows - Setup working dir
         working-directory: C:\
         if: ${{ runner.os == 'Windows' }}
@@ -145,40 +131,6 @@ jobs:
           path: |
             windows.tzstd
           key: src-${{ steps.deps_hash.outputs.deps_hash }}-windows
-      - name: Retrieve cache (mac)
-        if: ${{ runner.os == 'macOS' }}
-        id: cache-src-mac
-        uses: actions/cache@v3
-        with:
-          path: |
-            mac.tzstd
-            mac-arm.tzstd
-          key: src-${{ steps.deps_hash.outputs.deps_hash }}-mac
-      - name: macOS - Free up space
-        if: ${{ runner.os == 'macOS' }}
-        run: |
-          sudo mkdir -p $TMPDIR/del-target
-
-          tmpify() {
-            if [ -d "$1" ]; then
-              sudo mv "$1" $TMPDIR/del-target/$(echo $1|shasum -a 256|head -n1|cut -d " " -f1)
-            fi
-          }
-
-          tmpify /Library/Developer/CoreSimulator
-          tmpify ~/Library/Developer/CoreSimulator
-          tmpify $(xcode-select -p)/Platforms/AppleTVOS.platform
-          tmpify $(xcode-select -p)/Platforms/iPhoneOS.platform
-          tmpify $(xcode-select -p)/Platforms/WatchOS.platform
-          tmpify $(xcode-select -p)/Platforms/WatchSimulator.platform
-          tmpify $(xcode-select -p)/Platforms/AppleTVSimulator.platform
-          tmpify $(xcode-select -p)/Platforms/iPhoneSimulator.platform
-          tmpify $(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/metal/ios
-          tmpify $(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift
-          tmpify $(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0
-          tmpify ~/Library/Android/sdk
-          tmpify ~/.rubies
-          sudo rm -rf $TMPDIR/del-target
       - name: Extract cache
         run: |
           cd "${{ inputs.working_dir }}"
@@ -193,13 +145,6 @@ jobs:
           tar --zstd -xf "$EL_WORKSPACE/dawn-angle.tzstd"
           tar --zstd --overwrite -xf "$EL_WORKSPACE/thirdparty.tzstd"
           case "${{ runner.os }}" in
-            macOS)
-              if [ "$FOR_APPLE_SILICON" == "true" ]; then
-                tar --zstd --overwrite -xf "$EL_WORKSPACE/mac-arm.tzstd"
-              else
-                tar --zstd --overwrite -xf "$EL_WORKSPACE/mac.tzstd"
-              fi
-              ;;
             Linux)
               tar --zstd --overwrite -xf "$EL_WORKSPACE/linux.tzstd"
               ;;
