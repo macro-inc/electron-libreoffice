@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "electron/office/lok_tilebuffer.h"
+#include "LibreOfficeKit/LibreOfficeKit.hxx"
 #include "base/check.h"
 #include "office/lok_callback.h"
 #include "third_party/skia/include/core/SkCanvas.h"

@@ -9,12 +9,15 @@
 #include <map>
 #include <unordered_set>
 #include "office/lok_callback.h"
-#include "third_party/libreofficekit/LibreOfficeKit.hxx"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/vector2d_f.h"
+
+namespace lok {
+class Document;
+}
 
 namespace electron::office {
 class TileBuffer {

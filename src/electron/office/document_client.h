@@ -7,6 +7,7 @@
 
 #include <map>
 #include <string>
+#include <unordered_map>
 
 #include "base/files/file_path.h"
 #include "base/memory/singleton.h"
@@ -17,9 +18,7 @@
 #include "gin/dictionary.h"
 #include "gin/handle.h"
 #include "gin/wrappable.h"
-#include "office/event_bus.h"
 #include "shell/common/gin_helper/pinnable.h"
-#include "third_party/libreofficekit/LibreOfficeKit.hxx"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "ui/gfx/geometry/point.h"
@@ -32,7 +31,13 @@ namespace base {
 class SequencedTaskRunner;
 }
 
+namespace lok {
+class Document;
+}  // namespace lok
+
 namespace electron::office {
+
+class EventBus;
 
 class DocumentClient : public gin::Wrappable<DocumentClient> {
  public:
@@ -147,7 +152,7 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   lok::Document* document_ = nullptr;
   std::string path_;
   int view_id_ = -1;
-  LibreOfficeKitTileMode tile_mode_;
+  int tile_mode_;
 
   float view_zoom_ = 1.0;
   float zoom_ = 1.0;

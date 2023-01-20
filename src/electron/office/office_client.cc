@@ -9,6 +9,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "LibreOfficeKit/LibreOfficeKit.hxx"
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
@@ -29,8 +30,6 @@
 #include "office/lok_callback.h"
 #include "shell/common/gin_converters/std_converter.h"
 #include "third_party/blink/public/web/blink.h"
-#include "third_party/libreofficekit/LibreOfficeKit.hxx"
-#include "third_party/libreofficekit/LibreOfficeKitEnums.h"
 #include "v8/include/v8-function.h"
 #include "v8/include/v8-isolate.h"
 #include "v8/include/v8-json.h"
@@ -74,7 +73,7 @@ void OfficeClient::HandleDocumentCallback(int type,
 }
 
 void OfficeClient::HandleDocumentEvent(lok::Document* document,
-                                       LibreOfficeKitCallbackType type,
+                                       int type,
                                        EventBus::EventCallback callback) {
   EventBus* event_router = GetInstance()->document_event_router_[document];
 

@@ -17,11 +17,8 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "cc/paint/paint_image.h"
+#include "gin/handle.h"
 #include "include/core/SkImage.h"
-#include "office/document_client.h"
-#include "office/event_bus.h"
-#include "office/lok_tilebuffer.h"
-#include "office/office_client.h"
 #include "pdf/paint_manager.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
@@ -32,13 +29,16 @@
 #include "third_party/blink/public/web/web_plugin_container.h"
 #include "third_party/blink/public/web/web_plugin_params.h"
 #include "third_party/blink/public/web/web_print_params.h"
-#include "third_party/libreofficekit/LibreOfficeKit.hxx"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 #include "v8/include/v8-value.h"
+
+namespace lok {
+class Document;
+}  // namespace lok
 
 namespace content {
 class RenderFrame;
@@ -47,6 +47,10 @@ class RenderFrame;
 namespace electron {
 
 namespace office {
+
+class DocumentClient;
+class TileBuffer;
+
 // MIME type of the internal office plugin.
 extern const char kInternalPluginMimeType[];
 // Tries to create an instance of the internal PDF plugin, returning `nullptr`
@@ -162,7 +166,8 @@ class OfficeWebPlugin : public blink::WebPlugin,
  private:
   // call `Destroy()` instead.
   ~OfficeWebPlugin() override;
-  blink::WebInputEventResult HandleKeyEvent(const blink::WebKeyboardEvent event, ui::Cursor* cursor);
+  blink::WebInputEventResult HandleKeyEvent(const blink::WebKeyboardEvent event,
+                                            ui::Cursor* cursor);
   bool HandleMouseEvent(blink::WebInputEvent::Type type,
                         gfx::PointF position,
                         int modifiers,

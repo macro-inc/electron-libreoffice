@@ -15,22 +15,38 @@ buildflag_header("buildflags") {
 assert(enable_office)
 
 copy("copy_libreofficekit") {
-  sources = [ "//third_party/libreofficekit/instdir" ]
+  sources = [
+    "//third_party/libreofficekit/instdir/LICENSE",
+    "//third_party/libreofficekit/instdir/program",
+    "//third_party/libreofficekit/instdir/presets",
+    "//third_party/libreofficekit/instdir/share",
+  ]
 
   if (is_mac) {
     sources = []
     if (target_cpu == "x64") {
-      sources = [ "//third_party/libreofficekit/instdir/x64" ]
+      sources = [
+        "//third_party/libreofficekit/instdir/x64/LICENSE",
+        "//third_party/libreofficekit/instdir/x64/program",
+        "//third_party/libreofficekit/instdir/x64/presets",
+        "//third_party/libreofficekit/instdir/x64/share",
+      ]
     } else if (target_cpu == "arm64" ) {
-      sources = [ "//third_party/libreofficekit/instdir/aarch64" ]
+      sources = [
+        "//third_party/libreofficekit/instdir/aarch64/LICENSE",
+        "//third_party/libreofficekit/instdir/aarch64/program",
+        "//third_party/libreofficekit/instdir/aarch64/presets",
+        "//third_party/libreofficekit/instdir/aarch64/share",
+      ]
     }
   }
 
-  outputs = [ "$root_out_dir/libreofficekit" ]
+  outputs = [ "$root_out_dir/libreofficekit/{{source_file_part}}" ]
 }
 
-config("electron_lib_config") {
-  include_dirs = [ "//electron" ]
+config("libreoffice_lib_config") {
+  include_dirs = [ "//third_party/libreofficekit/instdir/sdk/include", "//electron" ]
+  defines = [ "LOK_USE_UNSTABLE_API" ]
 }
 
 source_set("internal") {
@@ -67,7 +83,7 @@ source_set("internal") {
     "//ui/gfx/range",
   ]
 
-  configs += [ ":electron_lib_config" ]
+  configs += [ ":libreoffice_lib_config" ]
 
   public_deps = [
     "//skia",
@@ -96,9 +112,9 @@ static_library("office_web_plugin") {
   assert(enable_plugins,
          "The LibreOffice viewer relies on plugin infrastructure")
 
-  sources = [ "office_web_plugin.cc" ]
+  sources = [ "office_web_plugin.cc", "office_web_plugin.h" ]
 
-  configs += [ ":electron_lib_config" ]
+  configs += [ ":libreoffice_lib_config" ]
 
   deps = [
     ":buildflags",

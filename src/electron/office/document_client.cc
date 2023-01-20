@@ -8,6 +8,7 @@
 #include <iterator>
 #include <string_view>
 #include <vector>
+#include "LibreOfficeKit/LibreOfficeKit.hxx"
 #include "base/bind.h"
 #include "base/callback_forward.h"
 #include "base/files/file_util.h"
@@ -32,7 +33,6 @@
 #include "office/office_client.h"
 #include "shell/common/gin_converters/gfx_converter.h"
 #include "third_party/blink/public/web/blink.h"
-#include "third_party/libreofficekit/LibreOfficeKitEnums.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "ui/gfx/geometry/point.h"
@@ -360,7 +360,8 @@ void DocumentClient::Emit(const std::string& event_name,
 
 DocumentClient::DocumentClient() = default;
 
-v8::Local<v8::Value> DocumentClient::GotoOutline(int idx, gin::Arguments* args) {
+v8::Local<v8::Value> DocumentClient::GotoOutline(int idx,
+                                                 gin::Arguments* args) {
   char* result = document_->gotoOutline(idx);
   v8::Isolate* isolate = args->isolate();
 
@@ -660,7 +661,6 @@ void DocumentClient::SendFormFieldEvent(const std::string& arguments) {
 bool DocumentClient::SendContentControlEvent(
     const v8::Local<v8::Object>& arguments,
     gin::Arguments* args) {
-
   v8::MaybeLocal<v8::String> maybe_str_object =
       v8::JSON::Stringify(args->GetHolderCreationContext(), arguments);
 
