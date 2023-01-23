@@ -46,7 +46,28 @@ copy("copy_libreofficekit") {
 
 config("libreoffice_lib_config") {
   include_dirs = [ "//third_party/libreofficekit/instdir/sdk/include", "//electron" ]
-  defines = [ "LOK_USE_UNSTABLE_API" ]
+  defines = [ "LOK_USE_UNSTABLE_API", "SAL_NO_EXCEPT" ]
+
+  # mostly ported from libreoffice-core/odk/settings/settings.mk
+  if (is_win) {
+    defines += [
+      "CPPU_ENV=mscx",
+      "WNT",
+      "WIN32"
+    ]
+  } else { 
+    defines += [
+      "CPPU_ENV=gcc3",
+      "UNX"
+    ]
+
+    if (is_mac) {
+      defines += [ "MACOSX" ]
+    }
+    if (is_linux) {
+      defines += [ "LINUX" ]
+    }
+  }
 }
 
 source_set("internal") {
@@ -83,7 +104,20 @@ source_set("internal") {
     "//ui/gfx/range",
   ]
 
-  configs += [ ":libreoffice_lib_config" ]
+  # LibreOffice uses a lot of inline exceptions for the UNO runtime.
+  # Since they are limited only to ::css::uno::RuntimeException and all
+  # other exceptions are intended to be translated to a throw in v8, this
+  # is probably fine until we find out otherwise
+  configs -= [
+    "//build/config/compiler:no_exceptions",
+    "//build/config/compiler:no_rtti",
+  ]
+
+  configs += [
+    ":libreoffice_lib_config",
+    "//build/config/compiler:exceptions",
+    "//build/config/compiler:rtti",
+  ]
 
   public_deps = [
     "//skia",
