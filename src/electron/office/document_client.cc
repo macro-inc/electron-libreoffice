@@ -50,6 +50,10 @@
 #include "v8/include/v8-json.h"
 #include "v8/include/v8-local-handle.h"
 #include "v8/include/v8-primitive.h"
+#include "sal/main.h"
+#include "com/sun/star/uno/Reference.h"
+#include "com/sun/star/uno/XInterface.hdl"
+#include "as/as.h"
 
 namespace electron::office {
 gin::WrapperInfo DocumentClient::kWrapperInfo = {gin::kEmbedderNativeGin};
@@ -118,6 +122,7 @@ gin::ObjectTemplateBuilder DocumentClient::GetObjectTemplateBuilder(
       .SetMethod("sendFormFieldEvent", &DocumentClient::SendFormFieldEvent)
       .SetMethod("sendContentControlEvent",
                  &DocumentClient::SendContentControlEvent)
+      .SetMethod("as", &DocumentClient::As)
       .SetLazyDataProperty("pageRects", &DocumentClient::PageRects)
       .SetLazyDataProperty("size", &DocumentClient::Size)
       .SetLazyDataProperty("isReady", &DocumentClient::IsReady);
@@ -680,4 +685,16 @@ bool DocumentClient::SendContentControlEvent(
 
   return true;
 }
+
+v8::Local<v8::Value> DocumentClient::As(const std::string& type, v8::Isolate* isolate)
+{
+  void *component = document_->getXComponent();
+  ::css::uno::XInterface *j = static_cast<::css::uno::XInterface *>(component);
+  j->acquire();
+  void *isdoc = unov8::as(component, "text.XTextDocument");
+  LOG(ERROR) << "IS A DOC? " << (isdoc == nullptr);
+  j->release();
+  return v8::Undefined(isolate);
+}
+
 }  // namespace electron::office

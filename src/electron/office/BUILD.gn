@@ -44,30 +44,8 @@ copy("copy_libreofficekit") {
   outputs = [ "$root_out_dir/libreofficekit/{{source_file_part}}" ]
 }
 
-config("libreoffice_lib_config") {
-  include_dirs = [ "//third_party/libreofficekit/instdir/sdk/include", "//electron" ]
-  defines = [ "LOK_USE_UNSTABLE_API", "SAL_NO_EXCEPT" ]
-
-  # mostly ported from libreoffice-core/odk/settings/settings.mk
-  if (is_win) {
-    defines += [
-      "CPPU_ENV=mscx",
-      "WNT",
-      "WIN32"
-    ]
-  } else { 
-    defines += [
-      "CPPU_ENV=gcc3",
-      "UNX"
-    ]
-
-    if (is_mac) {
-      defines += [ "MACOSX" ]
-    }
-    if (is_linux) {
-      defines += [ "LINUX" ]
-    }
-  }
+config("electron_config") {
+  include_dirs = ["//electron"]
 }
 
 source_set("internal") {
@@ -88,6 +66,11 @@ source_set("internal") {
     "office_keys.h",
   ]
 
+  # configs -= [
+  #   "//build/config/compiler:no_exceptions",
+  #   "//build/config/compiler:no_rtti",
+  # ]
+
   deps = [
     ":buildflags",
     "//base",
@@ -102,44 +85,18 @@ source_set("internal") {
     "//ui/events/blink",
     "//ui/gfx/codec",
     "//ui/gfx/range",
-  ]
-
-  # LibreOffice uses a lot of inline exceptions for the UNO runtime.
-  # Since they are limited only to ::css::uno::RuntimeException and all
-  # other exceptions are intended to be translated to a throw in v8, this
-  # is probably fine until we find out otherwise
-  configs -= [
-    "//build/config/compiler:no_exceptions",
-    "//build/config/compiler:no_rtti",
+    "//third_party/libreofficekit/instdir/sdk/v8:as_utility"
   ]
 
   configs += [
-    ":libreoffice_lib_config",
-    "//build/config/compiler:exceptions",
-    "//build/config/compiler:rtti",
+    ":electron_config",
+    "//third_party/libreofficekit/instdir/sdk/v8:libreoffice_lib_config"
   ]
 
   public_deps = [
     "//skia",
     "//v8",
   ]
-
-  libs = []
-  ldflags = []
-
-  if (is_win) {
-    libs += []
-  }
-
-  if (is_mac) {
-    libs += []
-    ldflags += [ "-Wl,-rpath,\$ORIGIN/libreofficekit/program" ]
-  }
-
-  if (is_linux) {
-    libs += []
-    ldflags += [ "-Wl,-rpath,\$ORIGIN/libreofficekit/program" ]
-  }
 }
 
 static_library("office_web_plugin") {
@@ -148,7 +105,25 @@ static_library("office_web_plugin") {
 
   sources = [ "office_web_plugin.cc", "office_web_plugin.h" ]
 
-  configs += [ ":libreoffice_lib_config" ]
+  configs += [ ":electron_config", "//third_party/libreofficekit/instdir/sdk/v8:libreoffice_lib_config" ]
+
+  lib_dirs = [ "$root_out_dir/libreofficekit/program" ]
+  libs = []
+  ldflags = []
+
+  if (is_win) {
+    libs += []
+  }
+
+  if (is_linux) {
+    libs += [
+      ":libuno_sal.so.3",
+      ":libuno_cppu.so.3",
+      ":libuno_salhelpergcc3.so.3",
+      ":libuno_cppuhelpergcc3.so.3",
+    ]
+    ldflags += [ "-Wl,-rpath,\$ORIGIN/libreofficekit/program" ]
+  }
 
   deps = [
     ":buildflags",

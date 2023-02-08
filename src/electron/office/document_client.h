@@ -103,6 +103,7 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   void SendFormFieldEvent(const std::string& arguments);
   bool SendContentControlEvent(const v8::Local<v8::Object>& arguments,
                                gin::Arguments* args);
+  v8::Local<v8::Value> As(const std::string& type, v8::Isolate* isolate);
   // }
 
   lok::Document* GetDocument();
