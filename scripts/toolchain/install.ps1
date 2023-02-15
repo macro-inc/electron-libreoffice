@@ -1,4 +1,5 @@
-. "$PSScriptRoot\PathHelper.ps1"
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+. "$PSScriptRoot\PathHelpers.ps1"
 . "$PSScriptRoot\InstallHelpers.ps1"
 . "$PSScriptRoot\VisualStudioHelpers.ps1"
 
