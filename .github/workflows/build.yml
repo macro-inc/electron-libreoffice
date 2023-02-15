@@ -224,6 +224,16 @@ jobs:
 
           cd ${{ inputs.working_dir }}
           scripts/e setup
+      - name: "Windows - Fix LOK (TODO: find out why this is broken)"
+        if: ${{ runner.os == 'Windows' }}
+        run: |
+          export LC_ALL=en_US.utf8
+          lok_version="$(cat ${{ inputs.working_dir }}/src/electron/DEPS | grep -oP "'libreofficekit_version': '\\K[^']+")"
+          cd ${{ inputs.working_dir }}/src/third_party/libreofficekit
+          rm -rf instdir
+          rm -f libreofficekit-win.tar.xz
+          curl -LO "https://github.com/coparse-inc/libreofficekit/releases/download/$lok_version/libreofficekit-win.tar.xz"
+          tar -xJf libreofficekit-win.tar.xz
       - name: Windows - Fix Clang toolchain
         if: ${{ runner.os == 'Windows' }}
         run: |
