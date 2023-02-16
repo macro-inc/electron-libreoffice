@@ -34,10 +34,10 @@ jobs:
             os: macro-windows
             runner: WINDOWS_RUNNER_INSTANCE_ID
             working_dir: /r/el
-          # - name: Linux x64
-          #   os: macro-linux
-          #   runner: LINUX_RUNNER_INSTANCE_ID
-          #   working_dir: /r/el
+          - name: Linux x64
+            os: macro-linux
+            runner: LINUX_RUNNER_INSTANCE_ID
+            working_dir: /r/el
     name: ${{ matrix.name }}
     uses: ./.github/workflows/build.yml
     with:
@@ -68,7 +68,7 @@ jobs:
         run: |
           echo '${{ secrets[matrix.key] }}' > buddykey
           chmod 500 buddykey
-          # ssh -t -o TCPKeepAlive=yes -o ServerAliveInterval=15 -o LogLevel=ERROR -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i buddykey ${{ secrets[matrix.userhost] }} v${{ needs.check_version.outputs.version }} electron-libreoffice $GITHUB_SHA
+          ssh -t -o TCPKeepAlive=yes -o ServerAliveInterval=15 -o LogLevel=ERROR -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i buddykey ${{ secrets[matrix.userhost] }} v${{ needs.check_version.outputs.version }} electron-libreoffice $GITHUB_SHA
   generate_sha:
     name: Generate SHA
     needs: [check_version, build_release, build_release_mac]
