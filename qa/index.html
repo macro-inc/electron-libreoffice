@@ -20,11 +20,11 @@
       accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     />
 
-    <button type="button" onclick="toggleTrackChanges()">
-      TOGGLE TRACK CHANGES
-    </button>
-    <button type="button" onclick="acceptTrackChange()">Accept TC</button>
-    <button type="button" onclick="rejectTrackChange()">Reject TC</button>
+    <!-- <button type="button" onclick="toggleTrackChanges()"> -->
+    <!--   TOGGLE TRACK CHANGES -->
+    <!-- </button> -->
+    <!-- <button type="button" onclick="acceptTrackChange()">Accept TC</button> -->
+    <!-- <button type="button" onclick="rejectTrackChange()">Reject TC</button> -->
     <!-- <button type="button" onclick="gotoOutline()">Goto Outline</button> -->
     <button type="button" onclick="testButton()">Test</button>
     <script src="wrapper.js"></script>
@@ -38,11 +38,11 @@
       });
 
       libreoffice.on('status_changed', (x) => {
-        console.log('lo', x);
+        console.log('status_changed', x);
       });
 
       libreoffice.on('window', (x) => {
-        console.log('lo', x);
+        console.log('window', x);
       });
 
       let globalDoc;
@@ -56,26 +56,8 @@
             globalDoc = doc;
             console.log('Document Ready', x);
 
-            const encodedData = new TextEncoder().encode(
-              'testing 123, will is cool'
-            );
-
-            const clipboardData = [
-              {
-                mimeType: 'text/plain',
-                buffer: encodedData.buffer,
-              },
-            ];
-
-            const outline = doc.getCommandValues('.uno:GetOutline');
-
-            if (outline.outline) {
-              // CONSTRUCT Tree for bookmarks
-              console.log(
-                'Outline tree',
-                constructBookmarkTree(outline.outline)
-              );
-            }
+            // Initialize clipboard to be empty
+            doc.setClipboard([]);
           });
 
           embed.renderDocument(doc);
@@ -114,10 +96,18 @@
         console.log('OUTLINE', globalDoc.gotoOutline(1));
       }
       function testButton() {
-        globalDoc.postUnoCommand('.uno:CreateTable', {
-          Row: { value: 4, type: 'long' },
-          Col: { value: 3, type: 'long' },
-        });
+        const res = globalDoc.getClipboard();
+        console.log('ENTRIES', res);
+
+        for (const r of res) {
+          if (r.mimeType.includes('text')) {
+            console.log(
+              `Mimetype: "${r.mimeType}"\nResponse: "${new TextDecoder().decode(
+                r.buffer
+              )}"`
+            );
+          }
+        }
       }
     </script>
   </body>

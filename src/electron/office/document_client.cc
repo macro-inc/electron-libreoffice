@@ -5,14 +5,18 @@
 #include "office/document_client.h"
 #include <sys/types.h>
 
+#include <codecvt>
 #include <iterator>
+#include <locale>
 #include <string_view>
 #include <vector>
+#include "absl/types/optional.h"
 #include "base/bind.h"
 #include "base/callback_forward.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -35,6 +39,10 @@
 #include "third_party/libreofficekit/LibreOfficeKitEnums.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
+#include "ui/base/clipboard/clipboard.h"
+#include "ui/base/clipboard/clipboard_format_type.h"
+#include "ui/base/clipboard/scoped_clipboard_writer.h"
+#include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -42,6 +50,7 @@
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/skia_conversions.h"
+#include "ui/gfx/image/image.h"
 #include "url/gurl.h"
 #include "v8-array-buffer.h"
 #include "v8/include/v8-container.h"
@@ -67,8 +76,13 @@ DocumentClient::DocumentClient(lok::Document* document,
   event_bus->Handle(LOK_CALLBACK_INVALIDATE_TILES,
                     base::BindRepeating(&DocumentClient::HandleInvalidate,
                                         base::Unretained(this)));
+
   event_bus->Handle(LOK_CALLBACK_STATE_CHANGED,
                     base::BindRepeating(&DocumentClient::HandleStateChange,
+                                        base::Unretained(this)));
+
+  event_bus->Handle(LOK_CALLBACK_UNO_COMMAND_RESULT,
+                    base::BindRepeating(&DocumentClient::HandleUnoCommandResult,
                                         base::Unretained(this)));
 }
 
@@ -310,6 +324,71 @@ void DocumentClient::HandleStateChange(std::string payload) {
   }
 }
 
+void DocumentClient::OnClipboardChanged() {
+  std::vector<std::string> mime_types;
+
+  mime_types.push_back("text/plain;charset=utf-8");
+  mime_types.push_back("image/png");
+
+  std::vector<const char*> mime_c_str;
+
+  for (const std::string& mime_type : mime_types) {
+    mime_c_str.push_back(mime_type.c_str());
+  }
+  mime_c_str.push_back(nullptr);
+
+  size_t out_count;
+  char** out_mime_types = nullptr;
+  size_t* out_sizes = nullptr;
+  char** out_streams = nullptr;
+
+  bool success = document_->getClipboard(
+      mime_types.size() ? mime_c_str.data() : nullptr, &out_count,
+      &out_mime_types, &out_sizes, &out_streams);
+
+  if (!success) {
+    LOG(ERROR) << "Unable to get document clipboard";
+    return;
+  }
+
+  ui::ScopedClipboardWriter writer(ui::ClipboardBuffer::kCopyPaste);
+
+  for (size_t i = 0; i < mime_types.size(); ++i) {
+    size_t buffer_size = out_sizes[i];
+    std::string mime_type = out_mime_types[i];
+    if (buffer_size > 0) {
+      if (mime_type == "text/plain;charset=utf-8") {
+        std::u16string converted_data = base::UTF8ToUTF16(out_streams[i]);
+
+        writer.WriteText(converted_data);
+      } else if (mime_type == "image/png") {
+        std::vector<uint8_t> bitmap_data(
+            reinterpret_cast<uint8_t*>(out_streams[i]),
+            reinterpret_cast<uint8_t*>(out_streams[i]) + buffer_size);
+
+        SkBitmap bitmap;
+
+        if (!gfx::PNGCodec::Decode(bitmap_data.data(), bitmap_data.size(),
+                                   &bitmap)) {
+          LOG(ERROR) << "Unable to set image to system clipboard";
+          continue;
+        }
+
+        writer.WriteImage(bitmap);
+      }
+    }
+  }
+}
+
+void DocumentClient::HandleUnoCommandResult(std::string payload) {
+  std::pair<std::string, bool> checker =
+      lok_callback::ParseUnoCommandResult(payload);
+
+  if (checker.first == ".uno:Copy" && checker.second) {
+    OnClipboardChanged();
+  }
+}
+
 void DocumentClient::HandleDocSizeChanged(std::string payload) {
   RefreshSize();
 }
@@ -360,7 +439,8 @@ void DocumentClient::Emit(const std::string& event_name,
 
 DocumentClient::DocumentClient() = default;
 
-v8::Local<v8::Value> DocumentClient::GotoOutline(int idx, gin::Arguments* args) {
+v8::Local<v8::Value> DocumentClient::GotoOutline(int idx,
+                                                 gin::Arguments* args) {
   char* result = document_->gotoOutline(idx);
   v8::Isolate* isolate = args->isolate();
 
@@ -407,10 +487,16 @@ void DocumentClient::PostUnoCommand(const std::string& command,
 
   args->GetNext(&notifyWhenFinished);
 
-  document_->postUnoCommand(command.c_str(), json_buffer, notifyWhenFinished);
+  PostUnoCommandI(command, json_buffer, notifyWhenFinished);
 
   if (json_buffer)
     delete[] json_buffer;
+}
+
+void DocumentClient::PostUnoCommandI(const std::string& command,
+                                     char* json_buffer,
+                                     bool notifyWhenFinished) {
+  document_->postUnoCommand(command.c_str(), json_buffer, notifyWhenFinished);
 }
 
 std::vector<std::string> DocumentClient::GetTextSelection(
@@ -500,6 +586,7 @@ v8::Local<v8::Value> DocumentClient::GetClipboard(gin::Arguments* args) {
     // add the nullptr terminator to the list of null-terminated strings
     mime_c_str.push_back(nullptr);
   }
+
   size_t out_count;
 
   // these are arrays of out_count size, variable size arrays in C are simply
@@ -582,6 +669,52 @@ bool DocumentClient::SetClipboard(
   return document_->setClipboard(entries, mime_c_str.data(), in_sizes, streams);
 }
 
+bool DocumentClient::OnPasteEvent(ui::Clipboard* clipboard,
+                                  std::string clipboard_type) {
+  size_t size;
+  const char* data;
+
+  if (clipboard_type == "text/plain;charset=utf-8") {
+    std::u16string system_clipboard_data;
+
+    clipboard->ReadText(ui::ClipboardBuffer::kCopyPaste, nullptr,
+                        &system_clipboard_data);
+
+    std::string converted_data = base::UTF16ToUTF8(system_clipboard_data);
+
+    const char* value =
+        strcpy(new char[converted_data.length() + 1], converted_data.c_str());
+
+    size = converted_data.size();
+    data = value;
+
+  } else if (clipboard_type == "image/png") {
+    absl::optional<std::vector<uint8_t>> image;
+    clipboard->ReadPng(
+        ui::ClipboardBuffer::kCopyPaste, nullptr,
+        base::BindOnce(
+            [](absl::optional<std::vector<uint8_t>>* image,
+               const std::vector<uint8_t>& result) { image->emplace(result); },
+            &image));
+
+    if (!image.has_value()) {
+      LOG(ERROR) << "Unable to get image value";
+      return false;
+    }
+
+    std::vector<uint8_t> img = image.value();
+
+    size = img.size();
+
+    data = static_cast<char*>(reinterpret_cast<char*>(img.data()));
+  } else {
+    LOG(ERROR) << "No valid clipboard value provided";
+    return false;
+  }
+
+  return document_->paste(clipboard_type.c_str(), data, size);
+}
+
 bool DocumentClient::Paste(const std::string& mime_type,
                            const std::string& data,
                            gin::Arguments* args) {
@@ -660,7 +793,6 @@ void DocumentClient::SendFormFieldEvent(const std::string& arguments) {
 bool DocumentClient::SendContentControlEvent(
     const v8::Local<v8::Object>& arguments,
     gin::Arguments* args) {
-
   v8::MaybeLocal<v8::String> maybe_str_object =
       v8::JSON::Stringify(args->GetHolderCreationContext(), arguments);
 

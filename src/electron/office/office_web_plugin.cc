@@ -16,6 +16,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
+#include "base/test/bind.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_flags.h"
@@ -23,6 +24,7 @@
 #include "cc/paint/paint_image_builder.h"
 #include "components/plugins/renderer/plugin_placeholder.h"
 #include "content/public/renderer/render_frame.h"
+#include "gin/arguments.h"
 #include "gin/converter.h"
 #include "gin/dictionary.h"
 #include "gin/handle.h"
@@ -37,6 +39,7 @@
 #include "office/office_keys.h"
 #include "shell/common/gin_converters/gfx_converter.h"
 #include "shell/common/gin_helper/dictionary.h"
+#include "shell/common/gin_helper/function_template_extensions.h"
 #include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
@@ -48,10 +51,12 @@
 #include "third_party/blink/public/web/web_plugin_params.h"
 #include "third_party/blink/public/web/web_widget.h"
 #include "third_party/libreofficekit/LibreOfficeKitEnums.h"
+#include "ui/base/clipboard/clipboard.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/cursor/platform_cursor.h"
 #include "ui/events/blink/blink_event_util.h"
+#include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/point3_f.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/rect.h"
@@ -60,6 +65,7 @@
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/skia_conversions.h"
+#include "ui/gfx/image/image.h"
 #include "ui/gfx/native_widget_types.h"
 #include "v8/include/v8-isolate.h"
 #include "v8/include/v8-local-handle.h"
@@ -275,6 +281,21 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
       return blink::WebInputEventResult::kNotHandled;
   }
 
+  const char16_t copy = 'c';
+  const char16_t paste = 'v';
+
+  if ((/**event.GetModifiers() == event.kControlKey ||**/
+       event.GetModifiers() == event.kMetaKey) &&
+      (*event.unmodified_text == copy || *event.unmodified_text == paste)) {
+    if (*event.unmodified_text == copy) {
+      return HandleCopyEvent();
+    } else if (*event.unmodified_text == paste) {
+      return HandlePasteEvent();
+    }
+    // This should never be hit
+    return blink::WebInputEventResult::kNotHandled;
+  }
+
   // intercept some special key events on Ctr/Command
   if (event.GetModifiers() & (event.kControlKey | event.kMetaKey)) {
     switch (event.dom_code) {
@@ -298,6 +319,39 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
                          : LOK_KEYEVENT_KEYINPUT,
                      event.text[0], lok_key_code));
   needs_reraster_ = true;
+
+  return blink::WebInputEventResult::kHandledApplication;
+}
+
+blink::WebInputEventResult OfficeWebPlugin::HandleCopyEvent() {
+  document_client_->PostUnoCommandI(".uno:Copy", nullptr, true);
+  return blink::WebInputEventResult::kHandledApplication;
+}
+
+blink::WebInputEventResult OfficeWebPlugin::HandlePasteEvent() {
+  ui::Clipboard* clipboard = ui::Clipboard::GetForCurrentThread();
+  std::vector<std::u16string> res =
+      clipboard->ReadAvailableStandardAndCustomFormatNames(
+          ui::ClipboardBuffer::kCopyPaste, nullptr);
+
+  std::string clipboard_type = "";
+
+  for (std::u16string r : res) {
+    if (r == u"text/plain") {
+      clipboard_type = "text/plain;charset=utf-8";
+      break;
+    } else if (r == u"image/png") {
+      clipboard_type = "image/png";
+      break;
+    }
+  }
+
+  ui::ClipboardFormatType formatType;
+
+  if (!document_client_->OnPasteEvent(clipboard, clipboard_type)) {
+    LOG(ERROR) << "Failed to set lok clipboard";
+    return blink::WebInputEventResult::kNotHandled;
+  }
 
   return blink::WebInputEventResult::kHandledApplication;
 }

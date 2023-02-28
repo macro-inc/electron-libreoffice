@@ -33,6 +33,7 @@ std::vector<gfx::Rect> ParseMultipleRects(
     size_t size);
 
 std::pair<std::string, std::string> ParseStatusChange(std::string payload);
+std::pair<std::string, bool> ParseUnoCommandResult(std::string payload);
 
 v8::Local<v8::Value> ParseJSON(v8::Isolate* isolate,
                                v8::Local<v8::String> json);

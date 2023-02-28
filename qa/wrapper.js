@@ -149,6 +149,8 @@ class OfficeDoc extends HTMLElement {
     doc.on('state_changed', logit);
     doc.on('window', logit);
     doc.on('jsdialog', logit);
+    doc.on('uno_command_result', logit);
+    doc.on('clipboard_changed', logit);
   }
 
   focus() {
