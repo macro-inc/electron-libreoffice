@@ -284,7 +284,7 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
   const char16_t copy = 'c';
   const char16_t paste = 'v';
 
-  if ((/**event.GetModifiers() == event.kControlKey ||**/
+  if ((event.GetModifiers() == event.kControlKey ||
        event.GetModifiers() == event.kMetaKey) &&
       (*event.unmodified_text == copy || *event.unmodified_text == paste)) {
     if (*event.unmodified_text == copy) {

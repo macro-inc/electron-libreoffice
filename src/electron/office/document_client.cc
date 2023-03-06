@@ -671,8 +671,7 @@ bool DocumentClient::SetClipboard(
 
 bool DocumentClient::OnPasteEvent(ui::Clipboard* clipboard,
                                   std::string clipboard_type) {
-  size_t size;
-  const char* data;
+  bool result = false;
 
   if (clipboard_type == "text/plain;charset=utf-8") {
     std::u16string system_clipboard_data;
@@ -685,9 +684,8 @@ bool DocumentClient::OnPasteEvent(ui::Clipboard* clipboard,
     const char* value =
         strcpy(new char[converted_data.length() + 1], converted_data.c_str());
 
-    size = converted_data.size();
-    data = value;
-
+    result = document_->paste(clipboard_type.c_str(), value, converted_data.size());
+    delete value;
   } else if (clipboard_type == "image/png") {
     absl::optional<std::vector<uint8_t>> image;
     clipboard->ReadPng(
@@ -704,15 +702,12 @@ bool DocumentClient::OnPasteEvent(ui::Clipboard* clipboard,
 
     std::vector<uint8_t> img = image.value();
 
-    size = img.size();
-
-    data = static_cast<char*>(reinterpret_cast<char*>(img.data()));
+    result = document_->paste(clipboard_type.c_str(), static_cast<char*>(reinterpret_cast<char*>(img.data())), img.size());
   } else {
-    LOG(ERROR) << "No valid clipboard value provided";
-    return false;
+    LOG(ERROR) << "Unsupported clipboard_type: " << clipboard_type;
   }
 
-  return document_->paste(clipboard_type.c_str(), data, size);
+  return result;
 }
 
 bool DocumentClient::Paste(const std::string& mime_type,
