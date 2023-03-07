@@ -16,7 +16,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
-#include "base/test/bind.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_flags.h"
@@ -56,7 +55,6 @@
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/cursor/platform_cursor.h"
 #include "ui/events/blink/blink_event_util.h"
-#include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/point3_f.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/rect.h"
@@ -65,7 +63,6 @@
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/skia_conversions.h"
-#include "ui/gfx/image/image.h"
 #include "ui/gfx/native_widget_types.h"
 #include "v8/include/v8-isolate.h"
 #include "v8/include/v8-local-handle.h"
@@ -281,20 +278,20 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
       return blink::WebInputEventResult::kNotHandled;
   }
 
-  const char16_t copy = 'c';
-  const char16_t paste = 'v';
-
-  if ((event.GetModifiers() == event.kControlKey ||
-       event.GetModifiers() == event.kMetaKey) &&
-      (*event.unmodified_text == copy || *event.unmodified_text == paste)) {
-    if (*event.unmodified_text == copy) {
-      return HandleCopyEvent();
-    } else if (*event.unmodified_text == paste) {
-      return HandlePasteEvent();
-    }
-    // This should never be hit
-    return blink::WebInputEventResult::kNotHandled;
-  }
+  /* const char16_t copy = 'c'; */
+  /* const char16_t paste = 'v'; */
+  /*  */
+  /* if ((event.GetModifiers() == event.kControlKey || */
+  /*      event.GetModifiers() == event.kMetaKey) && */
+  /*     (*event.unmodified_text == copy || *event.unmodified_text == paste)) { */
+  /*   if (*event.unmodified_text == copy) { */
+  /*     return HandleCopyEvent(); */
+  /*   } else if (*event.unmodified_text == paste) { */
+  /*     return HandlePasteEvent(); */
+  /*   } */
+  /*   // This should never be hit */
+  /*   return blink::WebInputEventResult::kNotHandled; */
+  /* } */
 
   // intercept some special key events on Ctr/Command
   if (event.GetModifiers() & (event.kControlKey | event.kMetaKey)) {
@@ -302,6 +299,10 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
       // don't close the internal LO window
       case office::DomCode::US_W:
         return blink::WebInputEventResult::kNotHandled;
+      case office::DomCode::US_C:
+        return HandleCopyEvent();
+      case office::DomCode::US_V:
+        return HandlePasteEvent();
     }
   }
 
@@ -324,7 +325,7 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
 }
 
 blink::WebInputEventResult OfficeWebPlugin::HandleCopyEvent() {
-  document_client_->PostUnoCommandI(".uno:Copy", nullptr, true);
+  document_client_->PostUnoCommandInternal(".uno:Copy", nullptr, true);
   return blink::WebInputEventResult::kHandledApplication;
 }
 
@@ -345,8 +346,6 @@ blink::WebInputEventResult OfficeWebPlugin::HandlePasteEvent() {
       break;
     }
   }
-
-  ui::ClipboardFormatType formatType;
 
   if (!document_client_->OnPasteEvent(clipboard, clipboard_type)) {
     LOG(ERROR) << "Failed to set lok clipboard";

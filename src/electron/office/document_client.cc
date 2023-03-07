@@ -5,9 +5,7 @@
 #include "office/document_client.h"
 #include <sys/types.h>
 
-#include <codecvt>
 #include <iterator>
-#include <locale>
 #include <string_view>
 #include <vector>
 #include "absl/types/optional.h"
@@ -50,7 +48,6 @@
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/skia_conversions.h"
-#include "ui/gfx/image/image.h"
 #include "url/gurl.h"
 #include "v8-array-buffer.h"
 #include "v8/include/v8-container.h"
@@ -356,26 +353,27 @@ void DocumentClient::OnClipboardChanged() {
   for (size_t i = 0; i < mime_types.size(); ++i) {
     size_t buffer_size = out_sizes[i];
     std::string mime_type = out_mime_types[i];
-    if (buffer_size > 0) {
-      if (mime_type == "text/plain;charset=utf-8") {
-        std::u16string converted_data = base::UTF8ToUTF16(out_streams[i]);
+    if (buffer_size <= 0) {
+      continue;
+    }
+    if (mime_type == "text/plain;charset=utf-8") {
+      std::u16string converted_data = base::UTF8ToUTF16(out_streams[i]);
 
-        writer.WriteText(converted_data);
-      } else if (mime_type == "image/png") {
-        std::vector<uint8_t> bitmap_data(
-            reinterpret_cast<uint8_t*>(out_streams[i]),
-            reinterpret_cast<uint8_t*>(out_streams[i]) + buffer_size);
+      writer.WriteText(converted_data);
+    } else if (mime_type == "image/png") {
+      std::vector<uint8_t> bitmap_data(
+          reinterpret_cast<uint8_t*>(out_streams[i]),
+          reinterpret_cast<uint8_t*>(out_streams[i]) + buffer_size);
 
-        SkBitmap bitmap;
+      SkBitmap bitmap;
 
-        if (!gfx::PNGCodec::Decode(bitmap_data.data(), bitmap_data.size(),
-                                   &bitmap)) {
-          LOG(ERROR) << "Unable to set image to system clipboard";
-          continue;
-        }
-
-        writer.WriteImage(bitmap);
+      if (!gfx::PNGCodec::Decode(bitmap_data.data(), bitmap_data.size(),
+                                 &bitmap)) {
+        LOG(ERROR) << "Unable to set image to system clipboard";
+        continue;
       }
+
+      writer.WriteImage(bitmap);
     }
   }
 }
@@ -487,13 +485,13 @@ void DocumentClient::PostUnoCommand(const std::string& command,
 
   args->GetNext(&notifyWhenFinished);
 
-  PostUnoCommandI(command, json_buffer, notifyWhenFinished);
+  PostUnoCommandInternal(command, json_buffer, notifyWhenFinished);
 
   if (json_buffer)
     delete[] json_buffer;
 }
 
-void DocumentClient::PostUnoCommandI(const std::string& command,
+void DocumentClient::PostUnoCommandInternal(const std::string& command,
                                      char* json_buffer,
                                      bool notifyWhenFinished) {
   document_->postUnoCommand(command.c_str(), json_buffer, notifyWhenFinished);
@@ -684,7 +682,8 @@ bool DocumentClient::OnPasteEvent(ui::Clipboard* clipboard,
     const char* value =
         strcpy(new char[converted_data.length() + 1], converted_data.c_str());
 
-    result = document_->paste(clipboard_type.c_str(), value, converted_data.size());
+    result =
+        document_->paste(clipboard_type.c_str(), value, converted_data.size());
     delete value;
   } else if (clipboard_type == "image/png") {
     absl::optional<std::vector<uint8_t>> image;
@@ -702,7 +701,9 @@ bool DocumentClient::OnPasteEvent(ui::Clipboard* clipboard,
 
     std::vector<uint8_t> img = image.value();
 
-    result = document_->paste(clipboard_type.c_str(), static_cast<char*>(reinterpret_cast<char*>(img.data())), img.size());
+    result = document_->paste(
+        clipboard_type.c_str(),
+        static_cast<char*>(reinterpret_cast<char*>(img.data())), img.size());
   } else {
     LOG(ERROR) << "Unsupported clipboard_type: " << clipboard_type;
   }

@@ -72,7 +72,7 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   gfx::Size Size() const;
   float TwipToPx(float in) const;
   void PostUnoCommand(const std::string& command, gin::Arguments* args);
-  void PostUnoCommandI(const std::string& command,
+  void PostUnoCommandInternal(const std::string& command,
                        char* json_buffer,
                        bool notifyWhenFinished);
   v8::Local<v8::Value> GotoOutline(int idx, gin::Arguments* args);

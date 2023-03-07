@@ -4,7 +4,6 @@
 
 #include "office/lok_callback.h"
 
-#include <codecvt>
 #include <cstddef>
 #include <string_view>
 #include <utility>
