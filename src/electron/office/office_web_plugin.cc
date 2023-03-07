@@ -278,21 +278,6 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
       return blink::WebInputEventResult::kNotHandled;
   }
 
-  /* const char16_t copy = 'c'; */
-  /* const char16_t paste = 'v'; */
-  /*  */
-  /* if ((event.GetModifiers() == event.kControlKey || */
-  /*      event.GetModifiers() == event.kMetaKey) && */
-  /*     (*event.unmodified_text == copy || *event.unmodified_text == paste)) { */
-  /*   if (*event.unmodified_text == copy) { */
-  /*     return HandleCopyEvent(); */
-  /*   } else if (*event.unmodified_text == paste) { */
-  /*     return HandlePasteEvent(); */
-  /*   } */
-  /*   // This should never be hit */
-  /*   return blink::WebInputEventResult::kNotHandled; */
-  /* } */
-
   // intercept some special key events on Ctr/Command
   if (event.GetModifiers() & (event.kControlKey | event.kMetaKey)) {
     switch (event.dom_code) {
