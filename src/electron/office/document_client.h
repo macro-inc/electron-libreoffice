@@ -22,6 +22,8 @@
 #include "third_party/libreofficekit/LibreOfficeKit.hxx"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkImage.h"
+#include "ui/base/clipboard/clipboard.h"
+#include "ui/base/clipboard/clipboard_format_type.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
@@ -70,6 +72,9 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   gfx::Size Size() const;
   float TwipToPx(float in) const;
   void PostUnoCommand(const std::string& command, gin::Arguments* args);
+  void PostUnoCommandInternal(const std::string& command,
+                       char* json_buffer,
+                       bool notifyWhenFinished);
   v8::Local<v8::Value> GotoOutline(int idx, gin::Arguments* args);
   std::vector<std::string> GetTextSelection(const std::string& mime_type,
                                             gin::Arguments* args);
@@ -82,6 +87,7 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   v8::Local<v8::Value> GetClipboard(gin::Arguments* args);
   bool SetClipboard(std::vector<v8::Local<v8::Object>> clipboard_data,
                     gin::Arguments* args);
+  bool OnPasteEvent(ui::Clipboard* clipboard, std::string clipboard_type);
   bool Paste(const std::string& mime_type,
              const std::string& data,
              gin::Arguments* args);
@@ -138,8 +144,11 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
 
  private:
   void HandleStateChange(std::string payload);
+  void HandleUnoCommandResult(std::string payload);
   void HandleDocSizeChanged(std::string payload);
   void HandleInvalidate(std::string payload);
+
+  void OnClipboardChanged();
 
   void RefreshSize();
 

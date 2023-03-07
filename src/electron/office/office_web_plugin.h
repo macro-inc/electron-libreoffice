@@ -163,6 +163,8 @@ class OfficeWebPlugin : public blink::WebPlugin,
   // call `Destroy()` instead.
   ~OfficeWebPlugin() override;
   blink::WebInputEventResult HandleKeyEvent(const blink::WebKeyboardEvent event, ui::Cursor* cursor);
+  blink::WebInputEventResult HandleCopyEvent();
+  blink::WebInputEventResult HandlePasteEvent();
   bool HandleMouseEvent(blink::WebInputEvent::Type type,
                         gfx::PointF position,
                         int modifiers,

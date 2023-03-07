@@ -250,7 +250,8 @@ std::string TypeToEventString(int type) {
 
 bool IsTypeJSON(int type) {
   switch (static_cast<LibreOfficeKitCallbackType>(type)) {
-    case LOK_CALLBACK_INVALIDATE_VISIBLE_CURSOR: // INVALIDATE_VISIBLE_CURSOR may also be CSV
+    case LOK_CALLBACK_INVALIDATE_VISIBLE_CURSOR:  // INVALIDATE_VISIBLE_CURSOR
+                                                  // may also be CSV
     case LOK_CALLBACK_CURSOR_VISIBLE:
     case LOK_CALLBACK_VIEW_CURSOR_VISIBLE:
     case LOK_CALLBACK_GRAPHIC_SELECTION:
@@ -294,7 +295,8 @@ bool IsTypeJSON(int type) {
 /* Is comma-separated number values. A semi-colon indicates a new array */
 bool IsTypeCSV(int type) {
   switch (static_cast<LibreOfficeKitCallbackType>(type)) {
-    case LOK_CALLBACK_INVALIDATE_VISIBLE_CURSOR: // INVALIDATE_VISIBLE_CURSOR may also be JSON
+    case LOK_CALLBACK_INVALIDATE_VISIBLE_CURSOR:  // INVALIDATE_VISIBLE_CURSOR
+                                                  // may also be JSON
     case LOK_CALLBACK_INVALIDATE_TILES:
     case LOK_CALLBACK_TEXT_SELECTION_START:
     case LOK_CALLBACK_TEXT_SELECTION_END:
@@ -332,6 +334,22 @@ std::pair<std::string, std::string> ParseStatusChange(std::string payload) {
 
   return std::make_pair(std::string(sv.begin(), target),
                         std::string(target + 1, end));
+}
+
+std::pair<std::string, bool> ParseUnoCommandResult(std::string payload) {
+  std::pair<std::string, bool> result;
+  // Used to correctly grab the value of commandValues
+  std::string commandPreface = "{ \"commandName\": \"";
+  result.first =
+      payload.substr(commandPreface.length(),
+                     payload.find("\", \"success\"") - commandPreface.length());
+  // Used to correctly grab the value of success
+  std::string successPreface =
+      commandPreface + result.first + "\", \"success\": ";
+  result.second = payload.substr(successPreface.length(),
+                                 payload.find(", \"result\"") -
+                                     successPreface.length()) == "true";
+  return result;
 }
 
 v8::Local<v8::Value> ParseJSON(v8::Isolate* isolate,
@@ -404,7 +422,8 @@ v8::Local<v8::Value> PayloadToLocalValue(v8::Isolate* isolate,
     return GraphicSelectionPayloadToLocalValue(isolate, payload);
   }
 
-  // INVALIDATE_VISIBLE_CURSOR may also be JSON, so check if the payload starts with '{'
+  // INVALIDATE_VISIBLE_CURSOR may also be JSON, so check if the payload starts
+  // with '{'
   if (IsTypeCSV(type) && payload[0] != '{') {
     std::string_view payload_sv(payload);
     std::string_view::const_iterator start = payload_sv.begin();
