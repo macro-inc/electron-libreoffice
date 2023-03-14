@@ -278,8 +278,17 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
       return blink::WebInputEventResult::kNotHandled;
   }
 
-  // intercept some special key events on Ctr/Command
-  if (event.GetModifiers() & (event.kControlKey | event.kMetaKey)) {
+  blink::WebInputEvent::Modifiers base_modifier = event.kControlKey;
+
+  bool is_mac = false;
+
+#if BUILDFLAG(IS_MAC)
+  base_modifier = event.kMetaKey;
+  is_mac = true;
+#endif
+
+  // intercept some special key events
+  if (event.GetModifiers() & base_modifier) {
     switch (event.dom_code) {
       // don't close the internal LO window
       case office::DomCode::US_W:
@@ -291,8 +300,22 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
     }
   }
 
-  int lok_key_code =
-      office::DOMKeyCodeToLOKKeyCode(event.dom_code, event.GetModifiers());
+  int modifiers = event.GetModifiers();
+
+  if (is_mac) {
+    int result = 0;
+
+    if (modifiers & blink::WebInputEvent::Modifiers::kShiftKey)
+      result |= blink::WebInputEvent::Modifiers::kShiftKey;
+    if (modifiers & blink::WebInputEvent::Modifiers::kAltKey)
+      result |= blink::WebInputEvent::Modifiers::kAltKey;
+    if (modifiers & blink::WebInputEvent::Modifiers::kMetaKey)
+      result |= blink::WebInputEvent::Modifiers::kControlKey;
+
+    modifiers = result;
+  }
+
+  int lok_key_code = office::DOMKeyCodeToLOKKeyCode(event.dom_code, modifiers);
 
   task_runner_->PostTask(FROM_HERE,
                          base::BindOnce(&lok::Document::setView,
