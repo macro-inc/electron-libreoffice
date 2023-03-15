@@ -158,10 +158,7 @@ class OfficeDoc extends HTMLElement {
   }
 
   _handleScroll() {
-    this.embed.updateScroll({
-      x: this.scroller.scrollLeft,
-      y: this.scroller.scrollTop,
-    });
+    this.embed.updateScroll(this.scroller.scrollTop);
   }
 
   _refreshSize = () => {

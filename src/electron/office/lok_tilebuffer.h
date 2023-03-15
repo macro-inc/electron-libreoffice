@@ -8,6 +8,8 @@
 #include <chrono>
 #include <map>
 #include <unordered_set>
+#include "cc/paint/paint_canvas.h"
+#include "cc/paint/paint_image.h"
 #include "office/lok_callback.h"
 #include "third_party/libreofficekit/LibreOfficeKit.hxx"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -34,11 +36,9 @@ class TileBuffer {
   void InvalidateTilesInRect(const gfx::RectF& rect);
   void InvalidateTilesInTwipRect(const gfx::Rect& rect_twips);
   void InvalidateAllTiles();
-  void PaintInvalidTiles(SkCanvas& canvas,
-                         const gfx::Rect& rect,
-                         std::chrono::steady_clock::time_point start,
-                         std::vector<gfx::Rect>& ready,
-                         std::vector<gfx::Rect>& pending);
+  void Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect);
+  void SetYPosition(float y);
+  bool PartiallyPainted();
 
  private:
   void PaintTile(uint8_t* buffer, int column, int row);
@@ -98,8 +98,18 @@ class TileBuffer {
 
   std::shared_ptr<SkBitmap[]> pool_bitmaps_ = nullptr;
   std::shared_ptr<int[]> pool_index_to_tile_index_ = nullptr;
+  std::shared_ptr<cc::PaintImage[]> pool_paint_images_ = nullptr;
 
   size_t current_index_ = 0;
+
+  // scroll position
+  int y_pos_ = 0;
+  bool in_paint_ = false;
+
+  // partial paints
+  bool partially_painted_ = false;
+  int resume_row = -1;
+  int resume_col = -1;
 };
 }  // namespace electron::office
 
