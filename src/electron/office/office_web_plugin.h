@@ -187,6 +187,8 @@ class OfficeWebPlugin : public blink::WebPlugin {
                       gin::Handle<office::DocumentClient> client);
   // }
 
+  void ResetTileBuffers();
+
   // LOK event handlers {
   void HandleInvalidateTiles(std::string payload);
   void HandleDocumentSizeChanged(std::string payload);
@@ -214,7 +216,7 @@ class OfficeWebPlugin : public blink::WebPlugin {
   // currently painting, to track deferred invalidates
   bool in_paint_ = false;
   // the offset for input events, adjusted by the scroll position
-  int input_y_offset = 0;
+  int scroll_y_position_ = 0;
 
   // If this is true, then don't scroll the plugin in response to calls to
   // `UpdateScroll()`. This will be true when the extension page is in the

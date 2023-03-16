@@ -343,7 +343,7 @@ bool OfficeWebPlugin::HandleMouseEvent(blink::WebInputEvent::Type type,
   }
 
   // offset by the scroll position
-  position.Offset(0, input_y_offset);
+  position.Offset(0, scroll_y_position_);
 
   // TODO: handle offsets
   gfx::Point pos = gfx::ToRoundedPoint(gfx::ScalePoint(
@@ -402,27 +402,28 @@ void OfficeWebPlugin::InvalidatePluginContainer() {
     container_->Invalidate();
 }
 
-namespace {
-void ResetTileBuffers(std::vector<office::TileBuffer>& buffers,
-                      lok::Document* document,
-                      int parts,
-                      float scale) {
-  // TODO: handle case where buffer exceeds the number of parts
-  int missing = parts - buffers.size();
+void OfficeWebPlugin::ResetTileBuffers() {
+  int parts = document_->getDocumentType() == LOK_DOCTYPE_TEXT
+                  ? 1
+                  : document_->getParts();
+
+  float scale = document_client_->TotalScale();
+  int missing = parts - part_tile_buffer_.size();
   if (missing < 0)
     missing = 0;
 
   for (int part = 0; part < missing; ++part) {
-    buffers.emplace_back(document, scale, part);
+    part_tile_buffer_.emplace_back(document_, scale, part);
   }
 
   parts -= missing;
   for (int part = 0; part < parts; ++part) {
-    buffers[part] = std::move(office::TileBuffer(document, scale, part));
-    LOG(ERROR) << "BUFFER RESET SCALE" << scale;
+    part_tile_buffer_[part] =
+        std::move(office::TileBuffer(document_, scale, part));
+    LOG(ERROR) << "BUFFER RESET SCALE: " << scale;
   }
+  part_tile_buffer_.at(0).SetYPosition(scroll_y_position_);
 }
-}  // namespace
 
 void OfficeWebPlugin::OnGeometryChanged(double old_zoom,
                                         float old_device_scale) {
@@ -431,12 +432,7 @@ void OfficeWebPlugin::OnGeometryChanged(double old_zoom,
 
   if (viewport_zoom_ != old_zoom || device_scale_ != old_device_scale) {
     document_client_->BrowserZoomUpdated(viewport_zoom_ * device_scale_);
-    ResetTileBuffers(part_tile_buffer_, document_,
-                     // there is only one tile buffer for text documents
-                     document_->getDocumentType() == LOK_DOCTYPE_TEXT
-                         ? 1
-                         : document_->getParts(),
-                     document_client_->TotalScale());
+    ResetTileBuffers();
   }
 
   available_area_ = gfx::Rect(plugin_rect_.size());
@@ -503,12 +499,7 @@ void OfficeWebPlugin::HandleInvalidateTiles(std::string payload) {
 }
 
 void OfficeWebPlugin::HandleDocumentSizeChanged(std::string payload) {
-  ResetTileBuffers(part_tile_buffer_, document_,
-                   // there is only one tile buffer for text documents
-                   document_->getDocumentType() == LOK_DOCTYPE_TEXT
-                       ? 1
-                       : document_->getParts(),
-                   document_client_->TotalScale());
+  ResetTileBuffers();
 }
 
 void OfficeWebPlugin::UpdateScrollInTask(int y_position) {
@@ -522,13 +513,13 @@ void OfficeWebPlugin::UpdateScroll(int y_position) {
   if (!document_client_ || stop_scrolling_)
     return;
 
-  float max_y = std::max(
-      document_client_->DocumentSizePx().height() - plugin_rect_.height() / device_scale_,
-      0.0f);
+  float max_y = std::max(document_client_->DocumentSizePx().height() -
+                             plugin_rect_.height() / device_scale_,
+                         0.0f);
 
   float scaled_y = base::clamp((float)y_position, 0.0f, max_y) * device_scale_;
   part_tile_buffer_.at(0).SetYPosition(scaled_y);
-  input_y_offset = scaled_y;
+  scroll_y_position_ = scaled_y;
 
   InvalidatePluginContainer();
 }
