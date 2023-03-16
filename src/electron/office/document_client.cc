@@ -129,8 +129,8 @@ gin::ObjectTemplateBuilder DocumentClient::GetObjectTemplateBuilder(
       .SetMethod("sendFormFieldEvent", &DocumentClient::SendFormFieldEvent)
       .SetMethod("sendContentControlEvent",
                  &DocumentClient::SendContentControlEvent)
-      .SetLazyDataProperty("pageRects", &DocumentClient::PageRects)
-      .SetLazyDataProperty("size", &DocumentClient::Size)
+      .SetProperty("pageRects", &DocumentClient::PageRects)
+      .SetProperty("size", &DocumentClient::Size)
       .SetLazyDataProperty("isReady", &DocumentClient::IsReady);
 }
 
