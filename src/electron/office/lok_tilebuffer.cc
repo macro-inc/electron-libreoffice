@@ -182,7 +182,7 @@ void TileBuffer::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
 
       canvas->drawImage(
           pool_paint_images_[pool_index], tile_size_scaled_px_ * column,
-          tile_size_scaled_px_ * row, SkSamplingOptions(), &flags);
+          tile_size_scaled_px_ * row, SkSamplingOptions(SkFilterMode::kLinear), &flags);
 
       // if (std::chrono::steady_clock::now() - start > kFrameDeadline) {
       //   // partial paint, mark for resume
