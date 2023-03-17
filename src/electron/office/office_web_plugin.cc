@@ -27,6 +27,7 @@
 #include "gin/converter.h"
 #include "gin/dictionary.h"
 #include "gin/handle.h"
+#include "gin/object_template_builder.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkFontStyle.h"
 #include "include/core/SkTextBlob.h"
@@ -91,6 +92,9 @@ OfficeWebPlugin::OfficeWebPlugin(blink::WebPluginParams params,
 // blink::WebPlugin {
 bool OfficeWebPlugin::Initialize(blink::WebPluginContainer* container) {
   container_ = container;
+  // This prevents the wheel event hit test data from causing a crash, wheel
+  // events are handled by the scroll container anyway
+  container->SetWantsWheelEvents(false);
 
   // TODO: figure out what false means?
   return true;
@@ -106,16 +110,43 @@ void OfficeWebPlugin::Destroy() {
   delete this;
 }
 
+v8::Global<v8::ObjectTemplate> OfficeWebPlugin::v8_template_;
+
 v8::Local<v8::Object> OfficeWebPlugin::V8ScriptableObject(
     v8::Isolate* isolate) {
-  gin_helper::Dictionary dict = gin::Dictionary::CreateEmpty(isolate);
-  dict.SetMethod("renderDocument",
-                 base::BindRepeating(&OfficeWebPlugin::RenderDocument,
-                                     base::Unretained(this)));
-  dict.SetMethod("updateScroll",
-                 base::BindRepeating(&OfficeWebPlugin::UpdateScrollInTask,
-                                     base::Unretained(this)));
-  return dict.GetHandle();
+  if (v8_template_.IsEmpty()) {
+    v8::Local<v8::ObjectTemplate> template_ =
+        gin::ObjectTemplateBuilder(isolate, "OfficeWebPlugin")
+            .SetMethod("renderDocument",
+                       base::BindRepeating(&OfficeWebPlugin::RenderDocument,
+                                           base::Unretained(this)))
+            .SetMethod("updateScroll",
+                       base::BindRepeating(&OfficeWebPlugin::UpdateScrollInTask,
+                                           base::Unretained(this)))
+            .SetMethod("getZoom", base::BindRepeating(&OfficeWebPlugin::GetZoom,
+                                                      base::Unretained(this)))
+            .SetMethod("setZoom", base::BindRepeating(&OfficeWebPlugin::SetZoom,
+                                                      base::Unretained(this)))
+            .SetMethod("twipToPx",
+                       base::BindRepeating(&OfficeWebPlugin::TwipToCSSPx,
+                                           base::Unretained(this)))
+            .SetProperty(
+                "documentSize",
+                base::BindRepeating(&OfficeWebPlugin::GetDocumentCSSPixelSize,
+                                    base::Unretained(this)))
+            .SetProperty("pageRects",
+                         base::BindRepeating(&OfficeWebPlugin::PageRects,
+                                             base::Unretained(this)))
+            .Build();
+    v8_template_.Reset(isolate, template_);
+  }
+
+  if (v8_object_.IsEmpty()) {
+    v8_object_.Reset(isolate, v8_template_.Get(isolate)
+                                  ->NewInstance(isolate->GetCurrentContext())
+                                  .ToLocalChecked());
+  }
+  return v8_object_.Get(isolate);
 }
 
 blink::WebPluginContainer* OfficeWebPlugin::Container() const {
@@ -136,16 +167,10 @@ void OfficeWebPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
       gfx::RectToSkRect(gfx::IntersectRects(css_plugin_rect_, rect));
   cc::PaintCanvasAutoRestore auto_restore(canvas, true);
 
+  if (reset_canvas_ || first_paint_)
+    canvas->drawColor(SK_ColorTRANSPARENT, SkBlendMode::kSrc);
+
   canvas->clipRect(invalidate_rect);
-
-  // nothing drawn yet
-  if (first_paint_) {
-    cc::PaintFlags flags;
-    flags.setBlendMode(SkBlendMode::kSrc);
-    flags.setColor(SK_ColorTRANSPARENT);
-
-    canvas->drawRect(invalidate_rect, flags);
-  }
 
   // not mounted
   if (!document_client_)
@@ -154,9 +179,21 @@ void OfficeWebPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
   if (!plugin_rect_.origin().IsOrigin())
     canvas->translate(plugin_rect_.x(), plugin_rect_.y());
 
+  if (reset_canvas_) {
+    canvas->scale(zoom_ / old_zoom_);
+    reset_canvas_ = false;
+    task_runner_->PostTask(FROM_HERE,
+                           base::BindOnce(&OfficeWebPlugin::ResetTileBuffers,
+                                          base::Unretained(this)));
+    task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&OfficeWebPlugin::InvalidatePluginContainer,
+                                  base::Unretained(this)));
+  }
+
   document_->setView(view_id_);
 
   part_tile_buffer_.at(0).Paint(canvas, rect);
+  first_paint_ = false;
 }
 
 void OfficeWebPlugin::UpdateGeometry(const gfx::Rect& window_rect,
@@ -345,10 +382,8 @@ bool OfficeWebPlugin::HandleMouseEvent(blink::WebInputEvent::Type type,
   // offset by the scroll position
   position.Offset(0, scroll_y_position_);
 
-  // TODO: handle offsets
   gfx::Point pos = gfx::ToRoundedPoint(gfx::ScalePoint(
-      position,
-      office::lok_callback::kTwipPerPx / document_client_->TotalScale()));
+      position, office::lok_callback::kTwipPerPx / TotalScale()));
 
   int buttons = 0;
   if (modifiers & blink::WebInputEvent::kLeftButtonDown)
@@ -407,7 +442,7 @@ void OfficeWebPlugin::ResetTileBuffers() {
                   ? 1
                   : document_->getParts();
 
-  float scale = document_client_->TotalScale();
+  float scale = TotalScale();
   int missing = parts - part_tile_buffer_.size();
   if (missing < 0)
     missing = 0;
@@ -431,7 +466,6 @@ void OfficeWebPlugin::OnGeometryChanged(double old_zoom,
     return;
 
   if (viewport_zoom_ != old_zoom || device_scale_ != old_device_scale) {
-    document_client_->BrowserZoomUpdated(viewport_zoom_ * device_scale_);
     ResetTileBuffers();
   }
 
@@ -451,9 +485,31 @@ void OfficeWebPlugin::OnGeometryChanged(double old_zoom,
       available_area_, office::lok_callback::kTwipPerPx);
 }
 
-gfx::Size OfficeWebPlugin::GetDocumentPixelSize() const {
-  return gfx::ToCeiledSize(gfx::ScaleSize(document_client_->DocumentSizePx(),
-                                          viewport_zoom_ * device_scale_));
+std::vector<gfx::Rect> OfficeWebPlugin::PageRects() const {
+  std::vector<gfx::Rect> result;
+
+  if (!document_client_)
+    return result;
+  auto page_rects_ = document_client_->PageRects();
+
+  float scale = zoom_ / office::lok_callback::kTwipPerPx;
+  for (auto& rect : page_rects_) {
+    result.emplace_back(gfx::ScaleToCeiledPoint(rect.origin(), scale),
+                        gfx::ScaleToCeiledSize(rect.size(), scale));
+  }
+  return result;
+}
+
+gfx::Size OfficeWebPlugin::GetDocumentPixelSize() {
+  auto size = document_client_->DocumentSizeTwips();
+  return gfx::Size(ceil(TwipToPx(size.width())), ceil(TwipToPx(size.height())));
+}
+
+gfx::Size OfficeWebPlugin::GetDocumentCSSPixelSize() {
+  auto size = document_client_->DocumentSizeTwips();
+  return gfx::Size(
+      ceil(office::lok_callback::TwipToPixel(size.width(), zoom_)),
+      ceil(office::lok_callback::TwipToPixel(size.height(), zoom_)));
 }
 
 void OfficeWebPlugin::OnViewportChanged(
@@ -502,6 +558,37 @@ void OfficeWebPlugin::HandleDocumentSizeChanged(std::string payload) {
   ResetTileBuffers();
 }
 
+float OfficeWebPlugin::TotalScale() {
+  return zoom_ * device_scale_ * viewport_zoom_;
+}
+
+void OfficeWebPlugin::SetZoom(float zoom) {
+  if (abs(zoom_ - zoom) < 0.0001f) {
+    return;
+  }
+
+  old_zoom_ = zoom_;
+  scroll_y_position_ = zoom / zoom_ * scroll_y_position_;
+  zoom_ = zoom;
+
+  if (!document_client_ || view_id_ == -1)
+    return;
+  reset_canvas_ = true;
+  InvalidatePluginContainer();
+}
+
+float OfficeWebPlugin::GetZoom() {
+  return zoom_;
+}
+
+float OfficeWebPlugin::TwipToPx(float in) {
+  return office::lok_callback::TwipToPixel(in, TotalScale());
+}
+
+float OfficeWebPlugin::TwipToCSSPx(float in) {
+  return ceil(office::lok_callback::TwipToPixel(in, zoom_));
+}
+
 void OfficeWebPlugin::UpdateScrollInTask(int y_position) {
   if (task_runner_)
     task_runner_->PostTask(FROM_HERE,
@@ -513,9 +600,11 @@ void OfficeWebPlugin::UpdateScroll(int y_position) {
   if (!document_client_ || stop_scrolling_)
     return;
 
-  float max_y = std::max(document_client_->DocumentSizePx().height() -
-                             plugin_rect_.height() / device_scale_,
-                         0.0f);
+  // float scale = TotalScale();
+  float max_y = std::max(
+      TwipToPx(document_client_->DocumentSizeTwips().height()) -
+          plugin_rect_.height() / device_scale_ / (float)viewport_zoom_,
+      0.0f);
 
   float scaled_y = base::clamp((float)y_position, 0.0f, max_y) * device_scale_;
   part_tile_buffer_.at(0).SetYPosition(scaled_y);
@@ -546,8 +635,7 @@ bool OfficeWebPlugin::RenderDocument(
   document_ = client->GetDocument();
   document_client_ = client.get();
   view_id_ = client->Mount(isolate);
-  document_client_->BrowserZoomUpdated(viewport_zoom_ * device_scale_);
-  part_tile_buffer_.emplace_back(document_, document_client_->TotalScale());
+  part_tile_buffer_.emplace_back(document_, TotalScale());
 
   if (needs_reset) {
     // this is an awful hack
@@ -577,8 +665,7 @@ bool OfficeWebPlugin::RenderDocument(
 }
 
 void OfficeWebPlugin::TriggerFullRerender() {
-  // OnGeometryChanged(viewport_zoom_, device_scale_);
-  if (document_client_ && !document_client_->DocumentSizePx().IsEmpty()) {
+  if (document_client_ && !document_client_->DocumentSizeTwips().IsEmpty()) {
     part_tile_buffer_.at(0).InvalidateAllTiles();
     InvalidatePluginContainer();
   }

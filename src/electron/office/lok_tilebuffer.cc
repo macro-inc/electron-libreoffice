@@ -14,7 +14,7 @@
 #include "ui/gfx/geometry/rect_f.h"
 
 // Enable to display debug painting
-#define TILEBUFFER_DEBUG_PAINT
+// #define TILEBUFFER_DEBUG_PAINT
 
 namespace electron::office {
 

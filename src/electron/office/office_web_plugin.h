@@ -32,11 +32,11 @@
 #include "third_party/blink/public/web/web_plugin_params.h"
 #include "third_party/blink/public/web/web_print_params.h"
 #include "third_party/libreofficekit/LibreOfficeKit.hxx"
-#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/vector2d_f.h"
+#include "v8/include/v8-template.h"
 #include "v8/include/v8-value.h"
 
 namespace content {
@@ -158,7 +158,8 @@ class OfficeWebPlugin : public blink::WebPlugin {
  private:
   // call `Destroy()` instead.
   ~OfficeWebPlugin() override;
-  blink::WebInputEventResult HandleKeyEvent(const blink::WebKeyboardEvent event, ui::Cursor* cursor);
+  blink::WebInputEventResult HandleKeyEvent(const blink::WebKeyboardEvent event,
+                                            ui::Cursor* cursor);
   blink::WebInputEventResult HandleCopyEvent();
   blink::WebInputEventResult HandlePasteEvent();
   bool HandleMouseEvent(blink::WebInputEvent::Type type,
@@ -170,16 +171,24 @@ class OfficeWebPlugin : public blink::WebPlugin {
   // Updates the available area
   void OnGeometryChanged(double old_zoom, float old_device_scale);
 
-  // Computes document width/height in device pixels, based on current browser
-  // zoom and device scale
-  gfx::Size GetDocumentPixelSize() const;
+  // Computes document width/height in device pixels, based on the total scale
+  gfx::Size GetDocumentPixelSize();
 
   void OnViewportChanged(const gfx::Rect& plugin_rect_in_css_pixel,
                          float new_device_scale);
 
   void UpdateScroll(int y_position);
 
+  float TwipToPx(float in);
+  float TotalScale();
+
   // Exposed methods {
+  gfx::Size GetDocumentCSSPixelSize();
+  std::vector<gfx::Rect> PageRects() const;
+  void SetZoom(float zoom);
+  float GetZoom();
+  float TwipToCSSPx(float in);
+
   void UpdateScrollInTask(int y_position);
 
   // prepares the embed as the document client's mounted viewer
@@ -211,8 +220,12 @@ class OfficeWebPlugin : public blink::WebPlugin {
   // current device scale factor. viewport * device_scale_ == screen, screen /
   // device_scale_ == viewport
   float device_scale_ = 1.0f;
+  float zoom_ = 1.0f;
+  float old_zoom_ = 1.0f;
   // first paint, requiring the full canvas of tiles to be painted
   bool first_paint_ = true;
+  // first paint, requiring the full canvas of tiles to be painted
+  bool reset_canvas_ = false;
   // currently painting, to track deferred invalidates
   bool in_paint_ = false;
   // the offset for input events, adjusted by the scroll position
@@ -242,6 +255,9 @@ class OfficeWebPlugin : public blink::WebPlugin {
   std::vector<office::TileBuffer> part_tile_buffer_;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
+
+  static v8::Global<v8::ObjectTemplate> v8_template_;
+  v8::Global<v8::Object> v8_object_;
 
   // invalidates when destroy() is called
   base::WeakPtrFactory<OfficeWebPlugin> weak_factory_{this};
