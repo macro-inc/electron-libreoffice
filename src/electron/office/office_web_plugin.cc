@@ -101,16 +101,8 @@ bool OfficeWebPlugin::Initialize(blink::WebPluginContainer* container) {
 }
 
 void OfficeWebPlugin::Destroy() {
-  if (container_) {
-    // TODO: release client container value
-  }
-  if (document_client_) {
-    document_client_->Unmount();
-  }
   delete this;
 }
-
-v8::Global<v8::ObjectTemplate> OfficeWebPlugin::v8_template_;
 
 v8::Local<v8::Object> OfficeWebPlugin::V8ScriptableObject(
     v8::Isolate* isolate) {
@@ -438,7 +430,8 @@ void OfficeWebPlugin::InvalidatePluginContainer() {
 }
 
 void OfficeWebPlugin::ResetTileBuffers() {
-  int parts = document_->getDocumentType() == LOK_DOCTYPE_TEXT
+  int parts = !document_ ? part_tile_buffer_.size()
+              : document_->getDocumentType() == LOK_DOCTYPE_TEXT
                   ? 1
                   : document_->getParts();
 
@@ -623,9 +616,9 @@ bool OfficeWebPlugin::RenderDocument(
 
   // TODO: honestly, this is terrible, need to do this properly
   // already mounted
-  bool needs_reset = view_id_ != -1;
+  bool needs_reset = view_id_ != -1 && document_ != client->GetDocument();
   if (needs_reset) {
-    part_tile_buffer_.clear();
+    ResetTileBuffers();
     office->CloseDocument(document_client_->Path());
     document_client_->Unmount();
     delete document_;

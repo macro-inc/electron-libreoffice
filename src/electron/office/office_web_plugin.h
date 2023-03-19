@@ -256,7 +256,7 @@ class OfficeWebPlugin : public blink::WebPlugin {
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
-  static v8::Global<v8::ObjectTemplate> v8_template_;
+  v8::Global<v8::ObjectTemplate> v8_template_;
   v8::Global<v8::Object> v8_object_;
 
   // invalidates when destroy() is called

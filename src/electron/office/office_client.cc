@@ -245,6 +245,7 @@ v8::Local<v8::Value> OfficeClient::LoadDocument(v8::Isolate* isolate,
 bool OfficeClient::CloseDocument(const std::string& path) {
   lok::Document* doc = document_map_[path];
   document_event_router_.erase(doc);
+  documents_mounted_.erase(doc);
   return document_map_.erase(path) == 1;
 }
 
