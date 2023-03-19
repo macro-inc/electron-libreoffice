@@ -145,15 +145,10 @@ void TileBuffer::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
   flags.setBlendMode(SkBlendMode::kSrc);
   canvas->translate(0, -y_pos_);
 
-  gfx::Rect tile_rect = TileRect(gfx::RectF(rect), doc_width_scaled_px_,
+  auto offset_rect = gfx::RectF(rect);
+  offset_rect.Offset(0, y_pos_);
+  gfx::Rect tile_rect = TileRect(offset_rect, doc_width_scaled_px_,
                                  doc_height_scaled_px_, tile_size_scaled_px_);
-  tile_rect.Offset(0, floor(y_pos_ / tile_size_scaled_px_));
-  // This is a hacky way to prevent over-offsetting on a high DPI
-  // TODO: figure out why scaling for high DPI causes the offset to exceed the
-  // document size
-  if (tile_rect.bottom() > rows_) {
-    tile_rect.Offset(0, rows_ - tile_rect.bottom());
-  }
 
   DCHECK(tile_rect.right() <= columns_);
   DCHECK(tile_rect.bottom() <= rows_);

@@ -192,7 +192,7 @@ void OfficeWebPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
 
   document_->setView(view_id_);
 
-  part_tile_buffer_.at(0).Paint(canvas, rect);
+  part_tile_buffer_.at(0).Paint(canvas, gfx::Rect(rect.size()));
   first_paint_ = false;
 }
 
@@ -600,7 +600,6 @@ void OfficeWebPlugin::UpdateScroll(int y_position) {
   if (!document_client_ || stop_scrolling_)
     return;
 
-  // float scale = TotalScale();
   float max_y = std::max(
       TwipToPx(document_client_->DocumentSizeTwips().height()) -
           plugin_rect_.height() / device_scale_ / (float)viewport_zoom_,
@@ -665,6 +664,7 @@ bool OfficeWebPlugin::RenderDocument(
 }
 
 void OfficeWebPlugin::TriggerFullRerender() {
+  first_paint_ = true;
   if (document_client_ && !document_client_->DocumentSizeTwips().IsEmpty()) {
     part_tile_buffer_.at(0).InvalidateAllTiles();
     InvalidatePluginContainer();
