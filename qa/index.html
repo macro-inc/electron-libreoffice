@@ -25,25 +25,33 @@
     />
 
     <div style="display: flex">
-    <button type="button" onclick="toggleTrackChanges()">
-      TOGGLE TRACK CHANGES
-    </button>
-    <button type="button" onclick="acceptTrackChange()">Accept TC</button>
-    <button type="button" onclick="rejectTrackChange()">Reject TC</button>
+      <button type="button" onclick="toggleTrackChanges()">
+        TOGGLE TRACK CHANGES
+      </button>
+      <button type="button" onclick="acceptTrackChange()">Accept TC</button>
+      <button type="button" onclick="rejectTrackChange()">Reject TC</button>
     </div>
     <div style="display: flex">
-    <button type="button" onclick="gotoOutline()">Goto Outline</button>
-    <button type="button" onclick="insertTable()">Insert Table</button>
+      <button type="button" onclick="gotoOutline()">Goto Outline</button>
+      <button type="button" onclick="insertTable()">Insert Table</button>
     </div>
     <div style="display: flex">
-    <button type="button" onclick="zoomIn()">Zoom In</button>
-    <button type="button" onclick="zoomOut()">Zoom Out</button>
+      <button type="button" onclick="zoomIn()">Zoom In</button>
+      <button type="button" onclick="zoomOut()">Zoom Out</button>
     </div>
     <script src="wrapper.js"></script>
-    <office-doc id="el-embed" />
+    <div style="display: flex; height: 100%;">
+      <div style="display: flex; width: 256px;">
+        <office-doc id="el-thumb" />
+      </div>
+      <div style="display: flex; width: calc(100% - 256px);">
+        <office-doc id="el-embed" />
+      </div>
+    </div>
     <script>
       const picker = document.getElementById('el-picker');
       const embed = document.getElementById('el-embed');
+      const thumb = document.getElementById('el-thumb');
 
       libreoffice.on('status_indicator_set_value', (x) => {
         console.log(x);
@@ -79,10 +87,11 @@
                 buffer: encodedData.buffer,
               },
             ];
-
           });
 
           embed.renderDocument(doc);
+          thumb.renderDocument(doc);
+          thumb.setZoom(0.1);
           embed.focus();
         }
       };
@@ -129,10 +138,7 @@
 
         if (outline.outline) {
           // CONSTRUCT Tree for bookmarks
-          console.log(
-            'Outline tree',
-            constructBookmarkTree(outline.outline)
-          );
+          console.log('Outline tree', constructBookmarkTree(outline.outline));
         }
         console.log('OUTLINE', globalDoc.gotoOutline(1));
       }

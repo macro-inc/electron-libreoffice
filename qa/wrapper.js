@@ -121,7 +121,7 @@ class OfficeDoc extends HTMLElement {
 
   _setCursor(payload) {
     const [x, y, width, height] = payload.map((n) =>
-      Math.max(embed.twipToPx(n), 1)
+      Math.max(this.embed.twipToPx(n), 1)
     );
     this.cursor.style.transform = `translate(${x + 1.067}px, ${y}px)`;
     this.cursor.style.width = `${width}px`;
@@ -134,7 +134,7 @@ class OfficeDoc extends HTMLElement {
    }
 
   setZoom(zoom) {
-    const old_zoom = this.embed.getZoom();
+    const old_zoom = this.embed.getZoom ? this.embed.getZoom() : 1.0;
     const old_scroll = this.scroller.scrollTop;
     this.embed.setZoom(zoom);
     this._refreshSize();
