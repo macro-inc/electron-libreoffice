@@ -847,26 +847,62 @@ typedef enum {
    */
   LOK_CALLBACK_PRINT_RANGES = 56,
 
-    /**
-     * Informs the LibreOfficeKit client that a font specified in the
-     * document is missing.
-     *
-     * This callback is emitted right after the document has been loaded.
-     *
-     * Payload example:
-     * {
-     *     "fontsmissing": [
-     *         "Some Random Font",
-     *         "Another Font"
-     *     ]
-     * }
-     *
-     * The names are those of the font family. Sadly it is currently
-     * not possible to know the name of the font style that is
-     * missing.
-     *
-     */
-    LOK_CALLBACK_FONTS_MISSING = 57,
+  /**
+   * Informs the LibreOfficeKit client that a font specified in the
+   * document is missing.
+   *
+   * This callback is emitted right after the document has been loaded.
+   *
+   * Payload example:
+   * {
+   *     "fontsmissing": [
+   *         "Some Random Font",
+   *         "Another Font"
+   *     ]
+   * }
+   *
+   * The names are those of the font family. Sadly it is currently
+   * not possible to know the name of the font style that is
+   * missing.
+   *
+   */
+  LOK_CALLBACK_FONTS_MISSING = 57,
+
+  /**
+   * Insertion, removal, movement, and selection of a media shape.
+   * The payload is a json with the relevant details.
+   *
+   *      {
+   *          "action": "insert",
+   *          "id": 123456,
+   *          "url": "file:// ..."
+   *          "x": ...,
+   *          "y": ...,
+   *      }
+   *
+   *      where the "svg" property is a string containing an svg document
+   *      which is a representation of the pie segment.
+   */
+  LOK_CALLBACK_MEDIA_SHAPE = 58,
+
+  /**
+   * The document is available to download by the client.
+   *
+   * Payload example:
+   * "file:///tmp/hello-world.pdf"
+   */
+  LOK_CALLBACK_EXPORT_FILE = 59,
+
+  LOK_DOC_CALLBACK_ON_NEW = 61,
+  LOK_DOC_CALLBACK_ON_LOAD = 62,
+  LOK_DOC_CALLBACK_ON_SAVE = 63,
+  LOK_DOC_CALLBACK_ON_SAVE_DONE = 64,
+  LOK_DOC_CALLBACK_ON_SAVE_AS = 65,
+  LOK_DOC_CALLBACK_ON_SAVE_AS_DONE = 66,
+  LOK_DOC_CALLBACK_ON_UNLOAD = 67,
+  LOK_DOC_CALLBACK_ON_TITLE_CHANGED = 68,
+  LOK_DOC_CALLBACK_ON_MODE_CHANGED = 69,
+
 } LibreOfficeKitCallbackType;
 
 typedef enum {
@@ -1006,12 +1042,29 @@ static inline const char* lokCallbackTypeToString(int nType) {
       return "LOK_CALLBACK_PRINT_RANGES";
     case LOK_CALLBACK_FONTS_MISSING:
       return "LOK_CALLBACK_FONTS_MISSING";
+    case LOK_DOC_CALLBACK_ON_NEW:
+      return "LOK_DOC_CALLBACK_ON_NEW";
+    case LOK_DOC_CALLBACK_ON_LOAD:
+      return "LOK_DOC_CALLBACK_ON_LOAD";
+    case LOK_DOC_CALLBACK_ON_SAVE:
+      return "LOK_DOC_CALLBACK_ON_SAVE";
+    case LOK_DOC_CALLBACK_ON_SAVE_DONE:
+      return "LOK_DOC_CALLBACK_ON_SAVE_DONE";
+    case LOK_DOC_CALLBACK_ON_SAVE_AS:
+      return "LOK_DOC_CALLBACK_ON_SAVE_AS";
+    case LOK_DOC_CALLBACK_ON_SAVE_AS_DONE:
+      return "LOK_DOC_CALLBACK_ON_SAVE_AS_DONE";
+    case LOK_DOC_CALLBACK_ON_UNLOAD:
+      return "LOK_DOC_CALLBACK_ON_UNLOAD";
+    case LOK_DOC_CALLBACK_ON_TITLE_CHANGED:
+      return "LOK_DOC_CALLBACK_ON_TITLE_CHANGED";
+    case LOK_DOC_CALLBACK_ON_MODE_CHANGED:
+      return "LOK_DOC_CALLBACK_ON_MODE_CHANGED";
     default:
       return "LOK_CALLBACK_UNKNOWN";
   }
-
-  return nullptr;
 }
+
 #endif
 
 typedef enum {

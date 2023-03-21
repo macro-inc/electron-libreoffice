@@ -169,7 +169,15 @@ class OfficeDoc extends HTMLElement {
     doc.on('window', logit);
     doc.on('jsdialog', logit);
     doc.on('uno_command_result', logit);
-    // doc.on('clipboard_changed', logit);
+    doc.on('new', logit);
+    doc.on('load', logit);
+    doc.on('save', logit);
+    doc.on('save_done', logit);
+    doc.on('save_as', logit);
+    doc.on('save_as_done', logit);
+    doc.on('unload', logit);
+    doc.on('title_changed', logit);
+    doc.on('mode_changed', logit);
   }
 
   focus() {

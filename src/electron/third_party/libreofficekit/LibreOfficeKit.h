@@ -241,8 +241,7 @@ struct _LibreOfficeKitDocumentClass {
                             const char* pCommand);
 
   /// @see lok::Document::gotoOutline().
-  char* (*gotoOutline)(LibreOfficeKitDocument* pThis,
-                            int idx);
+  char* (*gotoOutline)(LibreOfficeKitDocument* pThis, int idx);
 
   /// @see lok::Document::setClientZoom().
   void (*setClientZoom)(LibreOfficeKitDocument* pThis,
