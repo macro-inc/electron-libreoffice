@@ -333,9 +333,7 @@ class Document {
                                   bNotifyWhenFinished);
   }
 
-  char* gotoOutline(int idx) {
-    return mpDoc->pClass->gotoOutline(mpDoc, idx);
-  }
+  char* gotoOutline(int idx) { return mpDoc->pClass->gotoOutline(mpDoc, idx); }
 
   /**
    * Sets the start or end of a text selection.
