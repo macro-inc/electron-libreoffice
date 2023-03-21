@@ -39,13 +39,6 @@ export namespace LibreOffice {
     emit(eventName: string, callback: () => void): void;
 
     /**
-     * @description converts twip to a css px
-     * @param input - twip
-     * @returns css px
-     */
-    twipToPx(input: number): number;
-
-    /**
      * @description posts a UNO command to the document
      * @param command - the uno command to be posted
      * @param args - arguments for the uno command
@@ -220,18 +213,6 @@ export namespace LibreOffice {
      * @returns whether sending the event was successful
      */
     sendContentControlEvent(arguments: { [name: string]: any }): boolean;
-
-    /**
-     * @description gets the page rect objects for the document
-     * @returns the page rect objects
-     */
-    pageRects(): Rect[];
-
-    /**
-     * @description gets the document size
-     * @returns the size object of the document
-     */
-    size(): Size;
 
     /**
      * @description if the document is ready
