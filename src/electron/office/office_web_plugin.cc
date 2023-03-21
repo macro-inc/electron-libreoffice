@@ -295,9 +295,11 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
       case office::DomCode::US_W:
         return blink::WebInputEventResult::kNotHandled;
       case office::DomCode::US_C:
-        return HandleCopyEvent();
+        return HandleCutCopyEvent(".uno:Copy");
       case office::DomCode::US_V:
         return HandlePasteEvent();
+      case office::DomCode::US_X:
+        return HandleCutCopyEvent(".uno:Cut");
     }
   }
 
@@ -327,8 +329,8 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
   return blink::WebInputEventResult::kHandledApplication;
 }
 
-blink::WebInputEventResult OfficeWebPlugin::HandleCopyEvent() {
-  document_client_->PostUnoCommandInternal(".uno:Copy", nullptr, true);
+blink::WebInputEventResult OfficeWebPlugin::HandleCutCopyEvent(std::string event) {
+  document_client_->PostUnoCommandInternal(event, nullptr, true);
   return blink::WebInputEventResult::kHandledApplication;
 }
 

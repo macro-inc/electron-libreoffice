@@ -350,7 +350,7 @@ void DocumentClient::HandleUnoCommandResult(std::string payload) {
   std::pair<std::string, bool> checker =
       lok_callback::ParseUnoCommandResult(payload);
 
-  if (checker.first == ".uno:Copy" && checker.second) {
+  if ((checker.first == ".uno:Copy" || checker.first == ".uno:Cut") && checker.second) {
     OnClipboardChanged();
   }
 }
@@ -455,8 +455,8 @@ void DocumentClient::PostUnoCommand(const std::string& command,
 }
 
 void DocumentClient::PostUnoCommandInternal(const std::string& command,
-                                     char* json_buffer,
-                                     bool notifyWhenFinished) {
+                                            char* json_buffer,
+                                            bool notifyWhenFinished) {
   document_->postUnoCommand(command.c_str(), json_buffer, notifyWhenFinished);
 }
 
