@@ -85,13 +85,19 @@ source_set("internal") {
     "//ui/events/blink",
     "//ui/gfx/codec",
     "//ui/gfx/range",
-    "//third_party/libreofficekit/instdir/sdk/v8:as_utility"
   ]
 
-  configs += [
-    ":electron_config",
-    "//third_party/libreofficekit/instdir/sdk/v8:libreoffice_lib_config"
-  ]
+  configs += [ ":electron_config" ]
+
+  if (is_mac) {
+    if (target_cpu == "x64") {
+      configs += [ "//third_party/libreofficekit/instdir/x64/sdk/v8:libreoffice_lib_config" ]
+    } else if (target_cpu == "arm64" ) {
+      configs += [ "//third_party/libreofficekit/instdir/aarch64/sdk/v8:libreoffice_lib_config" ]
+    }
+  } else {
+    configs += [ "//third_party/libreofficekit/instdir/sdk/v8:libreoffice_lib_config" ]
+  }
 
   public_deps = [
     "//skia",
@@ -105,7 +111,17 @@ static_library("office_web_plugin") {
 
   sources = [ "office_web_plugin.cc", "office_web_plugin.h" ]
 
-  configs += [ ":electron_config", "//third_party/libreofficekit/instdir/sdk/v8:libreoffice_lib_config" ]
+  configs += [ ":electron_config" ]
+
+  if (is_mac) {
+    if (target_cpu == "x64") {
+      configs += [ "//third_party/libreofficekit/instdir/x64/sdk/v8:libreoffice_lib_config" ]
+    } else if (target_cpu == "arm64" ) {
+      configs += [ "//third_party/libreofficekit/instdir/aarch64/sdk/v8:libreoffice_lib_config" ]
+    }
+  } else {
+    configs += [ "//third_party/libreofficekit/instdir/sdk/v8:libreoffice_lib_config" ]
+  }
 
   lib_dirs = [ "$root_out_dir/libreofficekit/program" ]
   libs = []
@@ -116,18 +132,16 @@ static_library("office_web_plugin") {
   }
 
   if (is_linux) {
-    libs += [
-      ":libuno_sal.so.3",
-      ":libuno_cppu.so.3",
-      ":libuno_salhelpergcc3.so.3",
-      ":libuno_cppuhelpergcc3.so.3",
-    ]
+    libs += []
     ldflags += [ "-Wl,-rpath,\$ORIGIN/libreofficekit/program" ]
   }
 
+  public_deps = [
+    ":copy_libreofficekit"
+  ]
+
   deps = [
     ":buildflags",
-    ":copy_libreofficekit",
     ":internal",
     "//base",
     "//base:i18n",
