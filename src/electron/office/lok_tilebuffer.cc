@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "electron/office/lok_tilebuffer.h"
+#include "base/auto_reset.h"
 #include "base/check.h"
 #include "office/lok_callback.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -47,6 +48,7 @@ TileBuffer::TileBuffer(lok::Document* document, float scale, int part)
   pool_buffer_ = std::make_unique<uint8_t[]>(kPoolAllocatedSize);
   pool_bitmaps_ = std::make_unique<SkBitmap[]>(pool_size_ - 1);
   pool_index_to_tile_index_ = std::make_unique<int[]>(pool_size_ - 1);
+  pool_paint_images_ = std::make_unique<cc::PaintImage[]>(pool_size_ - 1);
   for (size_t index = 0; index < pool_size_ - 1; index++) {
     // set the bitmap allocation to the installed pixels
     pool_bitmaps_[index].installPixels(image_info_, GetPoolBuffer(index),
@@ -125,20 +127,39 @@ void TileBuffer::InvalidateAllTiles() {
   valid_tile_.clear();
 }
 
-void TileBuffer::PaintInvalidTiles(SkCanvas& canvas,
-                                   const gfx::Rect& rect,
-                                   std::chrono::steady_clock::time_point start,
-                                   std::vector<gfx::Rect>& ready,
-                                   std::vector<gfx::Rect>& pending) {
-  auto tile_rect = TileRect(std::move(gfx::RectF(rect)), doc_width_scaled_px_,
-                            doc_height_scaled_px_, tile_size_scaled_px_);
+bool TileBuffer::PartiallyPainted() {
+  return partially_painted_;
+}
+
+void TileBuffer::SetYPosition(float y) {
+  if (y != y_pos_) {
+    resume_row = -1;
+    resume_col = -1;
+  }
+  y_pos_ = y;
+}
+
+void TileBuffer::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
+  base::AutoReset<bool> auto_reset_in_paint(&in_paint_, true);
+  cc::PaintFlags flags;
+  flags.setBlendMode(SkBlendMode::kSrc);
+  canvas->translate(0, -y_pos_);
+
+  auto offset_rect = gfx::RectF(rect);
+  offset_rect.Offset(0, y_pos_);
+  gfx::Rect tile_rect = TileRect(offset_rect, doc_width_scaled_px_,
+                                 doc_height_scaled_px_, tile_size_scaled_px_);
+
   DCHECK(tile_rect.right() <= columns_);
   DCHECK(tile_rect.bottom() <= rows_);
+  // auto start = std::chrono::steady_clock::now();
+  partially_painted_ = true;
 
   for (int row = tile_rect.y(); row < tile_rect.bottom(); ++row) {
     for (int column = tile_rect.x(); column < tile_rect.right(); ++column) {
       int tile_index = CoordToIndex(column, row);
       size_t pool_index;
+
       if (!TileToPoolIndex(tile_index, &pool_index)) {
         valid_tile_.erase(tile_index);
         InvalidatePoolTile(current_index_);
@@ -148,83 +169,45 @@ void TileBuffer::PaintInvalidTiles(SkCanvas& canvas,
         current_index_ = NextPoolIndex();
       }
 
-      if (valid_tile_.count(tile_index) == 0) {
+      if (valid_tile_.find(tile_index) == valid_tile_.end()) {
         PaintTile(GetPoolBuffer(pool_index), column, row);
+        pool_paint_images_[pool_index] =
+            cc::PaintImage::CreateFromBitmap(pool_bitmaps_[pool_index]);
       }
 
-      canvas.drawImage(pool_bitmaps_[pool_index].asImage(),
-                       tile_size_scaled_px_ * column,
-                       tile_size_scaled_px_ * row);
+      canvas->drawImage(
+          pool_paint_images_[pool_index], tile_size_scaled_px_ * column,
+          tile_size_scaled_px_ * row, SkSamplingOptions(SkFilterMode::kLinear), &flags);
 
-      /*
-        NOTE: ready and pending must always be a two rectangles or set of
-        L-shapes that compose into a rectangle.
-
-        0         column      tile_rect.width()
-        |           |                 |
-
-        -------------------------------   -- 0
-        |          ready_top          |
-        -------------------------------   -- row
-        | ready_mid |   pending_mid   |
-        -------------------------------   -- row + 1
-        |       remaining_bottom      |
-        -------------------------------   -- tile_rect.height()
-      */
-      // missed deadline, push ready and pending rect
-      /* TODO: Re-enable once scrolling is handled properly
-            if (std::chrono::steady_clock::now() - start > kFrameDeadline) {
-              gfx::Rect ready_top = gfx::Rect(0, 0, tile_rect.width(), row);
-              gfx::Rect ready_mid = gfx::Rect(0, row, column, 1);
-
-              gfx::Rect pending_mid = gfx::Rect(
-                  column, row, tile_rect.width() - column, tile_rect.height());
-              pending_mid.Subtract(ready_top);
-
-              gfx::Rect remaining_bottom = gfx::Rect(tile_rect);
-              remaining_bottom.Subtract(ready_top);
-              remaining_bottom.Subtract(ready_mid);
-              remaining_bottom.Subtract(pending_mid);
-
-              ready_top.set_origin(tile_rect.origin());
-              ready_mid.set_origin(tile_rect.origin());
-              pending_mid.set_origin(tile_rect.origin());
-              remaining_bottom.set_origin(tile_rect.origin());
-
-              if (!ready_top.IsEmpty())
-                ready.push_back(
-                    gfx::ScaleToEnclosingRect(ready_top, tile_size_scaled_px_));
-              if (!ready_mid.IsEmpty())
-                ready.push_back(
-                    gfx::ScaleToEnclosingRect(ready_mid, tile_size_scaled_px_));
-              if (!pending_mid.IsEmpty())
-                pending.push_back(
-                    gfx::ScaleToEnclosingRect(pending_mid,
-         tile_size_scaled_px_)); if (!remaining_bottom.IsEmpty())
-                pending.push_back(gfx::ScaleToEnclosingRect(remaining_bottom,
-                                                            tile_size_scaled_px_));
-              return;
-            }
-      */
+      // if (std::chrono::steady_clock::now() - start > kFrameDeadline) {
+      //   // partial paint, mark for resume
+      //   break;
+      // }
 
 #ifdef TILEBUFFER_DEBUG_PAINT
-      SkPaint debugPaint;
-      debugPaint.setARGB(255, 255, 64, 0);
-      debugPaint.setStroke(true);
+      cc::PaintFlags debugPaint;
+      debugPaint.setColor(SK_ColorRED);
       debugPaint.setStrokeWidth(1);
-      SkRect rect{(float)tile_size_scaled_px_ * column,
-                  (float)tile_size_scaled_px_ * row,
-                  (float)tile_size_scaled_px_ * (column + 1),
-                  (float)tile_size_scaled_px_ * (row + 1)
+      SkRect debugRect{(float)tile_size_scaled_px_ * column,
+                       (float)tile_size_scaled_px_ * row,
+                       (float)tile_size_scaled_px_ * (column + 1),
+                       (float)tile_size_scaled_px_ * (row + 1)
 
       };
-      canvas.drawRect(rect, debugPaint);
+
+      canvas->drawLine(debugRect.left(), debugRect.top(), debugRect.right(),
+                       debugRect.top(), debugPaint);
+      canvas->drawLine(debugRect.right(), debugRect.top(), debugRect.right(),
+                       debugRect.bottom(), debugPaint);
+      canvas->drawLine(debugRect.right(), debugRect.bottom(), debugRect.left(),
+                       debugRect.bottom(), debugPaint);
+      canvas->drawLine(debugRect.left(), debugRect.top(), debugRect.left(),
+                       debugRect.bottom(), debugPaint);
 #endif
     }
   }
 
-  // finished everything
-  ready.emplace_back(gfx::ScaleToEnclosedRect(tile_rect, tile_size_scaled_px_));
+  partially_painted_ = false;
 }
 
 }  // namespace electron::office

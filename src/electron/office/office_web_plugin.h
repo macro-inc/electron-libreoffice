@@ -22,7 +22,6 @@
 #include "office/event_bus.h"
 #include "office/lok_tilebuffer.h"
 #include "office/office_client.h"
-#include "pdf/paint_manager.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
@@ -33,11 +32,11 @@
 #include "third_party/blink/public/web/web_plugin_params.h"
 #include "third_party/blink/public/web/web_print_params.h"
 #include "third_party/libreofficekit/LibreOfficeKit.hxx"
-#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/vector2d_f.h"
+#include "v8/include/v8-template.h"
 #include "v8/include/v8-value.h"
 
 namespace content {
@@ -55,8 +54,7 @@ blink::WebPlugin* CreateInternalPlugin(blink::WebPluginParams params,
                                        content::RenderFrame* render_frame);
 }  // namespace office
 
-class OfficeWebPlugin : public blink::WebPlugin,
-                        public chrome_pdf::PaintManager::Client {
+class OfficeWebPlugin : public blink::WebPlugin {
  public:
   OfficeWebPlugin(blink::WebPluginParams params,
                   content::RenderFrame* render_frame);
@@ -150,19 +148,18 @@ class OfficeWebPlugin : public blink::WebPlugin,
 
   // } blink::WebPlugin
 
-  // PaintManager::Client
-  void InvalidatePluginContainer() override;
+  void InvalidatePluginContainer();
 
   content::RenderFrame* render_frame() const;
 
-  void Invalidate(const gfx::Rect& rect);
   void TriggerFullRerender();
   base::WeakPtr<OfficeWebPlugin> GetWeakPtr();
 
  private:
   // call `Destroy()` instead.
   ~OfficeWebPlugin() override;
-  blink::WebInputEventResult HandleKeyEvent(const blink::WebKeyboardEvent event, ui::Cursor* cursor);
+  blink::WebInputEventResult HandleKeyEvent(const blink::WebKeyboardEvent event,
+                                            ui::Cursor* cursor);
   blink::WebInputEventResult HandleCopyEvent();
   blink::WebInputEventResult HandlePasteEvent();
   bool HandleMouseEvent(blink::WebInputEvent::Type type,
@@ -171,59 +168,35 @@ class OfficeWebPlugin : public blink::WebPlugin,
                         int clickCount,
                         ui::Cursor* cursor);
 
-  // PaintManager::Client
-  void OnPaint(const std::vector<gfx::Rect>& paint_rects,
-               std::vector<chrome_pdf::PaintReadyRect>& ready,
-               std::vector<gfx::Rect>& pending) override;
-  void UpdateSnapshot(sk_sp<SkImage> snapshot) override;
-  void UpdateScale(float scale) override;
-  void UpdateLayerTransform(float scale,
-                            const gfx::Vector2dF& translate) override;
-
-  // PaintManager::Client::OnPaint() should be its only caller.
-  void DoPaint(const std::vector<gfx::Rect>& paint_rects,
-               std::vector<chrome_pdf::PaintReadyRect>& ready,
-               std::vector<gfx::Rect>& pending);
-
-  // The preparation when painting on the image data buffer for the first
-  // time.
-  void PrepareForFirstPaint(std::vector<chrome_pdf::PaintReadyRect>& ready);
-
-  // Updates the available area and the background parts, notifies the PDF
-  // engine, and updates the accessibility information.
+  // Updates the available area
   void OnGeometryChanged(double old_zoom, float old_device_scale);
 
-  // A helper of OnGeometryChanged() which updates the available area and
-  // the background parts, and notifies the PDF engine of geometry changes.
-  void RecalculateAreas(double old_zoom, float old_device_scale);
+  // Computes document width/height in device pixels, based on the total scale
+  gfx::Size GetDocumentPixelSize();
 
-  // Figures out the location of any background rectangles (i.e. those that
-  // aren't painted by the PDF engine).
-  void CalculateBackgroundParts();
-
-  // Computes document width/height in device pixels, based on current browser
-  // zoom and device scale
-  gfx::Size GetDocumentPixelSize() const;
-
-  // Schedules invalidation tasks after painting finishes.
-  void InvalidateAfterPaintDone();
-
-  // Callback to clear deferred invalidates after painting finishes.
-  void ClearDeferredInvalidates();
-
-  void UpdateScaledValues();
   void OnViewportChanged(const gfx::Rect& plugin_rect_in_css_pixel,
                          float new_device_scale);
 
-  void UpdateScroll(const gfx::PointF& scroll_position);
+  void UpdateScroll(int y_position);
+
+  float TwipToPx(float in);
+  float TotalScale();
 
   // Exposed methods {
-  void UpdateScrollInTask(const gfx::PointF& scroll_position);
+  gfx::Size GetDocumentCSSPixelSize();
+  std::vector<gfx::Rect> PageRects() const;
+  void SetZoom(float zoom);
+  float GetZoom();
+  float TwipToCSSPx(float in);
+
+  void UpdateScrollInTask(int y_position);
 
   // prepares the embed as the document client's mounted viewer
   bool RenderDocument(v8::Isolate* isolate,
                       gin::Handle<office::DocumentClient> client);
   // }
+
+  void ResetTileBuffers();
 
   // LOK event handlers {
   void HandleInvalidateTiles(std::string payload);
@@ -232,55 +205,32 @@ class OfficeWebPlugin : public blink::WebPlugin,
 
   // owns this class
   blink::WebPluginContainer* container_;
-  SkColor background_color_ = SK_ColorLTGRAY;
 
   // Painting State {
-  chrome_pdf::PaintManager paint_manager_{this};
-  // Image data buffer for painting.
-  SkBitmap image_data_;
-  // current image snapshot
-  cc::PaintImage snapshot_;
-  // Translate from snapshot to device pixels.
-  gfx::Vector2dF snapshot_translate_;
-  // snapshot to device pixels ratios
-  float snapshot_scale_ = 1.0f;
-  // viewport coordinates to device-independent pixel ratio
-  float viewport_to_dip_scale_ = 1.0f;
-  // device pixel to css pixel ratio
-  float device_to_css_scale_ = 1.0f;
-  // combined translate snapshot -> device -> CSS pixels
-  gfx::Vector2dF total_translate_;
   // plugin rect in CSS pixels
   gfx::Rect css_plugin_rect_;
-  // size of plugin rectangle in DIPs.
-  gfx::Size plugin_dip_size_;
   // plugin rectangle in device pixels.
   gfx::Rect plugin_rect_;
   // Remaining area, in pixels, to render the view in after accounting for
   // horizontal centering.
   gfx::Rect available_area_;
   gfx::Rect available_area_twips_;
-  // zoom factor
-  double zoom_ = 1.0;
+  // browser viewport zoom factor
+  double viewport_zoom_ = 1.0;
   // current device scale factor. viewport * device_scale_ == screen, screen /
   // device_scale_ == viewport
   float device_scale_ = 1.0f;
+  float zoom_ = 1.0f;
+  float old_zoom_ = 1.0f;
   // first paint, requiring the full canvas of tiles to be painted
   bool first_paint_ = true;
+  // first paint, requiring the full canvas of tiles to be painted
+  bool reset_canvas_ = false;
   // currently painting, to track deferred invalidates
   bool in_paint_ = false;
-  // True if last bitmap was smaller than the screen.
-  // bool last_bitmap_smaller_ = false;
-  // True if we request a new bitmap rendering.
-  bool needs_reraster_ = true;
-  std::vector<gfx::Rect> background_parts_;
-  // Deferred invalidates while `in_paint_` is true.
-  std::vector<gfx::Rect> deferred_invalidates_;
-  // The UI direction.
-  // base::i18n::TextDirection ui_direction_ = base::i18n::UNKNOWN_DIRECTION;
+  // the offset for input events, adjusted by the scroll position
+  int scroll_y_position_ = 0;
 
-  // The scroll position in CSS pixels, before any transformations are applied.
-  gfx::PointF scroll_position_;
   // If this is true, then don't scroll the plugin in response to calls to
   // `UpdateScroll()`. This will be true when the extension page is in the
   // process of zooming the plugin so that flickering doesn't occur while
@@ -305,6 +255,9 @@ class OfficeWebPlugin : public blink::WebPlugin,
   std::vector<office::TileBuffer> part_tile_buffer_;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
+
+  v8::Global<v8::ObjectTemplate> v8_template_;
+  v8::Global<v8::Object> v8_object_;
 
   // invalidates when destroy() is called
   base::WeakPtrFactory<OfficeWebPlugin> weak_factory_{this};

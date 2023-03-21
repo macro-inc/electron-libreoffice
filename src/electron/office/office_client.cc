@@ -61,9 +61,17 @@ void OfficeClient::HandleDocumentCallback(int type,
                                           const char* payload,
                                           void* document) {
   OfficeClient* client = GetInstance();
-  EventBus* event_router =
-      client->document_event_router_[static_cast<lok::Document*>(document)];
-  DCHECK(event_router);
+  auto search = client->document_event_router_.find(
+      static_cast<lok::Document*>(document));
+  if (search == client->document_event_router_.end()) {
+    LOG(ERROR) << "Document event router is missing!"
+               << lok_callback::TypeToEventString(type);
+    LOG(ERROR) << "   " << payload;
+
+    return;
+  }
+
+  EventBus* event_router = search->second;
 
   if (client->renderer_task_runner_)
     client->renderer_task_runner_->PostTask(
@@ -224,7 +232,7 @@ v8::Local<v8::Value> OfficeClient::LoadDocument(v8::Isolate* isolate,
       }
     })");
 
-    document_event_router_[doc] = new EventBus();
+    document_event_router_.insert_or_assign(doc, new EventBus());
 
     doc->registerCallback(OfficeClient::HandleDocumentCallback, doc);
   }
@@ -237,6 +245,7 @@ v8::Local<v8::Value> OfficeClient::LoadDocument(v8::Isolate* isolate,
 bool OfficeClient::CloseDocument(const std::string& path) {
   lok::Document* doc = document_map_[path];
   document_event_router_.erase(doc);
+  documents_mounted_.erase(doc);
   return document_map_.erase(path) == 1;
 }
 

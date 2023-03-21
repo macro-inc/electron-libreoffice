@@ -104,7 +104,6 @@ gin::ObjectTemplateBuilder DocumentClient::GetObjectTemplateBuilder(
       .SetMethod("on", &DocumentClient::On)
       .SetMethod("off", &DocumentClient::Off)
       .SetMethod("emit", &DocumentClient::Emit)
-      .SetMethod("twipToPx", &DocumentClient::TwipToPx)
       .SetMethod("postUnoCommand", &DocumentClient::PostUnoCommand)
       .SetMethod("gotoOutline", &DocumentClient::GotoOutline)
       .SetMethod("getTextSelection", &DocumentClient::GetTextSelection)
@@ -129,9 +128,7 @@ gin::ObjectTemplateBuilder DocumentClient::GetObjectTemplateBuilder(
       .SetMethod("sendFormFieldEvent", &DocumentClient::SendFormFieldEvent)
       .SetMethod("sendContentControlEvent",
                  &DocumentClient::SendContentControlEvent)
-      .SetLazyDataProperty("pageRects", &DocumentClient::PageRects)
-      .SetLazyDataProperty("size", &DocumentClient::Size)
-      .SetLazyDataProperty("isReady", &DocumentClient::IsReady);
+      .SetProperty("isReady", &DocumentClient::IsReady);
 }
 
 const char* DocumentClient::GetTypeName() {
@@ -143,26 +140,7 @@ bool DocumentClient::IsReady() const {
 }
 
 std::vector<gfx::Rect> DocumentClient::PageRects() const {
-  std::vector<gfx::Rect> result;
-  float zoom = zoom_;  // want CSS pixels, which are already scaled to the
-                       // device, so don't use TotalScale
-  std::transform(page_rects_.begin(), page_rects_.end(),
-                 std::back_inserter(result), [zoom](const gfx::Rect& rect) {
-                   float scale = zoom / lok_callback::kTwipPerPx;
-                   return gfx::Rect(
-                       gfx::ScaleToCeiledPoint(rect.origin(), scale),
-                       gfx::ScaleToCeiledSize(rect.size(), scale));
-                 });
-  return result;
-}
-
-gfx::Size DocumentClient::Size() const {
-  return gfx::ToCeiledSize(document_size_px_);
-}
-
-// actually TwipTo_CSS_Px, since the pixels are device-indpendent
-float DocumentClient::TwipToPx(float in) const {
-  return lok_callback::TwipToPixel(in, zoom_);
+  return page_rects_;
 }
 
 lok::Document* DocumentClient::GetDocument() {
@@ -171,10 +149,6 @@ lok::Document* DocumentClient::GetDocument() {
 
 gfx::Size DocumentClient::DocumentSizeTwips() {
   return gfx::Size(document_width_in_twips_, document_height_in_twips_);
-}
-
-gfx::SizeF DocumentClient::DocumentSizePx() {
-  return document_size_px_;
 }
 
 namespace {
@@ -268,12 +242,6 @@ void DocumentClient::Unmount() {
 
   // allow garbage collection
   mounted_.Reset();
-}
-
-// Plugin Engine {
-void DocumentClient::BrowserZoomUpdated(double new_zoom_level) {
-  view_zoom_ = new_zoom_level;
-  RefreshSize();
 }
 
 int DocumentClient::GetNumberOfPages() const {
@@ -402,11 +370,6 @@ void DocumentClient::RefreshSize() {
 
   document_->getDocumentSize(&document_width_in_twips_,
                              &document_height_in_twips_);
-
-  float zoom = zoom_;
-  document_size_px_ =
-      gfx::SizeF(lok_callback::TwipToPixel(document_width_in_twips_, zoom),
-                 lok_callback::TwipToPixel(document_height_in_twips_, zoom));
 
   std::string_view page_rect_sv(document_->getPartPageRectangles());
   std::string_view::const_iterator start = page_rect_sv.begin();

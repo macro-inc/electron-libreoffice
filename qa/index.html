@@ -11,6 +11,10 @@
         display: flex;
         flex-direction: column;
       }
+      button {
+        margin: 0.5em;
+        min-width: 10em;
+      }
     </style>
   </head>
   <body style="height: 100vh">
@@ -20,18 +24,34 @@
       accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     />
 
-    <button type="button" onclick="toggleTrackChanges()">
-      TOGGLE TRACK CHANGES
-    </button>
-    <button type="button" onclick="acceptTrackChange()">Accept TC</button>
-    <button type="button" onclick="rejectTrackChange()">Reject TC</button>
-    <!-- <button type="button" onclick="gotoOutline()">Goto Outline</button> -->
-    <button type="button" onclick="testButton()">Test</button>
+    <div style="display: flex">
+      <button type="button" onclick="toggleTrackChanges()">
+        TOGGLE TRACK CHANGES
+      </button>
+      <button type="button" onclick="acceptTrackChange()">Accept TC</button>
+      <button type="button" onclick="rejectTrackChange()">Reject TC</button>
+    </div>
+    <div style="display: flex">
+      <button type="button" onclick="gotoOutline()">Goto Outline</button>
+      <button type="button" onclick="insertTable()">Insert Table</button>
+    </div>
+    <div style="display: flex">
+      <button type="button" onclick="zoomIn()">Zoom In</button>
+      <button type="button" onclick="zoomOut()">Zoom Out</button>
+    </div>
     <script src="wrapper.js"></script>
-    <office-doc id="el-embed" />
+    <div style="display: flex; height: 100%;">
+      <div style="display: flex; width: 256px;">
+        <office-doc id="el-thumb" />
+      </div>
+      <div style="display: flex; width: calc(100% - 256px);">
+        <office-doc id="el-embed" />
+      </div>
+    </div>
     <script>
       const picker = document.getElementById('el-picker');
       const embed = document.getElementById('el-embed');
+      const thumb = document.getElementById('el-thumb');
 
       libreoffice.on('status_indicator_set_value', (x) => {
         console.log(x);
@@ -46,6 +66,7 @@
       });
 
       let globalDoc;
+      let zoom = 1.0;
       picker.onchange = () => {
         if (picker.files.length === 1) {
           const uri = encodeURI(
@@ -66,22 +87,24 @@
                 buffer: encodedData.buffer,
               },
             ];
-
-            const outline = doc.getCommandValues('.uno:GetOutline');
-
-            if (outline.outline) {
-              // CONSTRUCT Tree for bookmarks
-              console.log(
-                'Outline tree',
-                constructBookmarkTree(outline.outline)
-              );
-            }
           });
 
           embed.renderDocument(doc);
+          thumb.renderDocument(doc);
+          thumb.setZoom(0.1);
           embed.focus();
         }
       };
+
+      function zoomIn() {
+        zoom += 0.1;
+        embed.setZoom(zoom);
+      }
+      function zoomOut() {
+        if (zoom < 0.2) return;
+        zoom -= 0.1;
+        embed.setZoom(zoom);
+      }
 
       // Used as POC to show how to structure outline data
       function constructBookmarkTree(outline) {
@@ -111,9 +134,15 @@
         globalDoc.postUnoCommand('.uno:RejectTrackedChange');
       }
       function gotoOutline() {
+        const outline = doc.getCommandValues('.uno:GetOutline');
+
+        if (outline.outline) {
+          // CONSTRUCT Tree for bookmarks
+          console.log('Outline tree', constructBookmarkTree(outline.outline));
+        }
         console.log('OUTLINE', globalDoc.gotoOutline(1));
       }
-      function testButton() {
+      function insertTable() {
         globalDoc.postUnoCommand('.uno:CreateTable', {
           Row: { value: 4, type: 'long' },
           Col: { value: 3, type: 'long' },

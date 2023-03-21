@@ -70,7 +70,6 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   bool IsReady() const;
   std::vector<gfx::Rect> PageRects() const;
   gfx::Size Size() const;
-  float TwipToPx(float in) const;
   void PostUnoCommand(const std::string& command, gin::Arguments* args);
   void PostUnoCommandInternal(const std::string& command,
                        char* json_buffer,
@@ -108,7 +107,6 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
 
   lok::Document* GetDocument();
 
-  gfx::SizeF DocumentSizePx();
   gfx::Size DocumentSizeTwips();
 
   // returns the view ID associated with the mount
@@ -117,16 +115,7 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   // left/never mounted
   // bool Unmount();
 
-  void SetZoom(float zoom);
-
-  // The total scale applying the browser zoom and document zoom
-  inline float TotalScale() const { return zoom_ * view_zoom_; };
-
-  // Plugin Engine {
   int GetNumberOfPages() const;
-
-  void BrowserZoomUpdated(double new_zoom_level);
-  // }
 
   // Editing State {
   bool CanCopy();
@@ -158,11 +147,8 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   int view_id_ = -1;
   LibreOfficeKitTileMode tile_mode_;
 
-  float view_zoom_ = 1.0;
-  float zoom_ = 1.0;
   long document_height_in_twips_;
   long document_width_in_twips_;
-  gfx::SizeF document_size_px_;
 
   std::vector<gfx::Rect> page_rects_;
   std::unordered_map<std::string, std::string> uno_state_;
