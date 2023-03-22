@@ -160,7 +160,7 @@ class OfficeWebPlugin : public blink::WebPlugin {
   ~OfficeWebPlugin() override;
   blink::WebInputEventResult HandleKeyEvent(const blink::WebKeyboardEvent event,
                                             ui::Cursor* cursor);
-  blink::WebInputEventResult HandleCopyEvent();
+  blink::WebInputEventResult HandleCutCopyEvent(std::string event);
   blink::WebInputEventResult HandlePasteEvent();
   bool HandleMouseEvent(blink::WebInputEvent::Type type,
                         gfx::PointF position,
