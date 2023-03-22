@@ -24,6 +24,8 @@ class Office;
 class Document;
 }  // namespace lok
 
+typedef struct _UnoV8 UnoV8;
+
 namespace electron::office {
 
 class EventBus;
@@ -44,6 +46,7 @@ class OfficeClient : public gin::Wrappable<OfficeClient> {
                            EventBus::EventCallback callback);
   static v8::Local<v8::Object> GetHandle(v8::Isolate* isolate);
   static bool IsValid();
+  static const ::UnoV8& GetUnoV8();
 
   // disable copy
   OfficeClient(const OfficeClient&) = delete;

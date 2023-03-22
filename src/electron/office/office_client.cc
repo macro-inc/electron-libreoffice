@@ -48,6 +48,11 @@ OfficeClient* OfficeClient::GetInstance() {
   return base::Singleton<OfficeClient>::get();
 }
 
+const ::UnoV8& OfficeClient::GetUnoV8()
+{
+  return GetInstance()->GetOffice()->getUnoV8();
+}
+
 // static
 void OfficeClient::HandleLibreOfficeCallback(int type,
                                              const char* payload,
