@@ -9,6 +9,7 @@
 #include <string_view>
 #include <vector>
 #include "LibreOfficeKit/LibreOfficeKit.hxx"
+#include "unov8.hxx"
 #include "base/bind.h"
 #include "base/callback_forward.h"
 #include "base/files/file_util.h"
@@ -43,17 +44,13 @@
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "url/gurl.h"
-#include "v8-array-buffer.h"
+#include "v8/include/v8-array-buffer.h"
 #include "v8/include/v8-container.h"
 #include "v8/include/v8-context.h"
 #include "v8/include/v8-isolate.h"
 #include "v8/include/v8-json.h"
 #include "v8/include/v8-local-handle.h"
 #include "v8/include/v8-primitive.h"
-#include "sal/main.h"
-#include "com/sun/star/uno/Reference.h"
-#include "com/sun/star/uno/XInterface.hdl"
-#include "as/as.h"
 
 namespace electron::office {
 gin::WrapperInfo DocumentClient::kWrapperInfo = {gin::kEmbedderNativeGin};
@@ -689,12 +686,7 @@ bool DocumentClient::SendContentControlEvent(
 v8::Local<v8::Value> DocumentClient::As(const std::string& type, v8::Isolate* isolate)
 {
   void *component = document_->getXComponent();
-  ::css::uno::XInterface *j = static_cast<::css::uno::XInterface *>(component);
-  j->acquire();
-  void *isdoc = unov8::as(component, "text.XTextDocument");
-  LOG(ERROR) << "IS A DOC? " << (isdoc == nullptr);
-  j->release();
-  return v8::Undefined(isolate);
+  return convert::As(isolate, component, type);
 }
 
 }  // namespace electron::office
