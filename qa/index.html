@@ -27,6 +27,7 @@
     <button type="button" onclick="rejectTrackChange()">Reject TC</button>
     <!-- <button type="button" onclick="gotoOutline()">Goto Outline</button> -->
     <button type="button" onclick="testButton()">Test</button>
+    <button type="button" onclick="colorize()">Colorize</button>
     <script src="wrapper.js"></script>
     <office-doc id="el-embed" />
     <script>
@@ -96,6 +97,20 @@
           const children = outline.filter((o) => o.parent === node.id);
           outlineTree[node.id].children = children;
         }
+      }
+      const colorizePalette = [ 0x333333, 0xA47E3B, 0x0F3460, 0xE94560];
+      function colorize() {
+        const txtDoc = globalDoc.as('text.XTextDocument');
+        const text = txtDoc.getText();
+        const cursor = text.createTextCursor();
+        cursor.gotoStart(false);
+        const wordCursor = cursor.as('text.XWordCursor');
+        let i = 0;
+        do {
+          wordCursor.gotoEndOfWord(true);
+          const props = wordCursor.as('beans.XPropertySet');
+          props.setPropertyValue("CharColor", colorizePalette[i++ % colorizePalette.length]);
+        } while (wordCursor.gotoNextWord(false));
       }
 
       function trackChangesWindow() {
