@@ -24,3 +24,4 @@
 # Logs
 debug.log
 renderer.log
+.DS_Store

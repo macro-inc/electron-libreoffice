@@ -147,7 +147,6 @@ static_library("office_web_plugin") {
     "//base:i18n",
     "//cc/paint",
     "//gin",
-    "//pdf",  # for PaintManager, might want to vendor this?
     "//skia",
     "//third_party/blink/public:blink_headers",
     "//ui/base/cursor",

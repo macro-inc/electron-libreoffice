@@ -243,6 +243,25 @@ std::string TypeToEventString(int type) {
       return "print_ranges";
     case LOK_CALLBACK_FONTS_MISSING:
       return "fonts_missing";
+    case LOK_DOC_CALLBACK_ON_NEW:
+      return "new";
+    case LOK_DOC_CALLBACK_ON_LOAD:
+      return "load";
+    case LOK_DOC_CALLBACK_ON_SAVE:
+      return "save";
+    case LOK_DOC_CALLBACK_ON_SAVE_DONE:
+      return "save_done";
+    case LOK_DOC_CALLBACK_ON_SAVE_AS:
+      return "save_as";
+    case LOK_DOC_CALLBACK_ON_SAVE_AS_DONE:
+      return "save_as_done";
+    case LOK_DOC_CALLBACK_ON_UNLOAD:
+      return "unload";
+    case LOK_DOC_CALLBACK_ON_TITLE_CHANGED:
+      return "title_changed";
+    case LOK_DOC_CALLBACK_ON_MODE_CHANGED:
+      return "mode_changed";
+
     default:
       return "unknown_event";
   }
@@ -334,6 +353,22 @@ std::pair<std::string, std::string> ParseStatusChange(std::string payload) {
 
   return std::make_pair(std::string(sv.begin(), target),
                         std::string(target + 1, end));
+}
+
+std::pair<std::string, bool> ParseUnoCommandResult(std::string payload) {
+  std::pair<std::string, bool> result;
+  // Used to correctly grab the value of commandValues
+  std::string commandPreface = "{ \"commandName\": \"";
+  result.first =
+      payload.substr(commandPreface.length(),
+                     payload.find("\", \"success\"") - commandPreface.length());
+  // Used to correctly grab the value of success
+  std::string successPreface =
+      commandPreface + result.first + "\", \"success\": ";
+  result.second = payload.substr(successPreface.length(),
+                                 payload.find(", \"result\"") -
+                                     successPreface.length()) == "true";
+  return result;
 }
 
 v8::Local<v8::Value> ParseJSON(v8::Isolate* isolate,

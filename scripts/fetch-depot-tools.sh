@@ -4,10 +4,12 @@ set -e
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE:-$0}")" &> /dev/null && pwd)
 BASE_PATH="$(dirname -- "$SCRIPT_DIR")"
 DEPOT_TOOLS_PATH="$BASE_PATH/depot_tools"
+DEPOT_TOOLS_PIN="2b1aa8dcabdd430ce92896343b822a128de6e368"
 
 echo "Fetching depot-tools"
 cd "$BASE_PATH"
-git clone --depth=1 https://chromium.googlesource.com/chromium/tools/depot_tools.git depot_tools
+git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git depot_tools
+(cd depot_tools && git checkout "$DEPOT_TOOLS_PIN")
 
 echo "Installing depot-tools"
 cd "$DEPOT_TOOLS_PATH"

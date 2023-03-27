@@ -119,12 +119,36 @@ class OfficeDoc extends HTMLElement {
     // unmounted
   }
 
+  _setCursor(payload) {
+    const [x, y, width, height] = payload.map((n) =>
+      Math.max(this.embed.twipToPx(n), 1)
+    );
+    this.cursor.style.transform = `translate(${x + 1.067}px, ${y}px)`;
+    this.cursor.style.width = `${width}px`;
+    this.cursor.style.height = `${height}px`;
+    this.cursor.classList.add('blink');
+  }
+  
+   twipToPx(in_) {
+     return this.embed.twipToPx(in_);
+   }
+
+  setZoom(zoom) {
+    const old_zoom = this.embed.getZoom ? this.embed.getZoom() : 1.0;
+    const old_scroll = this.scroller.scrollTop;
+    this.embed.setZoom(zoom);
+    this._refreshSize();
+    this.scroller.scrollTop = zoom / old_zoom * old_scroll;
+    if (this._cursor_payload) this._setCursor(this._cursor_payload);
+  }
+
   /**
    * @param {any} doc DocumentClient object to render
    */
   renderDocument(doc) {
-    this.embed.style.display = 'block';
-    this.embed.renderDocument(doc);
+    const embed = this.embed;
+    embed.style.display = 'block';
+    embed.renderDocument(doc);
     this.doc = doc;
     this._refreshSize();
     doc.on('document_size_changed', this._refreshSize);
@@ -132,13 +156,8 @@ class OfficeDoc extends HTMLElement {
       console.log(x);
     };
     doc.on('invalidate_visible_cursor', ({ payload }) => {
-      const [x, y, width, height] = payload.map((n) =>
-        Math.max(doc.twipToPx(n), 1)
-      );
-      this.cursor.style.transform = `translate(${x + 1.067}px, ${y}px)`;
-      this.cursor.style.width = `${width}px`;
-      this.cursor.style.height = `${height}px`;
-      this.cursor.classList.add('blink');
+      this._cursor_payload = payload;
+      this._setCursor(payload);
     });
     doc.on('text_selection_start', logit);
     doc.on('text_selection_end', logit);
@@ -149,6 +168,16 @@ class OfficeDoc extends HTMLElement {
     // doc.on('state_changed', logit);
     doc.on('window', logit);
     doc.on('jsdialog', logit);
+    doc.on('uno_command_result', logit);
+    doc.on('new', logit);
+    doc.on('load', logit);
+    doc.on('save', logit);
+    doc.on('save_done', logit);
+    doc.on('save_as', logit);
+    doc.on('save_as_done', logit);
+    doc.on('unload', logit);
+    doc.on('title_changed', logit);
+    doc.on('mode_changed', logit);
   }
 
   focus() {
@@ -156,10 +185,7 @@ class OfficeDoc extends HTMLElement {
   }
 
   _handleScroll() {
-    this.embed.updateScroll({
-      x: this.scroller.scrollLeft,
-      y: this.scroller.scrollTop,
-    });
+    this.embed.updateScroll(this.scroller.scrollTop);
   }
 
   _refreshSize = () => {
@@ -167,11 +193,12 @@ class OfficeDoc extends HTMLElement {
       console.error('Doc is not set!');
       return;
     }
-    const doc = this.doc;
-    const { width, height } = doc.size;
+    const embed = this.embed;
+    const { width, height } = embed.documentSize;
+    console.log({ width, height });
     this._setDimensions(width, height);
 
-    this._pageRects = doc.pageRects;
+    this._pageRects = embed.pageRects;
     this._pageNodes = this._pageRects.map((rect) => {
       const node = document.createElement('div');
       node.className = 'page';
@@ -205,6 +232,7 @@ class OfficeDoc extends HTMLElement {
    * @param {number} height
    */
   _setDimensions(width, height) {
+    console.log(`W: ${width} H: ${height}`);
     const w = `${width}px`;
     this.embed.style.width = w;
     this.pages.style.width = w;

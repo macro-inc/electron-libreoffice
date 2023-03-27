@@ -98,13 +98,6 @@ declare namespace LibreOffice {
     ): void;
 
     /**
-     * converts twip to a css px
-     * @param input - twip
-     * @returns css px
-     */
-    twipToPx(input: number): number;
-
-    /**
      * posts a UNO command to the document
      * @param command - the uno command to be posted
      * @param args - arguments for the uno command
@@ -279,12 +272,6 @@ declare namespace LibreOffice {
      * @returns whether sending the event was successful
      */
     sendContentControlEvent(arguments: { [name: string]: any }): boolean;
-
-    /** The rectangles for the bounds of each page in the document, units are CSS pixels */
-    get pageRects(): PageRect[];
-
-    /** the document size, units are CSS pixels */
-    get size(): Size;
 
     /**
      * if the document is ready
