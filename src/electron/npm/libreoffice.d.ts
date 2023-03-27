@@ -3,6 +3,34 @@ declare const libreoffice: LibreOffice.OfficeClient;
 interface HTMLLibreOfficeEmbed extends HTMLEmbedElement {
   updateScroll(position: { x: number; y: number }): void;
   renderDocument(doc: LibreOffice.DocumentClient): void;
+  /**
+   * updates the scroll to the yPosition in pixels
+   * @param yPosition the position in CSS pixels: [0, the height of document in CSS pixels]
+   */
+  updateScroll(yPosition: number): void;
+  /**
+   * renders a LibreOffice.DocumentClient
+   * @param doc the DocumentClient to be rendered
+   */
+  renderDocument(doc: LibreOffice.DocumentClient): void;
+  /**
+   * description converts twip to a css px
+   * @param input - twip
+   * @returns css px
+   */
+  twipToPx(input: number): number;
+  /** The rectangles for the bounds of each page in the document, units are CSS pixels */
+  get pageRects(): LibreOffice.PageRect[];
+  /** The rectangles for the bounds of each page in the document, units are CSS pixels */
+  get documentSize(): LibreOffice.Size;
+  /** Sets the current zoom level
+   * @param scale the scale where 1.0 is the base zoom level (100% zoom): (0,5]
+   **/
+  setZoom(scale: number): number;
+  /** Gets the current zoom
+   * @returns the current zoom
+   **/
+  getZoom(): number;
 }
 
 declare namespace LibreOffice {
@@ -36,7 +64,7 @@ declare namespace LibreOffice {
   ];
 
   /** Rect in twips */
-  interface TwipsRect extends Rect {}
+  type TwipsRect = Rect & {};
 
   type EventPayload<T> = {
     payload: T;
@@ -52,14 +80,18 @@ declare namespace LibreOffice {
     cursor_visible: EventPayload<boolean>;
     set_part: EventPayload<number>;
     ready: StateChangedValue[];
+    state_changed: EventPayload<StateChangedValue>;
 
     // TODO: document these types
     hyperlink_clicked: any;
     text_selection_start: any;
     text_selection: any;
     text_selection_end: any;
-    state_changed: EventPayload<StateChangedValue>;
     window: any;
+    comment: any;
+    redline_table_entry_modified: any;
+    redline_table_size_changed: any;
+    invalidate_tiles: any;
   };
 
   type DocumentEventHandler<Event extends keyof DocumentEvents> = (
