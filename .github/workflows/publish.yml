@@ -31,6 +31,13 @@ jobs:
       - name: Attach License
         run: |
           cp ./LICENSE ./src/electron/npm
+      - name: Download LOK TypeScript bindings artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: lok-ts
+      - name: Copy LOK TypeScript to NPM folder
+        run: |
+          cp -rf ./src/third_party/libreofficekit/instdir/sdk/typescript ./src/electron/npm/lok_api
       - name: Publish package on NPM
         run: |
           cd src/electron/npm

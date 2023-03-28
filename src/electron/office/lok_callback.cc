@@ -9,9 +9,9 @@
 #include <utility>
 #include <vector>
 
+#include "LibreOfficeKit/LibreOfficeKitEnums.h"
 #include "base/logging.h"
 #include "gin/converter.h"
-#include "third_party/libreofficekit/LibreOfficeKitEnums.h"
 #include "ui/gfx/geometry/rect.h"
 #include "v8-primitive.h"
 #include "v8/include/v8-exception.h"

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <unordered_map>
+#include "LibreOfficeKit/LibreOfficeKit.hxx"
 #include "base/bind.h"
 #include "base/values.h"
 #include "content/public/renderer/render_frame.h"
@@ -48,7 +49,7 @@ void EventBus::Off(const std::string& event_name,
   vec.erase(std::remove(vec.begin(), vec.end(), listener_callback), vec.end());
 }
 
-void EventBus::Handle(LibreOfficeKitCallbackType type, EventCallback callback) {
+void EventBus::Handle(int type, EventCallback callback) {
   internal_event_listeners_[type].emplace_back(callback);
 }
 

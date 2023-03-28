@@ -16,11 +16,19 @@
 #include "gin/handle.h"
 #include "gin/wrappable.h"
 #include "office/event_bus.h"
-#include "third_party/libreofficekit/LibreOfficeKit.hxx"
 #include "v8/include/v8-isolate.h"
 #include "v8/include/v8-local-handle.h"
 
+namespace lok {
+class Office;
+class Document;
+}  // namespace lok
+
+typedef struct _UnoV8 UnoV8;
+
 namespace electron::office {
+
+class EventBus;
 
 class OfficeClient : public gin::Wrappable<OfficeClient> {
  public:
@@ -34,10 +42,11 @@ class OfficeClient : public gin::Wrappable<OfficeClient> {
                                      const char* payload,
                                      void* document);
   void HandleDocumentEvent(lok::Document* document,
-                           LibreOfficeKitCallbackType type,
+                           int type,
                            EventBus::EventCallback callback);
   static v8::Local<v8::Object> GetHandle(v8::Isolate* isolate);
   static bool IsValid();
+  static const ::UnoV8& GetUnoV8();
 
   // disable copy
   OfficeClient(const OfficeClient&) = delete;

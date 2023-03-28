@@ -7,6 +7,7 @@
 #include <chrono>
 #include <memory>
 
+#include "LibreOfficeKit/LibreOfficeKit.hxx"
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/location.h"
@@ -50,7 +51,6 @@
 #include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_plugin_params.h"
 #include "third_party/blink/public/web/web_widget.h"
-#include "third_party/libreofficekit/LibreOfficeKitEnums.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"

@@ -15,22 +15,37 @@ buildflag_header("buildflags") {
 assert(enable_office)
 
 copy("copy_libreofficekit") {
-  sources = [ "//third_party/libreofficekit/instdir" ]
+  sources = [
+    "//third_party/libreofficekit/instdir/LICENSE",
+    "//third_party/libreofficekit/instdir/program",
+    "//third_party/libreofficekit/instdir/presets",
+    "//third_party/libreofficekit/instdir/share",
+  ]
 
   if (is_mac) {
     sources = []
     if (target_cpu == "x64") {
-      sources = [ "//third_party/libreofficekit/instdir/x64" ]
+      sources = [
+        "//third_party/libreofficekit/instdir/x64/LICENSE",
+        "//third_party/libreofficekit/instdir/x64/program",
+        "//third_party/libreofficekit/instdir/x64/presets",
+        "//third_party/libreofficekit/instdir/x64/share",
+      ]
     } else if (target_cpu == "arm64" ) {
-      sources = [ "//third_party/libreofficekit/instdir/aarch64" ]
+      sources = [
+        "//third_party/libreofficekit/instdir/aarch64/LICENSE",
+        "//third_party/libreofficekit/instdir/aarch64/program",
+        "//third_party/libreofficekit/instdir/aarch64/presets",
+        "//third_party/libreofficekit/instdir/aarch64/share",
+      ]
     }
   }
 
-  outputs = [ "$root_out_dir/libreofficekit" ]
+  outputs = [ "$root_out_dir/libreofficekit/{{source_file_part}}" ]
 }
 
-config("electron_lib_config") {
-  include_dirs = [ "//electron" ]
+config("electron_config") {
+  include_dirs = ["//electron"]
 }
 
 source_set("internal") {
@@ -51,6 +66,11 @@ source_set("internal") {
     "office_keys.h",
   ]
 
+  # configs -= [
+  #   "//build/config/compiler:no_exceptions",
+  #   "//build/config/compiler:no_rtti",
+  # ]
+
   deps = [
     ":buildflags",
     "//base",
@@ -67,13 +87,43 @@ source_set("internal") {
     "//ui/gfx/range",
   ]
 
-  configs += [ ":electron_lib_config" ]
+  configs += [ ":electron_config" ]
+
+  if (is_mac) {
+    if (target_cpu == "x64") {
+      configs += [ "//third_party/libreofficekit/instdir/x64/sdk/v8:libreoffice_lib_config" ]
+    } else if (target_cpu == "arm64" ) {
+      configs += [ "//third_party/libreofficekit/instdir/aarch64/sdk/v8:libreoffice_lib_config" ]
+    }
+  } else {
+    configs += [ "//third_party/libreofficekit/instdir/sdk/v8:libreoffice_lib_config" ]
+  }
 
   public_deps = [
     "//skia",
     "//v8",
   ]
+}
 
+static_library("office_web_plugin") {
+  assert(enable_plugins,
+         "The LibreOffice viewer relies on plugin infrastructure")
+
+  sources = [ "office_web_plugin.cc", "office_web_plugin.h" ]
+
+  configs += [ ":electron_config" ]
+
+  if (is_mac) {
+    if (target_cpu == "x64") {
+      configs += [ "//third_party/libreofficekit/instdir/x64/sdk/v8:libreoffice_lib_config" ]
+    } else if (target_cpu == "arm64" ) {
+      configs += [ "//third_party/libreofficekit/instdir/aarch64/sdk/v8:libreoffice_lib_config" ]
+    }
+  } else {
+    configs += [ "//third_party/libreofficekit/instdir/sdk/v8:libreoffice_lib_config" ]
+  }
+
+  lib_dirs = [ "$root_out_dir/libreofficekit/program" ]
   libs = []
   ldflags = []
 
@@ -81,28 +131,17 @@ source_set("internal") {
     libs += []
   }
 
-  if (is_mac) {
-    libs += []
-    ldflags += [ "-Wl,-rpath,\$ORIGIN/libreofficekit/program" ]
-  }
-
   if (is_linux) {
     libs += []
     ldflags += [ "-Wl,-rpath,\$ORIGIN/libreofficekit/program" ]
   }
-}
 
-static_library("office_web_plugin") {
-  assert(enable_plugins,
-         "The LibreOffice viewer relies on plugin infrastructure")
-
-  sources = [ "office_web_plugin.cc" ]
-
-  configs += [ ":electron_lib_config" ]
+  public_deps = [
+    ":copy_libreofficekit"
+  ]
 
   deps = [
     ":buildflags",
-    ":copy_libreofficekit",
     ":internal",
     "//base",
     "//base:i18n",

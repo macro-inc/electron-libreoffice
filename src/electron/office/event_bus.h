@@ -12,7 +12,6 @@
 #include "gin/object_template_builder.h"
 #include "gin/public/wrapper_info.h"
 #include "gin/wrappable.h"
-#include "third_party/libreofficekit/LibreOfficeKitEnums.h"
 #include "v8/include/v8-context.h"
 #include "v8/include/v8-function.h"
 #include "v8/include/v8-isolate.h"
@@ -32,7 +31,7 @@ class EventBus {
 
   typedef base::RepeatingCallback<void(std::string payload)> EventCallback;
 
-  void Handle(LibreOfficeKitCallbackType type, EventCallback callback);
+  void Handle(int type, EventCallback callback);
 
   void EmitLibreOfficeEvent(int type, std::string payload);
 
@@ -63,8 +62,7 @@ class EventBus {
   raw_ptr<v8::Isolate> isolate_;
 
   std::unordered_map<std::string, std::vector<PersistedFn>> event_listeners_;
-  std::unordered_map<LibreOfficeKitCallbackType, std::vector<EventCallback>>
-      internal_event_listeners_;
+  std::unordered_map<int, std::vector<EventCallback>> internal_event_listeners_;
 
   base::WeakPtrFactory<EventBus> weak_factory_{this};
 };

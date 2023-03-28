@@ -8,6 +8,8 @@
 #include <iterator>
 #include <string_view>
 #include <vector>
+#include "LibreOfficeKit/LibreOfficeKit.hxx"
+#include "unov8.hxx"
 #include "absl/types/optional.h"
 #include "base/bind.h"
 #include "base/callback_forward.h"
@@ -34,7 +36,6 @@
 #include "office/office_client.h"
 #include "shell/common/gin_converters/gfx_converter.h"
 #include "third_party/blink/public/web/blink.h"
-#include "third_party/libreofficekit/LibreOfficeKitEnums.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "ui/base/clipboard/clipboard.h"
@@ -49,7 +50,7 @@
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "url/gurl.h"
-#include "v8-array-buffer.h"
+#include "v8/include/v8-array-buffer.h"
 #include "v8/include/v8-container.h"
 #include "v8/include/v8-context.h"
 #include "v8/include/v8-isolate.h"
@@ -128,6 +129,7 @@ gin::ObjectTemplateBuilder DocumentClient::GetObjectTemplateBuilder(
       .SetMethod("sendFormFieldEvent", &DocumentClient::SendFormFieldEvent)
       .SetMethod("sendContentControlEvent",
                  &DocumentClient::SendContentControlEvent)
+      .SetMethod("as", &DocumentClient::As)
       .SetProperty("isReady", &DocumentClient::IsReady);
 }
 
@@ -771,4 +773,11 @@ bool DocumentClient::SendContentControlEvent(
 
   return true;
 }
+
+v8::Local<v8::Value> DocumentClient::As(const std::string& type, v8::Isolate* isolate)
+{
+  void *component = document_->getXComponent();
+  return convert::As(isolate, component, type);
+}
+
 }  // namespace electron::office

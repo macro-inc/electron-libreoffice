@@ -17,6 +17,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "cc/paint/paint_image.h"
+#include "gin/handle.h"
 #include "include/core/SkImage.h"
 #include "office/document_client.h"
 #include "office/event_bus.h"
@@ -31,13 +32,16 @@
 #include "third_party/blink/public/web/web_plugin_container.h"
 #include "third_party/blink/public/web/web_plugin_params.h"
 #include "third_party/blink/public/web/web_print_params.h"
-#include "third_party/libreofficekit/LibreOfficeKit.hxx"
 #include "ui/base/cursor/cursor.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 #include "v8/include/v8-template.h"
 #include "v8/include/v8-value.h"
+
+namespace lok {
+class Document;
+}  // namespace lok
 
 namespace content {
 class RenderFrame;
@@ -46,6 +50,10 @@ class RenderFrame;
 namespace electron {
 
 namespace office {
+
+class DocumentClient;
+class TileBuffer;
+
 // MIME type of the internal office plugin.
 extern const char kInternalPluginMimeType[];
 // Tries to create an instance of the internal PDF plugin, returning `nullptr`

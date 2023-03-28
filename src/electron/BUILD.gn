@@ -840,15 +840,20 @@ if (is_mac) {
 
   if (enable_office) {
     bundle_data("electron_libreofficekit_binaries") {
-      sources = [ "$root_out_dir/libreofficekit" ]
-      outputs = [ "{{bundle_contents_dir}}/libreofficekit" ]
+      sources = [
+        "$root_out_dir/libreofficekit/LICENSE",
+        "$root_out_dir/libreofficekit/program",
+        "$root_out_dir/libreofficekit/presets",
+        "$root_out_dir/libreofficekit/share",
+      ]
+      outputs = [ "{{bundle_contents_dir}}/libreofficekit/{{source_file_part}}" ]
       public_deps = [ "//electron/office:copy_libreofficekit"]
     }
   }
 
   group("electron_libreoffice_library") {
     if (enable_office) {
-      deps = [ ":electron_libreofficekit_binaries" ]
+      public_deps = [ ":electron_libreofficekit_binaries" ]
     }
   }
 
