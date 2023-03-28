@@ -179,6 +179,7 @@ jobs:
           rm -f libreofficekit-win.tar.xz
           curl -LO "https://github.com/coparse-inc/libreofficekit/releases/download/$lok_version/libreofficekit-win.tar.xz"
           tar -xJf libreofficekit-win.tar.xz
+          mv instdir/{license.txt,LICENSE} || true
       - name: Windows - Fix Clang toolchain
         if: ${{ runner.os == 'Windows' }}
         run: |
@@ -227,13 +228,14 @@ jobs:
           cp -rf ${{ inputs.working_dir }}/src/out/Default/* .
           if [ "${{ runner.os }}" = "Linux" ]; then
             cp -f ${{ inputs.working_dir }}/src/electron/{electron-api.json,electron.d.ts}{,.sha256sum} .
+            cp -rf ${{ inputs.working_dir }}/src/third_party/libreofficekit/instdir/sdk/typescript ./typescript-defs
           fi
-      - name: Linux - Store LOK TypeScript bindings as artifact
+      - name: Linux - Store LOK TypeScript definitions as an artifact
         if: ${{ runner.os == 'Linux' }}
         uses: actions/upload-artifact@v3
         with:
           name: lok-ts
-          path: src/third_party/libreofficekit/instdir/sdk/typescript/
+          path: typescript-defs
           retention-days: 1
           if-no-files-found: error
       - name: Create release

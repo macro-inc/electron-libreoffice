@@ -108,6 +108,12 @@ def main():
             print("extracting '{}'".format(output_file))
             with tarfile.open(output_file) as f:
                 f.extractall(args.output_dir)
+            # the windows version sometimes renames LICENSE to license.txt, fix that
+            if args.os == 'win':
+                license_path = os.path.join(args.output_dir, 'instdir', 'license.txt')
+                new_license_path = os.path.join(args.output_dir, 'instdir', 'LICENSE')
+                if os.path.isfile(license_path):
+                    os.rename(license_path, new_license_path)
             return 0
 
     # remove the existing output_dir
@@ -128,6 +134,12 @@ def main():
     print("extracting '{}'".format(output_file))
     with tarfile.open(output_file) as f:
         f.extractall(args.output_dir)
+    # the windows version sometimes renames LICENSE to license.txt, fix that
+    if args.os == 'win':
+        license_path = os.path.join(args.output_dir, 'instdir', 'license.txt')
+        new_license_path = os.path.join(args.output_dir, 'instdir', 'LICENSE')
+        if os.path.isfile(license_path):
+            os.rename(license_path, new_license_path)
 
     return 0
 
