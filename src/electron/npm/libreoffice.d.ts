@@ -363,14 +363,14 @@ declare namespace LibreOffice {
     /**
      * loads a given document
      * @param path - the document path
-     * @returns a handle to the document client
+     * @returns the document client if the load succeeded, undefined if the load failed
      */
-    loadDocument(path: string): DocumentClient;
+    loadDocument(path: string): DocumentClient | undefined;
 
     /**
      * run a macro
      * @param url - the url for the macro (macro:// URI format)
-     * @returns success
+     * @returns true if it succeeded, false if it failed
      */
     runMacro(url: string): boolean;
 
