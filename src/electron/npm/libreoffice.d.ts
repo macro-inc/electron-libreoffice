@@ -1,8 +1,6 @@
 declare const libreoffice: LibreOffice.OfficeClient;
 
 interface HTMLLibreOfficeEmbed extends HTMLEmbedElement {
-  updateScroll(position: { x: number; y: number }): void;
-  renderDocument(doc: LibreOffice.DocumentClient): void;
   /**
    * updates the scroll to the yPosition in pixels
    * @param yPosition the position in CSS pixels: [0, the height of document in CSS pixels]
