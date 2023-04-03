@@ -11,12 +11,10 @@
 
 #include "LibreOfficeKit/LibreOfficeKit.hxx"
 #include "base/bind.h"
-#include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "base/native_library.h"
-#include "base/path_service.h"
 #include "base/stl_util.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -28,6 +26,7 @@
 #include "office/document_client.h"
 #include "office/event_bus.h"
 #include "office/lok_callback.h"
+#include "office/office_singleton.h"
 #include "shell/common/gin_converters/std_converter.h"
 #include "third_party/blink/public/web/blink.h"
 #include "v8/include/v8-function.h"
@@ -40,17 +39,27 @@
 
 namespace electron::office {
 
+namespace {
+
+static base::LazyInstance<
+    base::ThreadLocalPointer<OfficeClient>>::DestructorAtExit lazy_tls =
+    LAZY_INSTANCE_INITIALIZER;
+
+}  // namespace
+
 gin::WrapperInfo OfficeClient::kWrapperInfo = {gin::kEmbedderNativeGin};
 
-static v8::Eternal<v8::Object> eternal_;
-
-OfficeClient* OfficeClient::GetInstance() {
-  return base::Singleton<OfficeClient>::get();
+OfficeClient* OfficeClient::GetCurrent() {
+  OfficeClient* self = lazy_tls.Pointer()->Get();
+  return self ? self : new OfficeClient;
 }
 
-const ::UnoV8& OfficeClient::GetUnoV8()
-{
-  return GetInstance()->GetOffice()->getUnoV8();
+bool OfficeClient::IsValid() {
+  return lazy_tls.IsCreated() && lazy_tls.Pointer()->Get();
+}
+
+const ::UnoV8& OfficeClient::GetUnoV8() {
+  return OfficeSingleton::GetOffice()->getUnoV8();
 }
 
 // static
@@ -63,93 +72,81 @@ void OfficeClient::HandleLibreOfficeCallback(int type,
 
 void OfficeClient::HandleDocumentCallback(int type,
                                           const char* payload,
-                                          void* document) {
-  OfficeClient* client = GetInstance();
-  auto search = client->document_event_router_.find(
-      static_cast<lok::Document*>(document));
-  if (search == client->document_event_router_.end()) {
-    LOG(ERROR) << "Document event router is missing!"
-               << lok_callback::TypeToEventString(type);
-    LOG(ERROR) << "   " << payload;
-
+                                          void* callback_context) {
+  DocumentCallbackContext* context =
+      static_cast<DocumentCallbackContext*>(callback_context);
+  if (context->invalid.IsSet() || !context->client.MaybeValid())
     return;
-  }
 
-  EventBus* event_router = search->second;
-
-  if (client->renderer_task_runner_)
-    client->renderer_task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(&EventBus::EmitLibreOfficeEvent,
-                       base::Unretained(event_router), type,
-                       payload ? std::string(payload) : std::string()));
-}
-
-void OfficeClient::HandleDocumentEvent(lok::Document* document,
-                                       int type,
-                                       EventBus::EventCallback callback) {
-  EventBus* event_router = GetInstance()->document_event_router_[document];
-
-  event_router->Handle(type, std::move(callback));
+  context->task_runner->PostTask(
+      FROM_HERE,
+      base::BindOnce(&DocumentClient::ForwardLibreOfficeEvent, context->client,
+                     type, payload ? std::string(payload) : std::string()));
 }
 
 v8::Local<v8::Object> OfficeClient::GetHandle(v8::Isolate* isolate) {
-  // TODO: this should probably be per-isolate data, or at least the runner
-  // should be passed to the document callback
-  OfficeClient* inst = GetInstance();
-  inst->event_bus_.SetContext(isolate, isolate->GetCurrentContext());
-  inst->renderer_task_runner_ = base::SequencedTaskRunnerHandle::Get();
-
   if (eternal_.IsEmpty()) {
-    eternal_.Set(isolate,
-                 gin::CreateHandle(isolate, inst).ToV8().As<v8::Object>());
+    event_bus_.SetContext(isolate, isolate->GetCurrentContext());
+    eternal_.Set(isolate, GetWrapper(isolate).ToLocalChecked());
   }
 
   return eternal_.Get(isolate);
 }
 
 // instance
-
-bool OfficeClient::IsValid() {
-  return GetInstance()->office_ != nullptr;
-}
-
-OfficeClient::OfficeClient()
-    : task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
-          {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
-           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})) {
-  base::FilePath module_path;
-  if (!base::PathService::Get(base::DIR_MODULE, &module_path))
+namespace {
+static void GetOfficeHandle(v8::Local<v8::Name> name,
+                            const v8::PropertyCallbackInfo<v8::Value>& info) {
+  if (!OfficeClient::GetCurrent())
     return;
 
-  base::FilePath libreoffice_path =
-      module_path.Append(FILE_PATH_LITERAL("libreofficekit"))
-          .Append(FILE_PATH_LITERAL("program"));
+  info.GetReturnValue().Set(
+      OfficeClient::GetCurrent()->GetHandle(info.GetIsolate()));
+}
+}  // namespace
 
-  // TODO: set the user profile path to the proper directory
-  office_ = lok::lok_cpp_init(libreoffice_path.AsUTF8Unsafe().c_str());
+void OfficeClient::InstallToContext(v8::Local<v8::Context> context) {
+  v8::Context::Scope context_scope(context);
+  v8::Isolate* isolate = context->GetIsolate();
+  v8::MicrotasksScope microtasks_scope(
+      isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
 
-  // this is null if init fails, no further access should occur from the
-  // electron_render_frame_observer
-  if (office_) {
-    office_->registerCallback(&OfficeClient::HandleLibreOfficeCallback, this);
-  }
+  context->Global()
+      ->SetNativeDataProperty(
+          context, gin::StringToV8(isolate, office::OfficeClient::kGlobalEntry),
+          GetOfficeHandle)
+      .Check();
+}
+
+void OfficeClient::RemoveFromContext(v8::Local<v8::Context> context) {
+  delete this;
+}
+
+OfficeClient::OfficeClient() {
+  office_ = OfficeSingleton::GetOffice();
+  lazy_tls.Pointer()->Set(this);
 }
 
 // TODO: try to save docs in a separate thread in the background if they are
 // opened and destroyed
-OfficeClient::~OfficeClient() = default;
+OfficeClient::~OfficeClient() {
+  LOG(ERROR) << "OFFICE CLIENT IS GOING DOWN";
+  for (auto& i : document_contexts_) {
+    i.second->invalid.Set();
+  }
+  lazy_tls.Pointer()->Set(nullptr);
+};
 
 gin::ObjectTemplateBuilder OfficeClient::GetObjectTemplateBuilder(
     v8::Isolate* isolate) {
   gin::PerIsolateData* data = gin::PerIsolateData::From(isolate);
   v8::Local<v8::FunctionTemplate> constructor =
-      data->GetFunctionTemplate(&this->kWrapperInfo);
+      data->GetFunctionTemplate(&kWrapperInfo);
   if (constructor.IsEmpty()) {
     constructor = v8::FunctionTemplate::New(isolate);
     constructor->SetClassName(gin::StringToV8(isolate, GetTypeName()));
     constructor->ReadOnlyPrototype();
-    data->SetFunctionTemplate(&this->kWrapperInfo, constructor);
+    data->SetFunctionTemplate(&kWrapperInfo, constructor);
   }
   return gin::ObjectTemplateBuilder(isolate, GetTypeName(),
                                     constructor->InstanceTemplate())
@@ -203,7 +200,7 @@ v8::Local<v8::Value> OfficeClient::LoadDocument(v8::Isolate* isolate,
   lok::Document* doc = GetDocument(path);
 
   if (!doc) {
-    doc = office_->documentLoad(path.c_str(), "Language=en-US");
+    doc = office_->documentLoad(path.c_str(), "Language=en-US,Batch=true");
 
     if (!doc) {
       LOG(ERROR) << "Unable to load '" << path << "': " << office_->getError();
@@ -235,20 +232,31 @@ v8::Local<v8::Value> OfficeClient::LoadDocument(v8::Isolate* isolate,
         "value": "Your Friendly Neighborhood Author"
       }
     })");
-
-    document_event_router_.insert_or_assign(doc, new EventBus());
-
-    doc->registerCallback(OfficeClient::HandleDocumentCallback, doc);
   }
 
   DocumentClient* doc_client =
-      new DocumentClient(doc, path, document_event_router_[doc]);
+      new DocumentClient(weak_factory_.GetWeakPtr(), doc, path);
+
+  if (document_contexts_.find(doc) == document_contexts_.end()) {
+    DocumentCallbackContext* context =
+        new DocumentCallbackContext{base::SequencedTaskRunnerHandle::Get(),
+                                    doc_client->GetWeakPtr(), doc->getView()};
+    doc_client->GetEventBus()->SetContext(isolate,
+                                          isolate->GetCurrentContext());
+    doc->registerCallback(OfficeClient::HandleDocumentCallback, context);
+    document_contexts_.emplace(doc, context);
+  }
   return gin::CreateHandle(isolate, doc_client).ToV8();
 }
 
 bool OfficeClient::CloseDocument(const std::string& path) {
-  lok::Document* doc = document_map_[path];
-  document_event_router_.erase(doc);
+  lok::Document* doc = GetDocument(path);
+  if (!doc)
+    return false;
+
+  auto doc_context_it = document_contexts_.find(doc);
+  if (doc_context_it != document_contexts_.end())
+    doc_context_it->second->invalid.Set();
   documents_mounted_.erase(doc);
   return document_map_.erase(path) == 1;
 }
@@ -344,4 +352,13 @@ void OfficeClient::SendDialogEvent(uint64_t window_id, gin::Arguments* args) {
 bool OfficeClient::RunMacro(const std::string& url) {
   return office_->runMacro(url.c_str());
 }
+
+OfficeClient::_DocumentCallbackContext::_DocumentCallbackContext(
+    scoped_refptr<base::SequencedTaskRunner> task_runner_,
+    base::WeakPtr<DocumentClient> client_,
+    const int view_id_)
+    : task_runner(task_runner_), client(client_), view_id(view_id_) {}
+
+OfficeClient::_DocumentCallbackContext::~_DocumentCallbackContext() = default;
+
 }  // namespace electron::office

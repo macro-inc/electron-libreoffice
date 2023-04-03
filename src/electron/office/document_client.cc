@@ -9,7 +9,6 @@
 #include <string_view>
 #include <vector>
 #include "LibreOfficeKit/LibreOfficeKit.hxx"
-#include "unov8.hxx"
 #include "absl/types/optional.h"
 #include "base/bind.h"
 #include "base/callback_forward.h"
@@ -49,6 +48,7 @@
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/skia_conversions.h"
+#include "unov8.hxx"
 #include "url/gurl.h"
 #include "v8/include/v8-array-buffer.h"
 #include "v8/include/v8-container.h"
@@ -61,31 +61,33 @@
 namespace electron::office {
 gin::WrapperInfo DocumentClient::kWrapperInfo = {gin::kEmbedderNativeGin};
 
-DocumentClient::DocumentClient(lok::Document* document,
-                               std::string path,
-                               EventBus* event_bus)
-    : document_(document), path_(path), event_bus_(event_bus) {
+DocumentClient::DocumentClient(base::WeakPtr<OfficeClient> office_client,
+                               lok::Document* document,
+                               std::string path)
+    : document_(document),
+      path_(path),
+      office_client_(std::move(office_client)) {
   // assumes the document loaded succesfully from OfficeClient
   DCHECK(document_);
 
-  event_bus->Handle(LOK_CALLBACK_DOCUMENT_SIZE_CHANGED,
+  event_bus_.Handle(LOK_CALLBACK_DOCUMENT_SIZE_CHANGED,
                     base::BindRepeating(&DocumentClient::HandleDocSizeChanged,
                                         base::Unretained(this)));
-  event_bus->Handle(LOK_CALLBACK_INVALIDATE_TILES,
+  event_bus_.Handle(LOK_CALLBACK_INVALIDATE_TILES,
                     base::BindRepeating(&DocumentClient::HandleInvalidate,
                                         base::Unretained(this)));
 
-  event_bus->Handle(LOK_CALLBACK_STATE_CHANGED,
+  event_bus_.Handle(LOK_CALLBACK_STATE_CHANGED,
                     base::BindRepeating(&DocumentClient::HandleStateChange,
                                         base::Unretained(this)));
 
-  event_bus->Handle(LOK_CALLBACK_UNO_COMMAND_RESULT,
+  event_bus_.Handle(LOK_CALLBACK_UNO_COMMAND_RESULT,
                     base::BindRepeating(&DocumentClient::HandleUnoCommandResult,
                                         base::Unretained(this)));
 }
 
 DocumentClient::~DocumentClient() {
-  LOG(ERROR) << "DOC CLIENT DESTROYED";
+  LOG(ERROR) << "DOC CLIENT DESTROYED: " << path_;
 }
 
 // gin::Wrappable
@@ -191,14 +193,14 @@ int DocumentClient::Mount(v8::Isolate* isolate) {
   {
     v8::HandleScope scope(isolate);
     v8::Local<v8::Value> wrapper;
-    if (this->GetWrapper(isolate).ToLocal(&wrapper)) {
-      event_bus_->SetContext(isolate, isolate->GetCurrentContext());
+    if (GetWrapper(isolate).ToLocal(&wrapper)) {
+      event_bus_.SetContext(isolate, isolate->GetCurrentContext());
       // prevent garbage collection
       mounted_.Reset(isolate, wrapper);
     }
   }
 
-  if (OfficeClient::GetInstance()->MarkMounted(document_)) {
+  if (office_client_->MarkMounted(document_)) {
     view_id_ = document_->getView();
   } else {
     view_id_ = document_->createView();
@@ -227,7 +229,7 @@ int DocumentClient::Mount(v8::Isolate* isolate) {
   // save a backup before we continue
   SaveBackup(path_);
 
-  event_bus_->Emit("ready", ready_value);
+  event_bus_.Emit("ready", ready_value);
 
   return view_id_;
 }
@@ -237,10 +239,10 @@ void DocumentClient::Unmount() {
   if (view_id_ == -1)
     return;
 
-  if (document_->getViewsCount()) {
+  if (document_->getViewsCount() > 1) {
     document_->destroyView(view_id_);
-    view_id_ = -1;
   }
+  view_id_ = -1;
 
   // allow garbage collection
   mounted_.Reset();
@@ -352,7 +354,8 @@ void DocumentClient::HandleUnoCommandResult(std::string payload) {
   std::pair<std::string, bool> checker =
       lok_callback::ParseUnoCommandResult(payload);
 
-  if ((checker.first == ".uno:Copy" || checker.first == ".uno:Cut") && checker.second) {
+  if ((checker.first == ".uno:Copy" || checker.first == ".uno:Cut") &&
+      checker.second) {
     OnClipboardChanged();
   }
 }
@@ -387,17 +390,17 @@ std::string DocumentClient::Path() {
 
 void DocumentClient::On(const std::string& event_name,
                         v8::Local<v8::Function> listener_callback) {
-  event_bus_->On(event_name, listener_callback);
+  event_bus_.On(event_name, listener_callback);
 }
 
 void DocumentClient::Off(const std::string& event_name,
                          v8::Local<v8::Function> listener_callback) {
-  event_bus_->Off(event_name, listener_callback);
+  event_bus_.Off(event_name, listener_callback);
 }
 
 void DocumentClient::Emit(const std::string& event_name,
                           v8::Local<v8::Value> data) {
-  event_bus_->Emit(event_name, data);
+  event_bus_.Emit(event_name, data);
 }
 
 DocumentClient::DocumentClient() = default;
@@ -774,10 +777,14 @@ bool DocumentClient::SendContentControlEvent(
   return true;
 }
 
-v8::Local<v8::Value> DocumentClient::As(const std::string& type, v8::Isolate* isolate)
-{
-  void *component = document_->getXComponent();
+v8::Local<v8::Value> DocumentClient::As(const std::string& type,
+                                        v8::Isolate* isolate) {
+  void* component = document_->getXComponent();
   return convert::As(isolate, component, type);
+}
+
+void DocumentClient::ForwardLibreOfficeEvent(int type, std::string payload) {
+  event_bus_.EmitLibreOfficeEvent(type, payload);
 }
 
 }  // namespace electron::office

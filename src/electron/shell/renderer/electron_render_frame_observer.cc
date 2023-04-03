@@ -82,16 +82,6 @@ void ElectronRenderFrameObserver::DidClearWindowObject() {
   renderer_client_->DidClearWindowObject(render_frame_);
 }
 
-static void GetOfficeHandle(v8::Local<v8::Name> name,
-                            const v8::PropertyCallbackInfo<v8::Value>& info) {
-  v8::ReturnValue<v8::Value> ret = info.GetReturnValue();
-  if (office::OfficeClient::IsValid()) {
-    ret.Set(office::OfficeClient::GetHandle(info.GetIsolate()));
-  } else {
-    ret.Set(v8::Undefined(info.GetIsolate()));
-  }
-}
-
 void ElectronRenderFrameObserver::DidInstallConditionalFeatures(
     v8::Handle<v8::Context> context,
     int world_id) {
@@ -146,14 +136,7 @@ void ElectronRenderFrameObserver::DidInstallConditionalFeatures(
 
 #if BUILDFLAG(ENABLE_OFFICE)
   if (is_main_world) {
-    v8::HandleScope handle_scope(isolate);
-    v8::Context::Scope context_scope(context);
-    auto source_context = web_frame->MainWorldScriptContext();
-    std::ignore = source_context->Global()->SetNativeDataProperty(
-        source_context,
-        gin::StringToV8(source_context->GetIsolate(),
-                        office::OfficeClient::kGlobalEntry),
-        GetOfficeHandle);
+    office::OfficeClient::GetCurrent()->InstallToContext(context);
   }
 #endif
 
@@ -188,6 +171,11 @@ void ElectronRenderFrameObserver::WillReleaseScriptContext(
     int world_id) {
   if (ShouldNotifyClient(world_id))
     renderer_client_->WillReleaseScriptContext(context, render_frame_);
+#if BUILDFLAG(ENABLE_OFFICE)
+  if (IsMainWorld(world_id)) {
+    office::OfficeClient::GetCurrent()->RemoveFromContext(context);
+  }
+#endif
 }
 
 void ElectronRenderFrameObserver::OnDestruct() {

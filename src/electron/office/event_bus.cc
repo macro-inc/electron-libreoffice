@@ -96,7 +96,7 @@ void EventBus::EmitLibreOfficeEvent(int type, std::string payload) {
   if (event_listeners_.find(type_string) == event_listeners_.end())
     return;
 
-  if (context_.IsEmpty()) {
+  if (context_.IsEmpty() || !isolate_) {
     LOG(ERROR) << "CONTEXT IS INVALID";
     return;
   }

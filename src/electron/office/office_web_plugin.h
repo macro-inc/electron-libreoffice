@@ -267,6 +267,8 @@ class OfficeWebPlugin : public blink::WebPlugin {
   v8::Global<v8::ObjectTemplate> v8_template_;
   v8::Global<v8::Object> v8_object_;
 
+  v8::Persistent<v8::Object> rendered_client_;
+
   // invalidates when destroy() is called
   base::WeakPtrFactory<OfficeWebPlugin> weak_factory_{this};
 };
