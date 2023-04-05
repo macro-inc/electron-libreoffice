@@ -49,29 +49,23 @@ jobs:
       EC2_RUNNER_AWS_SECRET: ${{ secrets.EC2_RUNNER_AWS_SECRET }}
       instance_id: ${{ secrets[matrix.runner] }}
   build_release_mac:
-    name: Build for Mac
-    runs-on: ubuntu-latest
-    needs: [check_version]
-    # if: ${{ needs.check_version.outputs.should_run != 'false' }}
+    name: Build for Mac ${{ matrix.name }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          # - name: x86_64
-          #   userhost: MACOS_BUILD_BUDDY_USERHOST_INTEL
-          #   key: MACOS_BUILD_BUDDY_KEY_INTEL
+          - name: x86_64
+            runner: macro-x641
           - name: arm64
-            userhost: MACOS_BUILD_BUDDY_USERHOST_M1
-            key: MACOS_BUILD_BUDDY_KEY_M1
-    steps:
-      - name: Queue macOS Build Buddy (${{ matrix.name }})
-        run: |
-          echo '${{ secrets[matrix.key] }}' > buddykey
-          chmod 500 buddykey
-          ssh -t -o TCPKeepAlive=no -o BatchMode=true -o ServerAliveCountMax=100 -o ServerAliveInterval=15 -o LogLevel=ERROR -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i buddykey ${{ secrets[matrix.userhost] }} v${{ needs.check_version.outputs.version }} electron-libreoffice $GITHUB_SHA
+            runner: macro-arm1
+    needs: [check_version]
+    uses: ./.github/workflows/build_mac.yml
+    with:
+      version: ${{ needs.check_version.outputs.version }}
+      runner_label: ${{ matrix.runner }}
   generate_sha:
     name: Generate SHA
-    needs: [check_version, build_release, build_release_mac]
+    needs: [check_version, build_release_mac]
     uses: ./.github/workflows/generate-sha.yml
     with:
       version: ${{ needs.check_version.outputs.version }}
