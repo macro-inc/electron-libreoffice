@@ -65,7 +65,7 @@ jobs:
       runner_label: ${{ matrix.runner }}
   generate_sha:
     name: Generate SHA
-    needs: [check_version, build_release, build_release_mac]
+    needs: [check_version, build_release_mac]
     uses: ./.github/workflows/generate-sha.yml
     with:
       version: ${{ needs.check_version.outputs.version }}

@@ -39,10 +39,12 @@ jobs:
       - name: Sync
         id: sync
         run: |
+          [ "$(uname -m)" = "arm64" ] && export TARGET_ARCH=arm64
           scripts/e sync
       - name: Build
         id: build
         run: |
+          [ "$(uname -m)" = "arm64" ] && export TARGET_ARCH=arm64
           scripts/e setup
 
           (cd -- src/electron && node script/yarn install --frozen-lockfile)
