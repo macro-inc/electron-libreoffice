@@ -74,7 +74,7 @@ jobs:
       - name: Copy build artifacts
         run: |
           cd "$GITHUB_WORKSPACE"
-          cp -rf src/out/Default/* .
+          cp -rf src/out/Default/{${{ steps.build.outputs.target_uploads }}} .
       - name: Create release
         uses: ncipollo/release-action@v1
         with:
