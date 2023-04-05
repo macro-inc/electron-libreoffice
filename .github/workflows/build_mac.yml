@@ -1,0 +1,92 @@
+name: Build
+on:
+  workflow_call:
+    inputs:
+      runner_label:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+
+jobs:
+  build:
+    name: Build
+    runs-on:
+      group: lo-runners
+      labels: ${{ inputs.runner_label }}
+    outputs:
+      succeeded: ${{ steps.check.outputs.check }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      IS_RELEASE: true
+      GOMA_START_COMPILER_PROXY: true
+      GOMA_FALLBACK_ON_AUTH_FAILURE: true
+    steps:
+      - name: Turn off line ending conversion in git
+        run: |
+          cd ${{ inputs.working_dir }}
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Setup Node v16
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16
+      - name: Sync
+        id: sync
+        run: |
+          scripts/e sync
+      - name: Build
+        id: build
+        run: |
+          scripts/e setup
+
+          (cd -- src/electron && node script/yarn install --frozen-lockfile)
+          # GitHub actions repeatedly kills GOMA, simply restart it and the build since GOMA_START_COMPILER_PROXY fails
+          set +e
+          set +o pipefail
+          attempts=1
+          finished=0
+          function goma_watch() {
+            while true
+            do
+              sleep 300
+              scripts/goma.sh check_restart
+            done
+          }
+
+          goma_watch &
+          GOMA_WATCH_PID=$!
+          export RUN_GN_ONCE=true
+          while [ $attempts -le 3 -a $finished -eq 0 ]
+          do
+            echo "Attempt: $attempts"
+            scripts/e build && finished=1
+            ((attempts++))
+          done
+          kill -9 $GOMA_WATCH_PID || true
+          scripts/goma.sh ensure_stop || true
+          [ $finished -eq 1 ] && echo "Finished successfully"
+      - name: Copy build artifacts
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          cp -rf src/out/Default/* .
+      - name: Create release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: ${{ steps.build.outputs.target_uploads }}
+          allowUpdates: true
+          artifactErrorsFailBuild: true
+          name: v${{ inputs.version }}
+          tag: v${{ inputs.version }}
+          body: |
+            This is an automated release built from the `main` branch.
+            For changes, please review the commit log.
+      - name: The job has succeeded
+        if: ${{ success() }}
+        id: check
+        run: echo "check=true" >> $GITHUB_OUTPUT

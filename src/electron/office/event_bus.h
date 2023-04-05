@@ -59,7 +59,7 @@ class EventBus {
  private:
   typedef v8::Global<v8::Function> PersistedFn;
   v8::Global<v8::Context> context_;
-  raw_ptr<v8::Isolate> isolate_;
+  raw_ptr<v8::Isolate> isolate_ = nullptr;
 
   std::unordered_map<std::string, std::vector<PersistedFn>> event_listeners_;
   std::unordered_map<int, std::vector<EventCallback>> internal_event_listeners_;

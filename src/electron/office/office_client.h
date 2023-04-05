@@ -11,8 +11,10 @@
 #include <unordered_set>
 
 #include "base/files/file_path.h"
-#include "base/memory/singleton.h"
+#include "base/lazy_instance.h"
+#include "base/synchronization/atomic_flag.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/threading/thread_local.h"
 #include "gin/handle.h"
 #include "gin/wrappable.h"
 #include "office/event_bus.h"
@@ -29,28 +31,30 @@ typedef struct _UnoV8 UnoV8;
 namespace electron::office {
 
 class EventBus;
+class DocumentClient;
 
 class OfficeClient : public gin::Wrappable<OfficeClient> {
  public:
   static constexpr char kGlobalEntry[] = "libreoffice";
 
-  static OfficeClient* GetInstance();
+  static OfficeClient* GetCurrent();
+  bool IsValid();
+
   static void HandleLibreOfficeCallback(int type,
                                         const char* payload,
                                         void* office_client);
   static void HandleDocumentCallback(int type,
                                      const char* payload,
                                      void* document);
-  void HandleDocumentEvent(lok::Document* document,
-                           int type,
-                           EventBus::EventCallback callback);
-  static v8::Local<v8::Object> GetHandle(v8::Isolate* isolate);
-  static bool IsValid();
   static const ::UnoV8& GetUnoV8();
 
   // disable copy
   OfficeClient(const OfficeClient&) = delete;
   OfficeClient& operator=(const OfficeClient&) = delete;
+
+  v8::Local<v8::Object> GetHandle(v8::Isolate* isolate);
+  void InstallToContext(v8::Local<v8::Context> context);
+  void RemoveFromContext(v8::Local<v8::Context> context);
 
   // gin::Wrappable
   static gin::WrapperInfo kWrapperInfo;
@@ -67,7 +71,6 @@ class OfficeClient : public gin::Wrappable<OfficeClient> {
 
   lok::Office* GetOffice();
   lok::Document* GetDocument(const std::string& path);
-  lok::Document* InitializeOnce();
 
   bool MarkMounted(lok::Document* document);
   bool CloseDocument(const std::string& path);
@@ -91,16 +94,31 @@ class OfficeClient : public gin::Wrappable<OfficeClient> {
 
   void EmitLibreOfficeEvent(int type, const char* payload);
 
-  friend struct base::DefaultSingletonTraits<OfficeClient>;
-
   lok::Office* office_ = nullptr;
   std::unordered_map<std::string, lok::Document*> document_map_;
   std::unordered_set<lok::Document*> documents_mounted_;
-  std::unordered_map<lok::Document*, EventBus*> document_event_router_;
 
-  scoped_refptr<base::SequencedTaskRunner> task_runner_ = nullptr;
-  scoped_refptr<base::SequencedTaskRunner> renderer_task_runner_ = nullptr;
   EventBus event_bus_;
+
+  typedef struct _DocumentCallbackContext {
+    _DocumentCallbackContext(
+        scoped_refptr<base::SequencedTaskRunner> task_runner_,
+        base::WeakPtr<DocumentClient> client_, const int view_id_);
+    ~_DocumentCallbackContext();
+
+    scoped_refptr<base::SequencedTaskRunner> task_runner;
+    base::WeakPtr<DocumentClient> client;
+    const int view_id;
+    base::AtomicFlag invalid;
+  } DocumentCallbackContext;
+
+  std::unordered_map<lok::Document*, DocumentCallbackContext*>
+      document_contexts_;
+
+  // prevents this global from being released until the isolate is destroyed
+  v8::Eternal<v8::Object> eternal_;
+
+  base::WeakPtrFactory<OfficeClient> weak_factory_{this};
 };
 
 }  // namespace electron::office

@@ -18,6 +18,7 @@
 #include "gin/dictionary.h"
 #include "gin/handle.h"
 #include "gin/wrappable.h"
+#include "office/event_bus.h"
 #include "shell/common/gin_helper/pinnable.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkImage.h"
@@ -39,19 +40,17 @@ class Document;
 
 namespace electron::office {
 
-class EventBus;
+class OfficeClient;
 
 class DocumentClient : public gin::Wrappable<DocumentClient> {
  public:
-  DocumentClient();
-  ~DocumentClient() override;
   // disable copy
   DocumentClient(const DocumentClient&) = delete;
   DocumentClient& operator=(const DocumentClient&) = delete;
 
-  DocumentClient(lok::Document* document,
-                 std::string path,
-                 EventBus* event_bus);
+  DocumentClient(base::WeakPtr<OfficeClient> office_client,
+                 lok::Document* document,
+                 std::string path);
 
   static void HandleLibreOfficeCallback(int type,
                                         const char* payload,
@@ -77,8 +76,8 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   gfx::Size Size() const;
   void PostUnoCommand(const std::string& command, gin::Arguments* args);
   void PostUnoCommandInternal(const std::string& command,
-                       char* json_buffer,
-                       bool notifyWhenFinished);
+                              char* json_buffer,
+                              bool notifyWhenFinished);
   v8::Local<v8::Value> GotoOutline(int idx, gin::Arguments* args);
   std::vector<std::string> GetTextSelection(const std::string& mime_type,
                                             gin::Arguments* args);
@@ -132,12 +131,18 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   // }
 
   std::string Path();
+  base::WeakPtr<OfficeClient> GetOfficeClient() { return office_client_; }
+  base::WeakPtr<EventBus> GetEventBus() { return event_bus_.GetWeakPtr(); }
+  void ForwardLibreOfficeEvent(int type, std::string payload);
 
   void Unmount();
 
   base::WeakPtr<DocumentClient> GetWeakPtr();
 
  private:
+  DocumentClient();
+  ~DocumentClient() override;
+
   void HandleStateChange(std::string payload);
   void HandleUnoCommandResult(std::string payload);
   void HandleDocSizeChanged(std::string payload);
@@ -163,7 +168,8 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   std::vector<std::string> state_change_buffer_;
 
   bool is_ready_;
-  EventBus* event_bus_;
+  EventBus event_bus_;
+  base::WeakPtr<OfficeClient> office_client_;
 
   // prevents from being garbage collected
   v8::Global<v8::Value> mounted_;

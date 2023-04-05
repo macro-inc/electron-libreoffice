@@ -60,6 +60,8 @@ source_set("internal") {
     "lok_tilebuffer.h",
     "lok_callback.cc",
     "lok_callback.h",
+    "office_singleton.cc",
+    "office_singleton.h",
     "office_client.cc",
     "office_client.h",
     "office_keys.cc",

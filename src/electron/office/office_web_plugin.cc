@@ -306,11 +306,11 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
   int modifiers = event.GetModifiers();
 
 #if BUILDFLAG(IS_MAC)
-    modifiers &= ~blink::WebInputEvent::Modifiers::kControlKey;
-    if (modifiers & blink::WebInputEvent::Modifiers::kMetaKey) {
-      modifiers |= blink::WebInputEvent::Modifiers::kControlKey;
-      modifiers &= ~blink::WebInputEvent::Modifiers::kMetaKey;
-    }
+  modifiers &= ~blink::WebInputEvent::Modifiers::kControlKey;
+  if (modifiers & blink::WebInputEvent::Modifiers::kMetaKey) {
+    modifiers |= blink::WebInputEvent::Modifiers::kControlKey;
+    modifiers &= ~blink::WebInputEvent::Modifiers::kMetaKey;
+  }
 #endif
 
   int lok_key_code = office::DOMKeyCodeToLOKKeyCode(event.dom_code, modifiers);
@@ -329,7 +329,8 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
   return blink::WebInputEventResult::kHandledApplication;
 }
 
-blink::WebInputEventResult OfficeWebPlugin::HandleCutCopyEvent(std::string event) {
+blink::WebInputEventResult OfficeWebPlugin::HandleCutCopyEvent(
+    std::string event) {
   document_client_->PostUnoCommandInternal(event, nullptr, true);
   return blink::WebInputEventResult::kHandledApplication;
 }
@@ -465,7 +466,6 @@ void OfficeWebPlugin::ResetTileBuffers() {
   for (int part = 0; part < parts; ++part) {
     part_tile_buffer_[part] =
         std::move(office::TileBuffer(document_, scale, part));
-    LOG(ERROR) << "BUFFER RESET SCALE: " << scale;
   }
   part_tile_buffer_.at(0).SetYPosition(scroll_y_position_);
 }
@@ -629,20 +629,31 @@ bool OfficeWebPlugin::RenderDocument(
     LOG(ERROR) << "invalid document client";
     return false;
   }
-  office::OfficeClient* office = office::OfficeClient::GetInstance();
+  base::WeakPtr<office::OfficeClient> office = client->GetOfficeClient();
+  if (!office) {
+    LOG(ERROR) << "invalid office client";
+    return false;
+  }
 
   // TODO: honestly, this is terrible, need to do this properly
   // already mounted
-  bool needs_reset = view_id_ != -1 && document_ != client->GetDocument();
+  bool needs_reset = view_id_ != -1 && document_ != client->GetDocument() &&
+                     document_ != nullptr;
   if (needs_reset) {
-    ResetTileBuffers();
     office->CloseDocument(document_client_->Path());
     document_client_->Unmount();
-    delete document_;
+    document_ = nullptr;
+    document_client_ = nullptr;
   }
 
   document_ = client->GetDocument();
+  if (needs_reset) {
+    ResetTileBuffers();
+  }
+
   document_client_ = client.get();
+  rendered_client_.Reset(
+      isolate, document_client_->GetWrapper(isolate).ToLocalChecked());
   view_id_ = client->Mount(isolate);
   part_tile_buffer_.emplace_back(document_, TotalScale());
 
@@ -657,15 +668,18 @@ bool OfficeWebPlugin::RenderDocument(
   document_->setView(view_id_);
   document_->resetSelection();
 
-  office->HandleDocumentEvent(
-      document_, LOK_CALLBACK_INVALIDATE_TILES,
-      base::BindRepeating(&OfficeWebPlugin::HandleInvalidateTiles,
-                          base::Unretained(this)));
-  office->HandleDocumentEvent(
-      document_, LOK_CALLBACK_DOCUMENT_SIZE_CHANGED,
-      base::BindRepeating(&OfficeWebPlugin::HandleDocumentSizeChanged,
-                          base::Unretained(this)));
+  base::WeakPtr<office::EventBus> event_bus(client->GetEventBus());
 
+  if (event_bus) {
+    event_bus->Handle(
+        LOK_CALLBACK_INVALIDATE_TILES,
+        base::BindRepeating(&OfficeWebPlugin::HandleInvalidateTiles,
+                            base::Unretained(this)));
+    event_bus->Handle(
+        LOK_CALLBACK_DOCUMENT_SIZE_CHANGED,
+        base::BindRepeating(&OfficeWebPlugin::HandleDocumentSizeChanged,
+                            base::Unretained(this)));
+  }
   if (needs_reset) {
     OnGeometryChanged(viewport_zoom_, device_scale_);
   }
