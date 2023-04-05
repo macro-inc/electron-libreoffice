@@ -13,8 +13,8 @@ jobs:
   build:
     name: Build
     runs-on:
-      - self-hosted
-      - ${{ inputs.runner_label }}
+      group: lo-runners
+      labels: ${{ inputs.runner_label }}
     outputs:
       succeeded: ${{ steps.check.outputs.check }}
     defaults:
