@@ -19,6 +19,7 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: 16
+          registry-url: 'https://registry.npmjs.org'
       - name: Update electron package
         uses: actions/github-script@v6
         env:
@@ -30,13 +31,15 @@ jobs:
       - name: Attach License
         run: |
           cp ./LICENSE ./src/electron/npm
-      - name: Download LOK TypeScript bindings artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: lok-ts
       - name: Copy LOK TypeScript to NPM folder
         run: |
-          cp -rf ./src/third_party/libreofficekit/instdir/sdk/typescript ./src/electron/npm/lok_api
+          export LC_ALL=en_US.utf8
+          lok_version="$(cat src/electron/DEPS | grep -oP "'libreofficekit_version': '\\K[^']+")"
+          rm -rf instdir || true
+          rm -f libreofficekit-linux.tar.xz || true
+          curl -LO "https://github.com/coparse-inc/libreofficekit/releases/download/$lok_version/libreofficekit-linux.tar.xz"
+          tar -xJf libreofficekit-linux.tar.xz
+          cp -rf instdir/sdk/typescript ./src/electron/npm/lok_api
       - name: Publish package on NPM
         run: |
           cd src/electron/npm
