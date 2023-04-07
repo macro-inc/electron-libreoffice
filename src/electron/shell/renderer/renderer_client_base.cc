@@ -585,17 +585,6 @@ bool RendererClientBase::IsWebViewFrame(
   return frame_element_dict.GetHidden("isWebView", &is_webview) && is_webview;
 }
 
-#if BUILDFLAG(ENABLE_OFFICE)
-void RendererClientBase::WorkerScriptReadyForEvaluationOnWorkerThread(
-    v8::Local<v8::Context> context) {
-  office::OfficeClient::GetCurrent()->InstallToContext(context);
-}
-void RendererClientBase::WillDestroyWorkerContextOnWorkerThread(
-    v8::Local<v8::Context> context) {
-  office::OfficeClient::GetCurrent()->RemoveFromContext(context);
-}
-#endif
-
 void RendererClientBase::SetupMainWorldOverrides(
     v8::Handle<v8::Context> context,
     content::RenderFrame* render_frame) {
