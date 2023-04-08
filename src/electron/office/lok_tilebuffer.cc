@@ -47,9 +47,9 @@ TileBuffer::TileBuffer(lok::Document* document, float scale, int part)
                     tile_size_scaled_px_);
 
   pool_buffer_ = std::make_unique<uint8_t[]>(kPoolAllocatedSize);
-  pool_bitmaps_ = std::make_unique<SkBitmap[]>(pool_size_ - 1);
-  pool_index_to_tile_index_ = std::make_unique<int[]>(pool_size_ - 1);
-  pool_paint_images_ = std::make_unique<cc::PaintImage[]>(pool_size_ - 1);
+  pool_bitmaps_ = std::make_unique<SkBitmap[]>(pool_size_);
+  pool_index_to_tile_index_ = std::make_unique<int[]>(pool_size_);
+  pool_paint_images_ = std::make_unique<cc::PaintImage[]>(pool_size_);
   for (size_t index = 0; index < pool_size_ - 1; index++) {
     // set the bitmap allocation to the installed pixels
     pool_bitmaps_[index].installPixels(image_info_, GetPoolBuffer(index),
