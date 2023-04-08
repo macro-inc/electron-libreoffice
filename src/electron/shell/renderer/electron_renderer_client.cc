@@ -21,7 +21,6 @@
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_local_frame.h"
-#include "office/office_client.h"
 
 namespace electron {
 
@@ -157,9 +156,7 @@ void ElectronRendererClient::WillReleaseScriptContext(
 
 void ElectronRendererClient::WorkerScriptReadyForEvaluationOnWorkerThread(
     v8::Local<v8::Context> context) {
-#if BUILDFLAG(ENABLE_OFFICE)
-  office::OfficeClient::GetCurrent()->InstallToContext(context);
-#endif
+  RendererClientBase::WorkerScriptReadyForEvaluationOnWorkerThread(context);
   // TODO(loc): Note that this will not be correct for in-process child windows
   // with webPreferences that have a different value for nodeIntegrationInWorker
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -170,9 +167,7 @@ void ElectronRendererClient::WorkerScriptReadyForEvaluationOnWorkerThread(
 
 void ElectronRendererClient::WillDestroyWorkerContextOnWorkerThread(
     v8::Local<v8::Context> context) {
-#if BUILDFLAG(ENABLE_OFFICE)
-  office::OfficeClient::GetCurrent()->RemoveFromContext(context);
-#endif
+  RendererClientBase::WillDestroyWorkerContextOnWorkerThread(context);
   // TODO(loc): Note that this will not be correct for in-process child windows
   // with webPreferences that have a different value for nodeIntegrationInWorker
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(

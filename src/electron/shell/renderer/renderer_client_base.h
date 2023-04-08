@@ -139,6 +139,13 @@ class RendererClientBase : public content::ContentRendererClient
       const GURL& service_worker_scope,
       const GURL& script_url) override;
 
+#if BUILDFLAG(ENABLE_OFFICE)
+  void WorkerScriptReadyForEvaluationOnWorkerThread(
+      v8::Local<v8::Context> context) override;
+  void WillDestroyWorkerContextOnWorkerThread(
+      v8::Local<v8::Context> context) override;
+#endif
+
  protected:
 #if BUILDFLAG(ENABLE_ELECTRON_EXTENSIONS)
   // app_shell embedders may need custom extensions client interfaces.
