@@ -16,14 +16,15 @@ const thumb = document.getElementById('el-thumb');
 
 let globalDoc;
 let zoom = 1.0;
+let uri;
 picker.onchange = () => {
   if (picker.files.length === 1) {
-    const uri = encodeURI(
+    uri = encodeURI(
       'file:///' + picker.files[0].path.replace(/\\/g, '/')
     );
+    runColorizeWorker();
     const doc = libreoffice.loadDocument(uri);
     globalDoc = doc;
-    runColorizeWorker();
 
     embed.renderDocument(doc);
     thumb.renderDocument(doc);
@@ -58,11 +59,8 @@ function attachChildrenToNodes(outline, outlineTree) {
 }
 
 function runColorizeWorker() {
-  if (!globalDoc) return;
-
   const worker = new Worker(fn2workerURL(colorizeWorker));
-  const originalDocUrl = globalDoc.as('frame.XStorable').getLocation();
-  worker.postMessage({type: 'load', file: originalDocUrl });
+  worker.postMessage({type: 'load', file: uri });
   worker.onmessage = (event) => {
     console.log(event.data);
   }
@@ -111,8 +109,11 @@ function colorizeWorker() {
         self.postMessage({ type: 'loading', file: data.file });
         doc = libreoffice.loadDocument(data.file);
         self.postMessage({ type: 'loaded', file: data.file });
-        const xDoc = doc.as('text.XTextDocument');
+        const old = doc.as('text.XTextDocument');
+        delete old;
+        const xDoc = old.createHiddenClone();
         xDoc.startBatchUpdate();
+        // FormatQuick and FormatLine respect the SwTextFrame::IsLocked, how do we engage that while formatting?
         const text = xDoc.getText();
         const cursor = text.createTextCursor();
         cursor.gotoStart(false);
@@ -123,8 +124,9 @@ function colorizeWorker() {
           const props = wordCursor.as('beans.XPropertySet');
           props.setPropertyValue("CharColor", colorizePalette[i++ % colorizePalette.length]);
         } while (!shouldStop && wordCursor.gotoNextWord(false));
-        xDoc.finishBatchUpdate();
+        // Skip calling finishBatchUpdate because the document will be saved as a PDF and discarded
         xDoc.as('frame.XStorable').storeToURL(data.file + ".pdf", { FilterName: 'writer_pdf_Export' });
+        xDoc.as('util.XCloseable').close(true);
         self.postMessage({ type: 'finished', time: (performance.now() - timeStart)/1000 });
         self.close();
         break;
@@ -139,7 +141,6 @@ function colorizeWorker() {
   }, false);
 }
 
-// courtesy of MDN
 function fn2workerURL(fn) {
   const blob = new Blob([`(${fn.toString()})()`], { type: "text/javascript" });
   return URL.createObjectURL(blob);
