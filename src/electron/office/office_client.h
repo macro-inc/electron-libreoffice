@@ -103,12 +103,11 @@ class OfficeClient : public gin::Wrappable<OfficeClient> {
   typedef struct _DocumentCallbackContext {
     _DocumentCallbackContext(
         scoped_refptr<base::SequencedTaskRunner> task_runner_,
-        base::WeakPtr<DocumentClient> client_, const int view_id_);
+        base::WeakPtr<DocumentClient> client_);
     ~_DocumentCallbackContext();
 
     scoped_refptr<base::SequencedTaskRunner> task_runner;
     base::WeakPtr<DocumentClient> client;
-    const int view_id;
     base::AtomicFlag invalid;
   } DocumentCallbackContext;
 

@@ -240,7 +240,7 @@ v8::Local<v8::Value> OfficeClient::LoadDocument(v8::Isolate* isolate,
   if (document_contexts_.find(doc) == document_contexts_.end()) {
     DocumentCallbackContext* context =
         new DocumentCallbackContext{base::SequencedTaskRunnerHandle::Get(),
-                                    doc_client->GetWeakPtr(), doc->getView()};
+                                    doc_client->GetWeakPtr()};
     doc_client->GetEventBus()->SetContext(isolate,
                                           isolate->GetCurrentContext());
     doc->registerCallback(OfficeClient::HandleDocumentCallback, context);
@@ -355,9 +355,8 @@ bool OfficeClient::RunMacro(const std::string& url) {
 
 OfficeClient::_DocumentCallbackContext::_DocumentCallbackContext(
     scoped_refptr<base::SequencedTaskRunner> task_runner_,
-    base::WeakPtr<DocumentClient> client_,
-    const int view_id_)
-    : task_runner(task_runner_), client(client_), view_id(view_id_) {}
+    base::WeakPtr<DocumentClient> client_)
+    : task_runner(task_runner_), client(client_) {}
 
 OfficeClient::_DocumentCallbackContext::~_DocumentCallbackContext() = default;
 
