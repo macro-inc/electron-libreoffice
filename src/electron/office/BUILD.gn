@@ -14,32 +14,23 @@ buildflag_header("buildflags") {
 
 assert(enable_office)
 
+lok_root_dir = "//third_party/libreofficekit/instdir"
+if (is_mac) {
+  if (target_cpu == "x64") {
+    lok_root_dir += "/x64" 
+  } else if (target_cpu == "arm64" ) {
+    lok_root_dir += "/aarch64" 
+  }
+}
+lok_sdk_dir = "$lok_root_dir/sdk/v8"
+
 copy("copy_libreofficekit") {
   sources = [
-    "//third_party/libreofficekit/instdir/LICENSE",
-    "//third_party/libreofficekit/instdir/program",
-    "//third_party/libreofficekit/instdir/presets",
-    "//third_party/libreofficekit/instdir/share",
+    "$lok_root_dir/LICENSE",
+    "$lok_root_dir/program",
+    "$lok_root_dir/presets",
+    "$lok_root_dir/share",
   ]
-
-  if (is_mac) {
-    sources = []
-    if (target_cpu == "x64") {
-      sources = [
-        "//third_party/libreofficekit/instdir/x64/LICENSE",
-        "//third_party/libreofficekit/instdir/x64/program",
-        "//third_party/libreofficekit/instdir/x64/presets",
-        "//third_party/libreofficekit/instdir/x64/share",
-      ]
-    } else if (target_cpu == "arm64" ) {
-      sources = [
-        "//third_party/libreofficekit/instdir/aarch64/LICENSE",
-        "//third_party/libreofficekit/instdir/aarch64/program",
-        "//third_party/libreofficekit/instdir/aarch64/presets",
-        "//third_party/libreofficekit/instdir/aarch64/share",
-      ]
-    }
-  }
 
   outputs = [ "$root_out_dir/libreofficekit/{{source_file_part}}" ]
 }
@@ -64,6 +55,8 @@ source_set("internal") {
     "office_singleton.h",
     "office_client.cc",
     "office_client.h",
+    lok_sdk_dir + "/unov8.hxx",
+    lok_sdk_dir + "/unov8.cxx",
     "office_keys.cc",
     "office_keys.h",
   ]
@@ -72,6 +65,7 @@ source_set("internal") {
   #   "//build/config/compiler:no_exceptions",
   #   "//build/config/compiler:no_rtti",
   # ]
+  configs += [ lok_sdk_dir + ":libreoffice_lib_config" ]
 
   deps = [
     ":buildflags",
@@ -91,16 +85,6 @@ source_set("internal") {
 
   configs += [ ":electron_config" ]
 
-  if (is_mac) {
-    if (target_cpu == "x64") {
-      configs += [ "//third_party/libreofficekit/instdir/x64/sdk/v8:libreoffice_lib_config" ]
-    } else if (target_cpu == "arm64" ) {
-      configs += [ "//third_party/libreofficekit/instdir/aarch64/sdk/v8:libreoffice_lib_config" ]
-    }
-  } else {
-    configs += [ "//third_party/libreofficekit/instdir/sdk/v8:libreoffice_lib_config" ]
-  }
-
   public_deps = [
     "//skia",
     "//v8",
@@ -114,16 +98,7 @@ static_library("office_web_plugin") {
   sources = [ "office_web_plugin.cc", "office_web_plugin.h" ]
 
   configs += [ ":electron_config" ]
-
-  if (is_mac) {
-    if (target_cpu == "x64") {
-      configs += [ "//third_party/libreofficekit/instdir/x64/sdk/v8:libreoffice_lib_config" ]
-    } else if (target_cpu == "arm64" ) {
-      configs += [ "//third_party/libreofficekit/instdir/aarch64/sdk/v8:libreoffice_lib_config" ]
-    }
-  } else {
-    configs += [ "//third_party/libreofficekit/instdir/sdk/v8:libreoffice_lib_config" ]
-  }
+  configs += [ lok_sdk_dir + ":libreoffice_lib_config" ]
 
   lib_dirs = [ "$root_out_dir/libreofficekit/program" ]
   libs = []
