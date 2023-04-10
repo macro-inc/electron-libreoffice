@@ -123,7 +123,6 @@ void OfficeClient::RemoveFromContext(v8::Local<v8::Context> context) {
 }
 
 OfficeClient::OfficeClient() {
-  office_ = OfficeSingleton::GetOffice();
   lazy_tls.Pointer()->Set(this);
 }
 
@@ -166,6 +165,9 @@ const char* OfficeClient::GetTypeName() {
 }
 
 lok::Office* OfficeClient::GetOffice() {
+  if (!office_) {
+    office_ = OfficeSingleton::GetOffice();
+  }
   return office_;
 }
 
@@ -183,27 +185,27 @@ bool OfficeClient::MarkMounted(lok::Document* document) {
 }
 
 std::string OfficeClient::GetLastError() {
-  char* err = office_->getError();
+  char* err = GetOffice()->getError();
   if (err == nullptr) {
     return std::string();
   }
   std::string result(err);
-  office_->freeError(err);
+  GetOffice()->freeError(err);
   return result;
 }
 
 v8::Local<v8::Value> OfficeClient::LoadDocument(v8::Isolate* isolate,
                                                 const std::string& path) {
-  office_->setOptionalFeatures(
+  GetOffice()->setOptionalFeatures(
       LibreOfficeKitOptionalFeatures::LOK_FEATURE_NO_TILED_ANNOTATIONS);
 
   lok::Document* doc = GetDocument(path);
 
   if (!doc) {
-    doc = office_->documentLoad(path.c_str(), "Language=en-US,Batch=true");
+    doc = GetOffice()->documentLoad(path.c_str(), "Language=en-US,Batch=true");
 
     if (!doc) {
-      LOG(ERROR) << "Unable to load '" << path << "': " << office_->getError();
+      LOG(ERROR) << "Unable to load '" << path << "': " << GetOffice()->getError();
       return v8::Undefined(isolate);
     }
 
@@ -283,7 +285,7 @@ void OfficeClient::Emit(const std::string& event_name,
 v8::Local<v8::Value> OfficeClient::GetFilterTypes(gin::Arguments* args) {
   v8::Isolate* isolate = args->isolate();
 
-  char* filter_types = office_->getFilterTypes();
+  char* filter_types = GetOffice()->getFilterTypes();
 
   v8::MaybeLocal<v8::String> maybe_filter_types_str =
       v8::String::NewFromUtf8(isolate, filter_types);
@@ -305,13 +307,13 @@ v8::Local<v8::Value> OfficeClient::GetFilterTypes(gin::Arguments* args) {
 
 void OfficeClient::SetDocumentPassword(const std::string& url,
                                        const std::string& password) {
-  office_->setDocumentPassword(url.c_str(), password.c_str());
+  GetOffice()->setDocumentPassword(url.c_str(), password.c_str());
 }
 
 v8::Local<v8::Value> OfficeClient::GetVersionInfo(gin::Arguments* args) {
   v8::Isolate* isolate = args->isolate();
 
-  char* version_info = office_->getVersionInfo();
+  char* version_info = GetOffice()->getVersionInfo();
 
   v8::MaybeLocal<v8::String> maybe_version_info_str =
       v8::String::NewFromUtf8(isolate, version_info);
@@ -346,11 +348,11 @@ void OfficeClient::SendDialogEvent(uint64_t window_id, gin::Arguments* args) {
       p_arguments = *p_arguments_utf8;
     }
   }
-  office_->sendDialogEvent(window_id, p_arguments);
+  GetOffice()->sendDialogEvent(window_id, p_arguments);
 }
 
 bool OfficeClient::RunMacro(const std::string& url) {
-  return office_->runMacro(url.c_str());
+  return GetOffice()->runMacro(url.c_str());
 }
 
 OfficeClient::_DocumentCallbackContext::_DocumentCallbackContext(
