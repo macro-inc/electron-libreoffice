@@ -128,6 +128,8 @@ void ElectronRenderFrameObserver::DidInstallConditionalFeatures(
   // DidCreateScriptContext();
   bool is_main_world = IsMainWorld(world_id);
   bool is_main_frame = render_frame_->IsMainFrame();
+  bool is_dev_tools = render_frame_->GetWebFrame()->GetDocument().Url().ProtocolIs("devtools");
+  bool is_dev_tools_extension = render_frame_->GetWebFrame()->GetDocument().Url().ProtocolIs("chrome-extension");
   bool allow_node_in_sub_frames = prefs.node_integration_in_sub_frames;
 
   bool should_create_isolated_context =
@@ -135,7 +137,7 @@ void ElectronRenderFrameObserver::DidInstallConditionalFeatures(
       (is_main_frame || allow_node_in_sub_frames);
 
 #if BUILDFLAG(ENABLE_OFFICE)
-  if (is_main_world) {
+  if (is_main_world && !is_dev_tools && !is_dev_tools_extension) {
     office::OfficeClient::GetCurrent()->InstallToContext(context);
   }
 #endif
