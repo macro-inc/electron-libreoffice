@@ -1,3 +1,4 @@
+/// <reference path="../src/electron/npm/libreoffice.d.ts" />
 const picker = document.getElementById('el-picker');
 const embed = document.getElementById('el-embed');
 const thumb = document.getElementById('el-thumb');
@@ -27,6 +28,21 @@ picker.onchange = () => {
     globalDoc = doc;
 
     embed.renderDocument(doc);
+
+    const xTxtDoc = doc.as('text.XTextDocument');
+    const xTxt = xTxtDoc.getText();
+    const wordCursor = xTxt.createTextCursor().as('text.XWordCursor');
+    wordCursor.gotoStart(false);
+    wordCursor.gotoStartOfWord(false);
+    for (let i=0; i < 6; i++) {
+      wordCursor.gotoNextWord(true);
+    }
+    wordCursor.gotoEndOfWord(true);
+    const xTxtR = wordCursor.as('text.XTextRange');
+    const xView = xTxtDoc.getCurrentController();
+    const xLayout = xView.as('text.XTextViewLayoutSupplier');
+    console.log(xLayout.getTextRangeRects(xTxtR));
+
     thumb.renderDocument(doc);
     thumb.setZoom(0.1);
     embed.focus();
