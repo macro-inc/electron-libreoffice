@@ -15,6 +15,7 @@
 #include "base/logging.h"
 #include "base/memory/singleton.h"
 #include "base/native_library.h"
+#include "base/notreached.h"
 #include "base/stl_util.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -23,6 +24,7 @@
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
 #include "gin/per_isolate_data.h"
+#include "office/async_resolver_scope.h"
 #include "office/document_client.h"
 #include "office/event_bus.h"
 #include "office/lok_callback.h"
@@ -157,7 +159,7 @@ gin::ObjectTemplateBuilder OfficeClient::GetObjectTemplateBuilder(
       .SetMethod("getVersionInfo", &OfficeClient::GetVersionInfo)
       .SetMethod("runMacro", &OfficeClient::RunMacro)
       .SetMethod("sendDialogEvent", &OfficeClient::SendDialogEvent)
-      .SetMethod("loadDocument", &OfficeClient::LoadDocument);
+      .SetMethod("loadDocument", &OfficeClient::LoadDocumentAsync);
 }
 
 const char* OfficeClient::GetTypeName() {
@@ -194,29 +196,36 @@ std::string OfficeClient::GetLastError() {
   return result;
 }
 
-v8::Local<v8::Value> OfficeClient::LoadDocument(v8::Isolate* isolate,
-                                                const std::string& path) {
+DocumentClient* OfficeClient::PrepareDocumentClient(lok::Document* doc,
+                                                    const std::string& path) {
+  DocumentClient* doc_client =
+      new DocumentClient(weak_factory_.GetWeakPtr(), doc, path);
+
+  if (document_contexts_.find(doc) == document_contexts_.end()) {
+    DocumentCallbackContext* context = new DocumentCallbackContext{
+        base::SequencedTaskRunnerHandle::Get(), doc_client->GetWeakPtr()};
+    doc->registerCallback(OfficeClient::HandleDocumentCallback, context);
+    document_contexts_.emplace(doc, context);
+  }
+
+  return doc_client;
+}
+
+lok::Document* OfficeClient::LoadDocument(const std::string& path) {
   GetOffice()->setOptionalFeatures(
       LibreOfficeKitOptionalFeatures::LOK_FEATURE_NO_TILED_ANNOTATIONS);
 
-  lok::Document* doc = GetDocument(path);
+  lok::Document* doc =
+      GetOffice()->documentLoad(path.c_str(), "Language=en-US,Batch=true");
 
   if (!doc) {
-    doc = GetOffice()->documentLoad(path.c_str(), "Language=en-US,Batch=true");
+    LOG(ERROR) << "Unable to load '" << path
+               << "': " << GetOffice()->getError();
+    return nullptr;
+  }
 
-    if (!doc) {
-      LOG(ERROR) << "Unable to load '" << path << "': " << GetOffice()->getError();
-      return v8::Undefined(isolate);
-    }
-
-    if (!document_map_.emplace(path.c_str(), doc).second) {
-      LOG(ERROR)
-          << "Unable to add LOK document to office client, out of memory?";
-      return v8::Undefined(isolate);
-    }
-
-    // TODO: pass these options from the function call?
-    doc->initializeForRendering(R"({
+  // TODO: pass these options from the function call?
+  doc->initializeForRendering(R"({
       ".uno:ShowBorderShadow": {
         "type": "boolean",
         "value": false
@@ -234,21 +243,73 @@ v8::Local<v8::Value> OfficeClient::LoadDocument(v8::Isolate* isolate,
         "value": "Your Friendly Neighborhood Author"
       }
     })");
-  }
+  return doc;
+}
 
-  DocumentClient* doc_client =
-      new DocumentClient(weak_factory_.GetWeakPtr(), doc, path);
+v8::Local<v8::Promise> OfficeClient::LoadDocumentAsync(
+    v8::Isolate* isolate,
+    const std::string& path) {
+  v8::Local<v8::Promise::Resolver> promise =
+      v8::Promise::Resolver::New(isolate->GetCurrentContext()).ToLocalChecked();
 
-  if (document_contexts_.find(doc) == document_contexts_.end()) {
-    DocumentCallbackContext* context =
-        new DocumentCallbackContext{base::SequencedTaskRunnerHandle::Get(),
-                                    doc_client->GetWeakPtr()};
+  lok::Document* doc = GetDocument(path);
+  if (doc) {
+    DocumentClient* doc_client = PrepareDocumentClient(doc, path);
     doc_client->GetEventBus()->SetContext(isolate,
                                           isolate->GetCurrentContext());
-    doc->registerCallback(OfficeClient::HandleDocumentCallback, context);
-    document_contexts_.emplace(doc, context);
+    v8::Local<v8::Object> v8_doc_client;
+    if (!doc_client->GetWrapper(isolate).ToLocal(&v8_doc_client)) {
+      promise->Resolve(isolate->GetCurrentContext(), v8::Undefined(isolate))
+          .Check();
+    }
+
+    promise->Resolve(isolate->GetCurrentContext(), v8_doc_client).Check();
+  } else {
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, {base::MayBlock()},
+        base::BindOnce(&OfficeClient::LoadDocument, base::Unretained(this),
+                       path),
+        base::BindOnce(&OfficeClient::LoadDocumentComplete,
+                       weak_factory_.GetWeakPtr(), isolate,
+                       v8::Global<v8::Promise::Resolver>(isolate, promise),
+                       path));
   }
-  return gin::CreateHandle(isolate, doc_client).ToV8();
+
+  return promise->GetPromise();
+}
+
+void OfficeClient::LoadDocumentComplete(
+    v8::Isolate* isolate,
+    v8::Global<v8::Promise::Resolver> promise_,
+    const std::string& path,
+    lok::Document* doc) {
+  AsyncResolverScope async(isolate, std::move(promise_));
+  v8::Local<v8::Promise::Resolver> promise = async.Resolver();
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
+
+  if (!doc) {
+    promise->Resolve(context, v8::Undefined(isolate)).Check();
+    return;
+  }
+
+  if (!document_map_.emplace(path.c_str(), doc).second) {
+    LOG(ERROR) << "Unable to add LOK document to office client, out of memory?";
+    promise->Resolve(context, v8::Undefined(isolate)).Check();
+    return;
+  }
+  DocumentClient* doc_client = PrepareDocumentClient(doc, path);
+  if (!doc_client) {
+    promise->Resolve(context, v8::Undefined(isolate)).Check();
+    return;
+  }
+
+  doc_client->GetEventBus()->SetContext(isolate, context);
+  v8::Local<v8::Object> v8_doc_client;
+  if (!doc_client->GetWrapper(isolate).ToLocal(&v8_doc_client)) {
+    promise->Resolve(context, v8::Undefined(isolate)).Check();
+  }
+
+  promise->Resolve(context, v8_doc_client).Check();
 }
 
 bool OfficeClient::CloseDocument(const std::string& path) {

@@ -53,6 +53,8 @@ source_set("internal") {
     "lok_callback.h",
     "office_singleton.cc",
     "office_singleton.h",
+    "async_resolver_scope.cc",
+    "async_resolver_scope.h",
     "office_client.cc",
     "office_client.h",
     lok_sdk_dir + "/unov8.hxx",

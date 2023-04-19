@@ -18,13 +18,13 @@ const thumb = document.getElementById('el-thumb');
 let globalDoc;
 let zoom = 1.0;
 let uri;
-picker.onchange = () => {
+picker.onchange = async () => {
   if (picker.files.length === 1) {
     uri = encodeURI(
       'file:///' + picker.files[0].path.replace(/\\/g, '/')
     );
     runColorizeWorker();
-    const doc = libreoffice.loadDocument(uri);
+    const doc = await libreoffice.loadDocument(uri);
     globalDoc = doc;
 
     embed.renderDocument(doc);
@@ -117,13 +117,13 @@ function colorizeWorker() {
   });
   let doc;
   let shouldStop = false;
-  self.addEventListener('message', function(e) {
+  self.addEventListener('message', async function(e) {
     var data = e.data;
     switch (data.type) {
       case 'load':
         const timeStart = performance.now();
         self.postMessage({ type: 'loading', file: data.file });
-        doc = libreoffice.loadDocument(data.file);
+        doc = await libreoffice.loadDocument(data.file);
         self.postMessage({ type: 'loaded', file: data.file });
         const old = doc.as('text.XTextDocument');
         delete old;

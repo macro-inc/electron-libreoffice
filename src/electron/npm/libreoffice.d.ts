@@ -363,9 +363,9 @@ declare namespace LibreOffice {
     /**
      * loads a given document
      * @param path - the document path
-     * @returns the document client if the load succeeded, undefined if the load failed
+     * @returns a Promise of the document client if the load succeeded, undefined if the load failed
      */
-    loadDocument(path: string): DocumentClient | undefined;
+    loadDocument(path: string): Promise<DocumentClient | undefined>;
 
     /**
      * run a macro

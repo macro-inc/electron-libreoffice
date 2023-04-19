@@ -85,8 +85,15 @@ class OfficeClient : public gin::Wrappable<OfficeClient> {
 
  protected:
   std::string GetLastError();
-  v8::Local<v8::Value> LoadDocument(v8::Isolate* isolate,
-                                    const std::string& path);
+  lok::Document* LoadDocument(const std::string& path);
+  DocumentClient* PrepareDocumentClient(lok::Document* doc,
+                                        const std::string& path);
+  v8::Local<v8::Promise> LoadDocumentAsync(v8::Isolate* isolate,
+                                           const std::string& path);
+  void LoadDocumentComplete(v8::Isolate* isolate,
+                            v8::Global<v8::Promise::Resolver> promise,
+                            const std::string& path,
+                            lok::Document* client);
 
  private:
   OfficeClient();
