@@ -572,7 +572,7 @@ void OfficeWebPlugin::HandleInvalidateTiles(std::string payload) {
 }
 
 void OfficeWebPlugin::HandleDocumentSizeChanged(std::string payload) {
-  ResetTileBuffers();
+  part_tile_buffer_.at(0).Resize();
 }
 
 float OfficeWebPlugin::TotalScale() {
@@ -655,7 +655,9 @@ bool OfficeWebPlugin::RenderDocument(
 
   document_ = client->GetDocument();
   if (needs_reset) {
-    ResetTileBuffers();
+    task_runner_->PostTask(FROM_HERE,
+                           base::BindOnce(&OfficeWebPlugin::ResetTileBuffers,
+                                          base::Unretained(this)));
   }
 
   document_client_ = client.get();
@@ -668,10 +670,12 @@ bool OfficeWebPlugin::RenderDocument(
     // this is an awful hack
     auto device_scale = device_scale_;
     device_scale_ = 0;
-    OnViewportChanged(css_plugin_rect_, device_scale);
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&OfficeWebPlugin::OnViewportChanged,
+                       base::Unretained(this), css_plugin_rect_, device_scale));
   }
 
-  document_->setViewLanguage(view_id_, "en-US");
   document_->setView(view_id_);
   document_->resetSelection();
 
@@ -688,9 +692,14 @@ bool OfficeWebPlugin::RenderDocument(
                             base::Unretained(this)));
   }
   if (needs_reset) {
-    OnGeometryChanged(viewport_zoom_, device_scale_);
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&OfficeWebPlugin::OnGeometryChanged,
+                       base::Unretained(this), viewport_zoom_, device_scale_));
   }
-  TriggerFullRerender();
+  task_runner_->PostTask(FROM_HERE,
+                         base::BindOnce(&OfficeWebPlugin::TriggerFullRerender,
+                                        base::Unretained(this)));
   return true;
 }
 

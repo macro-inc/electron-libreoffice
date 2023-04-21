@@ -42,6 +42,7 @@ class TileBuffer {
   void Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect);
   void SetYPosition(float y);
   bool PartiallyPainted();
+  void Resize();
 
  private:
   void PaintTile(uint8_t* buffer, int column, int row);
@@ -94,6 +95,7 @@ class TileBuffer {
   // 256MiB should be sufficient to display an 8K display twice, so should be
   // fine for now?
   static constexpr size_t kPoolAllocatedSize = 256 * 1024 * 1024;
+  static constexpr size_t kPoolAligned = 4096;
 
   std::shared_ptr<uint8_t[]> pool_buffer_ = nullptr;
   size_t pool_buffer_stride_;
