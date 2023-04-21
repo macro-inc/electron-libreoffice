@@ -83,17 +83,19 @@ class OfficeClient : public gin::Wrappable<OfficeClient> {
   bool RunMacro(const std::string& url);
   // }
 
+  typedef std::pair<lok::Document*, int> LOKDocWithViewId;
+  DocumentClient* PrepareDocumentClient(LOKDocWithViewId doc,
+                                        const std::string& path);
+
  protected:
   std::string GetLastError();
-  lok::Document* LoadDocument(const std::string& path);
-  DocumentClient* PrepareDocumentClient(lok::Document* doc,
-                                        const std::string& path);
+  LOKDocWithViewId LoadDocument(const std::string& path);
   v8::Local<v8::Promise> LoadDocumentAsync(v8::Isolate* isolate,
                                            const std::string& path);
   void LoadDocumentComplete(v8::Isolate* isolate,
                             v8::Global<v8::Promise::Resolver> promise,
                             const std::string& path,
-                            lok::Document* client);
+                            LOKDocWithViewId client);
 
  private:
   OfficeClient();

@@ -50,6 +50,7 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
 
   DocumentClient(base::WeakPtr<OfficeClient> office_client,
                  lok::Document* document,
+                 int view_id,
                  std::string path);
 
   static void HandleLibreOfficeCallback(int type,
@@ -136,6 +137,8 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   void ForwardLibreOfficeEvent(int type, std::string payload);
 
   void Unmount();
+  void SetView();
+  v8::Local<v8::Value> NewView(v8::Isolate* isolate);
 
   base::WeakPtr<DocumentClient> GetWeakPtr();
 
@@ -151,6 +154,9 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   void OnClipboardChanged();
 
   void RefreshSize();
+
+  int ViewId();
+  bool IsMounted();
 
   // has a
   lok::Document* document_ = nullptr;

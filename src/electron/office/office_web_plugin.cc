@@ -404,8 +404,15 @@ bool OfficeWebPlugin::HandleMouseEvent(blink::WebInputEvent::Type type,
     buttons |= 4;
 
   if (buttons > 0) {
-    document_->postMouseEvent(event_type, pos.x(), pos.y(), clickCount, buttons,
-                              office::EventModifiersToLOKModifiers(modifiers));
+    task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&lok::Document::setView,
+                                  base::Unretained(document_), view_id_));
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&lok::Document::postMouseEvent,
+                       base::Unretained(document_), event_type, pos.x(),
+                       pos.y(), clickCount, buttons,
+                       office::EventModifiersToLOKModifiers(modifiers)));
     return true;
   }
 

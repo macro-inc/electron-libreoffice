@@ -63,9 +63,11 @@ gin::WrapperInfo DocumentClient::kWrapperInfo = {gin::kEmbedderNativeGin};
 
 DocumentClient::DocumentClient(base::WeakPtr<OfficeClient> office_client,
                                lok::Document* document,
+                               int view_id,
                                std::string path)
     : document_(document),
       path_(path),
+      view_id_(view_id),
       office_client_(std::move(office_client)) {
   // assumes the document loaded succesfully from OfficeClient
   DCHECK(document_);
@@ -132,6 +134,7 @@ gin::ObjectTemplateBuilder DocumentClient::GetObjectTemplateBuilder(
       .SetMethod("sendContentControlEvent",
                  &DocumentClient::SendContentControlEvent)
       .SetMethod("as", &DocumentClient::As)
+      .SetMethod("newView", &DocumentClient::NewView)
       .SetProperty("isReady", &DocumentClient::IsReady);
 }
 
@@ -185,9 +188,13 @@ void SaveBackup(const std::string& path) {
 }
 }  // namespace
 
+bool DocumentClient::IsMounted() {
+  return !mounted_.IsEmpty();
+}
+
 int DocumentClient::Mount(v8::Isolate* isolate) {
-  if (view_id_ != -1) {
-    return view_id_;
+  if (IsMounted()) {
+    return ViewId();
   }
 
   {
@@ -200,11 +207,7 @@ int DocumentClient::Mount(v8::Isolate* isolate) {
     }
   }
 
-  if (office_client_->MarkMounted(document_)) {
-    view_id_ = document_->getView();
-  } else {
-    view_id_ = document_->createView();
-  }
+  office_client_->MarkMounted(document_);
 
   RefreshSize();
 
@@ -231,17 +234,13 @@ int DocumentClient::Mount(v8::Isolate* isolate) {
 
   event_bus_.Emit("ready", ready_value);
 
-  return view_id_;
+  return ViewId();
 }
 
 void DocumentClient::Unmount() {
-  // not mounted
-  if (view_id_ == -1)
+  if (!IsMounted())
     return;
 
-  if (document_->getViewsCount() > 1) {
-    document_->destroyView(view_id_);
-  }
   view_id_ = -1;
 
   // allow garbage collection
@@ -288,7 +287,7 @@ void DocumentClient::HandleStateChange(std::string payload) {
     uno_state_.insert(pair);
   }
 
-  if (view_id_ == -1 || !is_ready_) {
+  if (!IsMounted() || !is_ready_) {
     state_change_buffer_.emplace_back(payload);
   }
 }
@@ -785,6 +784,31 @@ v8::Local<v8::Value> DocumentClient::As(const std::string& type,
 
 void DocumentClient::ForwardLibreOfficeEvent(int type, std::string payload) {
   event_bus_.EmitLibreOfficeEvent(type, payload);
+}
+
+int DocumentClient::ViewId() {
+  if (!document_)
+    return -1;
+
+  return view_id_;
+}
+
+v8::Local<v8::Value> DocumentClient::NewView(v8::Isolate* isolate) {
+  DocumentClient* new_client = office_client_->PrepareDocumentClient(
+      std::make_pair(document_, document_->createView()), path_);
+  v8::Local<v8::Object> result;
+
+  if (!new_client->GetWrapper(isolate).ToLocal(&result))
+    return v8::Undefined(isolate);
+
+  return result;
+}
+
+void DocumentClient::SetView() {
+  if (ViewId() == -1)
+    return;
+
+  document_->setView(ViewId());
 }
 
 }  // namespace electron::office

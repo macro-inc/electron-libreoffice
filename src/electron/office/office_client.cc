@@ -196,22 +196,25 @@ std::string OfficeClient::GetLastError() {
   return result;
 }
 
-DocumentClient* OfficeClient::PrepareDocumentClient(lok::Document* doc,
+DocumentClient* OfficeClient::PrepareDocumentClient(LOKDocWithViewId doc,
                                                     const std::string& path) {
-  DocumentClient* doc_client =
-      new DocumentClient(weak_factory_.GetWeakPtr(), doc, path);
+  DocumentClient* doc_client = new DocumentClient(weak_factory_.GetWeakPtr(),
+                                                  doc.first, doc.second, path);
 
-  if (document_contexts_.find(doc) == document_contexts_.end()) {
+  if (document_contexts_.find(doc.first) == document_contexts_.end()) {
     DocumentCallbackContext* context = new DocumentCallbackContext{
         base::SequencedTaskRunnerHandle::Get(), doc_client->GetWeakPtr()};
-    doc->registerCallback(OfficeClient::HandleDocumentCallback, context);
-    document_contexts_.emplace(doc, context);
+
+    doc_client->SetView();
+    doc.first->registerCallback(OfficeClient::HandleDocumentCallback, context);
+    document_contexts_.emplace(doc.first, context);
   }
 
   return doc_client;
 }
 
-lok::Document* OfficeClient::LoadDocument(const std::string& path) {
+OfficeClient::LOKDocWithViewId OfficeClient::LoadDocument(
+    const std::string& path) {
   GetOffice()->setOptionalFeatures(
       LibreOfficeKitOptionalFeatures::LOK_FEATURE_NO_TILED_ANNOTATIONS);
 
@@ -221,8 +224,10 @@ lok::Document* OfficeClient::LoadDocument(const std::string& path) {
   if (!doc) {
     LOG(ERROR) << "Unable to load '" << path
                << "': " << GetOffice()->getError();
-    return nullptr;
+    return std::make_pair(nullptr, -1);
   }
+
+  int view_id = doc->getView();
 
   // TODO: pass these options from the function call?
   doc->initializeForRendering(R"({
@@ -243,7 +248,7 @@ lok::Document* OfficeClient::LoadDocument(const std::string& path) {
         "value": "Your Friendly Neighborhood Author"
       }
     })");
-  return doc;
+  return std::make_pair(doc, view_id);
 }
 
 v8::Local<v8::Promise> OfficeClient::LoadDocumentAsync(
@@ -254,7 +259,8 @@ v8::Local<v8::Promise> OfficeClient::LoadDocumentAsync(
 
   lok::Document* doc = GetDocument(path);
   if (doc) {
-    DocumentClient* doc_client = PrepareDocumentClient(doc, path);
+    DocumentClient* doc_client =
+        PrepareDocumentClient(std::make_pair(doc, doc->getView()), path);
     doc_client->GetEventBus()->SetContext(isolate,
                                           isolate->GetCurrentContext());
     v8::Local<v8::Object> v8_doc_client;
@@ -266,7 +272,7 @@ v8::Local<v8::Promise> OfficeClient::LoadDocumentAsync(
     promise->Resolve(isolate->GetCurrentContext(), v8_doc_client).Check();
   } else {
     base::ThreadPool::PostTaskAndReplyWithResult(
-        FROM_HERE, {base::MayBlock()},
+        FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
         base::BindOnce(&OfficeClient::LoadDocument, base::Unretained(this),
                        path),
         base::BindOnce(&OfficeClient::LoadDocumentComplete,
@@ -282,17 +288,17 @@ void OfficeClient::LoadDocumentComplete(
     v8::Isolate* isolate,
     v8::Global<v8::Promise::Resolver> promise_,
     const std::string& path,
-    lok::Document* doc) {
+    std::pair<lok::Document*, int> doc) {
   AsyncResolverScope async(isolate, std::move(promise_));
   v8::Local<v8::Promise::Resolver> promise = async.Resolver();
   v8::Local<v8::Context> context = isolate->GetCurrentContext();
 
-  if (!doc) {
+  if (!doc.first) {
     promise->Resolve(context, v8::Undefined(isolate)).Check();
     return;
   }
 
-  if (!document_map_.emplace(path.c_str(), doc).second) {
+  if (!document_map_.emplace(path.c_str(), doc.first).second) {
     LOG(ERROR) << "Unable to add LOK document to office client, out of memory?";
     promise->Resolve(context, v8::Undefined(isolate)).Check();
     return;
