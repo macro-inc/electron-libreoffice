@@ -213,26 +213,14 @@ int DocumentClient::Mount(v8::Isolate* isolate) {
 
   tile_mode_ = static_cast<LibreOfficeKitTileMode>(document_->getTileMode());
 
-  // emit the state change buffer when ready
-  v8::Local<v8::Array> ready_value =
-      v8::Array::New(isolate, state_change_buffer_.size());
-  v8::Local<v8::Context> context = v8::Context::New(isolate);
-  if (!state_change_buffer_.empty()) {
-    for (size_t i = 0; i < state_change_buffer_.size(); i++) {
-      // best effort
-      std::ignore = ready_value->Set(
-          context, i,
-          lok_callback::PayloadToLocalValue(isolate, LOK_CALLBACK_STATE_CHANGED,
-                                            state_change_buffer_[i].c_str()));
-    }
-
-    state_change_buffer_.clear();
-  }
+  base::SequencedTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          &DocumentClient::EmitReady, GetWeakPtr(), isolate,
+          v8::Global<v8::Context>(isolate, isolate->GetCurrentContext())));
 
   // save a backup before we continue
   SaveBackup(path_);
-
-  event_bus_.Emit("ready", ready_value);
 
   return ViewId();
 }
@@ -809,6 +797,35 @@ void DocumentClient::SetView() {
     return;
 
   document_->setView(ViewId());
+}
+
+void DocumentClient::EmitReady(v8::Isolate* isolate,
+                               v8::Global<v8::Context> context) {
+  v8::Isolate::Scope isolate_scope(isolate);
+  v8::HandleScope handle_scope(isolate);
+  v8::MicrotasksScope microtasks_scope(
+      isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
+  v8::Local<v8::Context> context_ = context.Get(isolate);
+  v8::Context::Scope context_scope(context_);
+
+  // emit the state change buffer when ready
+  v8::Local<v8::Array> ready_value =
+      v8::Array::New(isolate, state_change_buffer_.size());
+
+  if (!state_change_buffer_.empty()) {
+    for (size_t i = 0; i < state_change_buffer_.size(); i++) {
+      ready_value
+          ->Set(context_, i,
+                lok_callback::PayloadToLocalValue(
+                    isolate, LOK_CALLBACK_STATE_CHANGED,
+                    state_change_buffer_[i].c_str()))
+          .Check();
+    }
+
+    state_change_buffer_.clear();
+  }
+
+  event_bus_.Emit("ready", ready_value);
 }
 
 }  // namespace electron::office

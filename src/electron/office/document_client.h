@@ -158,6 +158,8 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   int ViewId();
   bool IsMounted();
 
+  void EmitReady(v8::Isolate* isolate, v8::Global<v8::Context> context);
+
   // has a
   lok::Document* document_ = nullptr;
   std::string path_;
