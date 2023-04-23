@@ -228,26 +228,6 @@ OfficeClient::LOKDocWithViewId OfficeClient::LoadDocument(
   }
 
   int view_id = doc->getView();
-
-  // TODO: pass these options from the function call?
-  doc->initializeForRendering(R"({
-      ".uno:ShowBorderShadow": {
-        "type": "boolean",
-        "value": false
-      },
-      ".uno:HideWhitespace": {
-        "type": "boolean",
-        "value": false
-      },
-      ".uno:SpellOnline": {
-        "type": "boolean",
-        "value": false
-      },
-      ".uno:Author": {
-        "type": "string",
-        "value": "Your Friendly Neighborhood Author"
-      }
-    })");
   return std::make_pair(doc, view_id);
 }
 
@@ -315,7 +295,31 @@ void OfficeClient::LoadDocumentComplete(
     promise->Resolve(context, v8::Undefined(isolate)).Check();
   }
 
+
   promise->Resolve(context, v8_doc_client).Check();
+
+  // TODO: pass these options from the function call?
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
+      base::BindOnce(&lok::Document::initializeForRendering, base::Unretained(doc.first),
+                     R"({
+      ".uno:ShowBorderShadow": {
+        "type": "boolean",
+        "value": false
+      },
+      ".uno:HideWhitespace": {
+        "type": "boolean",
+        "value": false
+      },
+      ".uno:SpellOnline": {
+        "type": "boolean",
+        "value": false
+      },
+      ".uno:Author": {
+        "type": "string",
+        "value": "Your Friendly Neighborhood Author"
+      }
+    })"));
 }
 
 bool OfficeClient::CloseDocument(const std::string& path) {
