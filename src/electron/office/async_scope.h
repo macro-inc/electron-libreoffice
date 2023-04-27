@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Macro.
+// Copyright (c) 2023 Macro.
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
@@ -18,21 +18,17 @@ namespace electron::office {
  * Manages V8 scope for a promise that resolves across threads
  * Necessary because all scopes are lost across thread boundaries
  */
-class AsyncResolverScope {
+class AsyncScope {
  public:
-  AsyncResolverScope(v8::Isolate* isolate, v8::Global<v8::Promise::Resolver> resolver);
-  explicit AsyncResolverScope(const AsyncResolverScope&) = delete;
-  AsyncResolverScope& operator=(const AsyncResolverScope&) = delete;
-  ~AsyncResolverScope();
-
-  v8::Local<v8::Promise::Resolver> Resolver();
+  explicit AsyncScope(v8::Isolate* isolate);
+  explicit AsyncScope(const AsyncScope&) = delete;
+  AsyncScope& operator=(const AsyncScope&) = delete;
+  ~AsyncScope();
 
  private:
   const v8::Isolate::Scope isolate_scope_;
   const v8::HandleScope handle_scope_;
   const v8::MicrotasksScope microtasks_scope_;
-  const v8::Local<v8::Promise::Resolver> resolver_;
-  const v8::Context::Scope context_scope_;
 };
 
 }

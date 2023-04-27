@@ -6,10 +6,40 @@
 #define OFFICE_OFFICE_KEYS_H_
 
 #include <cstdint>
-#include "third_party/blink/public/common/input/web_input_event.h"
 namespace electron::office {
 
-using Modifiers = blink::WebInputEvent::Modifiers;
+// compatible with Modifiers //third_party/blink/public/common/input/web_input_event.h
+// but without the large number of dependencies
+enum Modifiers {
+  kShiftKey = 1 << 0,
+  kControlKey = 1 << 1,
+  kAltKey = 1 << 2,
+  kMetaKey = 1 << 3,
+
+  kIsKeyPad = 1 << 4,
+  kIsAutoRepeat = 1 << 5,
+
+  kLeftButtonDown = 1 << 6,
+  kMiddleButtonDown = 1 << 7,
+  kRightButtonDown = 1 << 8,
+
+  kCapsLockOn = 1 << 9,
+  kNumLockOn = 1 << 10,
+
+  kIsLeft = 1 << 11,
+  kIsRight = 1 << 12,
+
+  kIsComposing = 1 << 14,
+
+  kAltGrKey = 1 << 15,
+  kFnKey = 1 << 16,
+  kSymbolKey = 1 << 17,
+
+  kKeyModifiers = kSymbolKey | kFnKey | kAltGrKey | kMetaKey | kAltKey |
+                  kControlKey | kShiftKey,
+
+  kNoModifiers = 0,
+};
 
 // based on include/vcl/keycodes.hxx
 enum LOKModifiers : unsigned short {

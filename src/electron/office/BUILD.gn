@@ -5,6 +5,7 @@
 import("//build/buildflag_header.gni")
 import("//electron/buildflags/buildflags.gni")
 import("//ppapi/buildflags/buildflags.gni")
+import("//testing/test.gni")
 import("//v8/gni/v8.gni")
 
 buildflag_header("buildflags") {
@@ -39,10 +40,65 @@ config("electron_config") {
   include_dirs = ["//electron"]
 }
 
-source_set("internal") {
+source_set("unov8") {
   visibility = [ ":*" ]
 
   sources = [
+    lok_sdk_dir + "/unov8.hxx",
+    lok_sdk_dir + "/unov8.cxx",
+  ]
+
+  configs += [ lok_sdk_dir + ":libreoffice_lib_config" ]
+  configs += [ ":electron_config" ]
+
+  deps = [
+    ":buildflags",
+    "//base",
+    "//gin",
+  ]
+}
+
+
+test("office_unittests") {
+  sources = [
+    "test/mocked_scoped_clipboard_writer.cc",
+    "test/office_test.cc",
+    "test/office_test.h",
+    "atomic_bitset_unittest.cc",
+    "office_singleton_unittest.cc",
+    "office_client_unittest.cc",
+    "document_client_unittest.cc",
+    "event_bus_unittest.cc",
+    "lok_tilebuffer_unittest.cc",
+    "paint_manager_unittest.cc",
+    "test/run_all_unittests.cc",
+  ]
+
+  configs += [ lok_sdk_dir + ":libreoffice_lib_config" ]
+  configs += [ ":electron_config" ]
+
+  public_deps = [
+    ":copy_libreofficekit"
+  ]
+
+  deps = [
+    ":office_lib",
+    "//base",
+    "//base/test:test_support",
+    "//url:url",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//gin:gin_test",
+    "//mojo/public/cpp/base:base"
+  ]
+}
+
+source_set("office_lib") {
+  visibility = [ ":*" ]
+
+  sources = [
+    "atomic_bitset.cc",
+    "atomic_bitset.h",
     "document_client.cc",
     "document_client.h",
     "event_bus.cc",
@@ -51,14 +107,16 @@ source_set("internal") {
     "lok_tilebuffer.h",
     "lok_callback.cc",
     "lok_callback.h",
+    "paint_manager.cc",
+    "paint_manager.h",
     "office_singleton.cc",
     "office_singleton.h",
-    "async_resolver_scope.cc",
-    "async_resolver_scope.h",
+    "async_scope.cc",
+    "async_scope.h",
+    "threaded_promise_resolver.cc",
+    "threaded_promise_resolver.h",
     "office_client.cc",
     "office_client.h",
-    lok_sdk_dir + "/unov8.hxx",
-    lok_sdk_dir + "/unov8.cxx",
     "office_keys.cc",
     "office_keys.h",
   ]
@@ -67,25 +125,17 @@ source_set("internal") {
   #   "//build/config/compiler:no_exceptions",
   #   "//build/config/compiler:no_rtti",
   # ]
-  configs += [ lok_sdk_dir + ":libreoffice_lib_config" ]
 
   deps = [
     ":buildflags",
+    ":unov8",
     "//base",
-    "//components/plugins/renderer",
-    "//components/strings",
     "//gin",
-    "//third_party/blink/public:blink_headers",
-    "//third_party/icu",
-    "//ui/base",
-    "//ui/base/cursor/mojom:cursor_type",
-    "//ui/events:events_base",
-    "//ui/events/blink",
-    "//ui/gfx/codec",
-    "//ui/gfx/range",
+    "//ui/gfx/geometry", # DocumentClient
   ]
 
   configs += [ ":electron_config" ]
+  configs += [ lok_sdk_dir + ":libreoffice_lib_config" ]
 
   public_deps = [
     "//skia",
@@ -121,16 +171,22 @@ static_library("office_web_plugin") {
 
   deps = [
     ":buildflags",
-    ":internal",
+    ":office_lib",
     "//base",
+    "//third_party/icu",
     "//base:i18n",
+    "//components/strings",
+    "//components/plugins/renderer",
     "//cc/paint",
     "//gin",
     "//skia",
     "//third_party/blink/public:blink_headers",
+    "//ui/base",
     "//ui/base/cursor",
     "//ui/base/cursor/mojom:cursor_type",
+    "//ui/events:events_base",
     "//ui/events/blink",
+    "//ui/gfx/range",
     "//v8",
   ]
 }

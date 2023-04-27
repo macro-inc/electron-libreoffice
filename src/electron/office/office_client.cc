@@ -24,13 +24,12 @@
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
 #include "gin/per_isolate_data.h"
-#include "office/async_resolver_scope.h"
+#include "office/async_scope.h"
 #include "office/document_client.h"
 #include "office/event_bus.h"
 #include "office/lok_callback.h"
 #include "office/office_singleton.h"
 #include "shell/common/gin_converters/std_converter.h"
-#include "third_party/blink/public/web/blink.h"
 #include "v8/include/v8-function.h"
 #include "v8/include/v8-isolate.h"
 #include "v8/include/v8-json.h"
@@ -86,24 +85,48 @@ void OfficeClient::HandleDocumentCallback(int type,
                      type, payload ? std::string(payload) : std::string()));
 }
 
-v8::Local<v8::Object> OfficeClient::GetHandle(v8::Isolate* isolate) {
+v8::Local<v8::Object> OfficeClient::GetHandle(v8::Local<v8::Context> context) {
+  v8::Context::Scope context_scope(context);
+  v8::Isolate* isolate = context->GetIsolate();
+  v8::EscapableHandleScope handle_scope(isolate);
   if (eternal_.IsEmpty()) {
-    event_bus_.SetContext(isolate, isolate->GetCurrentContext());
-    eternal_.Set(isolate, GetWrapper(isolate).ToLocalChecked());
+    v8::Local<v8::Object> local;
+    if (GetWrapper(isolate).ToLocal(&local)) {
+      eternal_.Set(isolate, local);
+    } else {
+      LOG(ERROR) << "Unable to prepare OfficeClient";
+    }
   }
 
-  return eternal_.Get(isolate);
+  return handle_scope.Escape(eternal_.Get(isolate));
 }
 
 // instance
 namespace {
 static void GetOfficeHandle(v8::Local<v8::Name> name,
                             const v8::PropertyCallbackInfo<v8::Value>& info) {
-  if (!OfficeClient::GetCurrent())
+  v8::Isolate* isolate = info.GetIsolate();
+  if (!isolate) {
     return;
+  }
 
-  info.GetReturnValue().Set(
-      OfficeClient::GetCurrent()->GetHandle(info.GetIsolate()));
+  v8::HandleScope handle_scope(isolate);
+  v8::MicrotasksScope microtasks_scope(
+      isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
+
+  v8::Local<v8::Context> context;
+  if (!info.This()->GetCreationContext().ToLocal(&context)) {
+    return;
+  }
+  v8::Context::Scope context_scope(context);
+
+  OfficeClient* current = OfficeClient::GetCurrent();
+  if (!current) {
+    return;
+  }
+
+  auto ret = info.GetReturnValue();
+  ret.Set(current->GetHandle(context));
 }
 }  // namespace
 
@@ -114,13 +137,14 @@ void OfficeClient::InstallToContext(v8::Local<v8::Context> context) {
       isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
 
   context->Global()
-      ->SetNativeDataProperty(
+      ->SetAccessor(
           context, gin::StringToV8(isolate, office::OfficeClient::kGlobalEntry),
-          GetOfficeHandle)
+          GetOfficeHandle, nullptr, v8::MaybeLocal<v8::Value>(),
+          v8::AccessControl::ALL_CAN_READ, v8::PropertyAttribute::ReadOnly)
       .Check();
 }
 
-void OfficeClient::RemoveFromContext(v8::Local<v8::Context> context) {
+void OfficeClient::RemoveFromContext(v8::Local<v8::Context> /*context*/) {
   delete this;
 }
 
@@ -131,7 +155,6 @@ OfficeClient::OfficeClient() {
 // TODO: try to save docs in a separate thread in the background if they are
 // opened and destroyed
 OfficeClient::~OfficeClient() {
-  LOG(ERROR) << "OFFICE CLIENT IS GOING DOWN";
   for (auto& i : document_contexts_) {
     i.second->invalid.Set();
   }
@@ -234,6 +257,7 @@ OfficeClient::LOKDocWithViewId OfficeClient::LoadDocument(
 v8::Local<v8::Promise> OfficeClient::LoadDocumentAsync(
     v8::Isolate* isolate,
     const std::string& path) {
+  v8::EscapableHandleScope handle_scope(isolate);
   v8::Local<v8::Promise::Resolver> promise =
       v8::Promise::Resolver::New(isolate->GetCurrentContext()).ToLocalChecked();
 
@@ -257,51 +281,53 @@ v8::Local<v8::Promise> OfficeClient::LoadDocumentAsync(
                        path),
         base::BindOnce(&OfficeClient::LoadDocumentComplete,
                        weak_factory_.GetWeakPtr(), isolate,
-                       v8::Global<v8::Promise::Resolver>(isolate, promise),
-                       path));
+                       new ThreadedPromiseResolver(isolate, promise), path));
   }
 
-  return promise->GetPromise();
+  return handle_scope.Escape(promise->GetPromise());
 }
 
-void OfficeClient::LoadDocumentComplete(
-    v8::Isolate* isolate,
-    v8::Global<v8::Promise::Resolver> promise_,
-    const std::string& path,
-    std::pair<lok::Document*, int> doc) {
-  AsyncResolverScope async(isolate, std::move(promise_));
-  v8::Local<v8::Promise::Resolver> promise = async.Resolver();
-  v8::Local<v8::Context> context = isolate->GetCurrentContext();
+void OfficeClient::LoadDocumentComplete(v8::Isolate* isolate,
+                                        ThreadedPromiseResolver* resolver,
+                                        const std::string& path,
+                                        std::pair<lok::Document*, int> doc) {
+  if (!OfficeClient::IsValid()) {
+    return;
+  }
+
+  AsyncScope async(isolate);
+  v8::Local<v8::Context> context = resolver->GetCreationContext(isolate);
+  v8::Context::Scope context_scope(context);
 
   if (!doc.first) {
-    promise->Resolve(context, v8::Undefined(isolate)).Check();
+    resolver->Resolve(isolate, v8::Undefined(isolate)).Check();
     return;
   }
 
   if (!document_map_.emplace(path.c_str(), doc.first).second) {
     LOG(ERROR) << "Unable to add LOK document to office client, out of memory?";
-    promise->Resolve(context, v8::Undefined(isolate)).Check();
+    resolver->Resolve(isolate, v8::Undefined(isolate)).Check();
     return;
   }
   DocumentClient* doc_client = PrepareDocumentClient(doc, path);
   if (!doc_client) {
-    promise->Resolve(context, v8::Undefined(isolate)).Check();
+    resolver->Resolve(isolate, v8::Undefined(isolate)).Check();
     return;
   }
 
   doc_client->GetEventBus()->SetContext(isolate, context);
   v8::Local<v8::Object> v8_doc_client;
   if (!doc_client->GetWrapper(isolate).ToLocal(&v8_doc_client)) {
-    promise->Resolve(context, v8::Undefined(isolate)).Check();
+    resolver->Resolve(isolate, v8::Undefined(isolate)).Check();
   }
 
-
-  promise->Resolve(context, v8_doc_client).Check();
+  resolver->Resolve(isolate, v8_doc_client).Check();
 
   // TODO: pass these options from the function call?
   base::ThreadPool::PostTask(
       FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
-      base::BindOnce(&lok::Document::initializeForRendering, base::Unretained(doc.first),
+      base::BindOnce(&lok::Document::initializeForRendering,
+                     base::Unretained(doc.first),
                      R"({
       ".uno:ShowBorderShadow": {
         "type": "boolean",

@@ -18,6 +18,7 @@
 #include "gin/handle.h"
 #include "gin/wrappable.h"
 #include "office/event_bus.h"
+#include "office/threaded_promise_resolver.h"
 #include "v8/include/v8-isolate.h"
 #include "v8/include/v8-local-handle.h"
 
@@ -38,7 +39,7 @@ class OfficeClient : public gin::Wrappable<OfficeClient> {
   static constexpr char kGlobalEntry[] = "libreoffice";
 
   static OfficeClient* GetCurrent();
-  bool IsValid();
+  static bool IsValid();
 
   static void HandleLibreOfficeCallback(int type,
                                         const char* payload,
@@ -52,7 +53,7 @@ class OfficeClient : public gin::Wrappable<OfficeClient> {
   OfficeClient(const OfficeClient&) = delete;
   OfficeClient& operator=(const OfficeClient&) = delete;
 
-  v8::Local<v8::Object> GetHandle(v8::Isolate* isolate);
+  v8::Local<v8::Object> GetHandle(v8::Local<v8::Context> context);
   void InstallToContext(v8::Local<v8::Context> context);
   void RemoveFromContext(v8::Local<v8::Context> context);
 
@@ -93,7 +94,7 @@ class OfficeClient : public gin::Wrappable<OfficeClient> {
   v8::Local<v8::Promise> LoadDocumentAsync(v8::Isolate* isolate,
                                            const std::string& path);
   void LoadDocumentComplete(v8::Isolate* isolate,
-                            v8::Global<v8::Promise::Resolver> promise,
+                            ThreadedPromiseResolver* resolver,
                             const std::string& path,
                             LOKDocWithViewId client);
 

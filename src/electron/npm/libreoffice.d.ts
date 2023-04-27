@@ -9,8 +9,9 @@ interface HTMLLibreOfficeEmbed extends HTMLEmbedElement {
   /**
    * renders a LibreOffice.DocumentClient
    * @param doc the DocumentClient to be rendered
+   * @returns a Promise which is true if render succeeded or false if render failed
    */
-  renderDocument(doc: LibreOffice.DocumentClient): void;
+  renderDocument(doc: LibreOffice.DocumentClient): Promise<boolean>;
   /**
    * description converts twip to a css px
    * @param input - twip

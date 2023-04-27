@@ -7,9 +7,10 @@
 #include <algorithm>
 #include <unordered_map>
 #include "LibreOfficeKit/LibreOfficeKit.hxx"
+#include "async_scope.h"
 #include "base/bind.h"
+#include "base/logging.h"
 #include "base/values.h"
-#include "content/public/renderer/render_frame.h"
 #include "gin/dictionary.h"
 #include "gin/object_template_builder.h"
 #include "gin/per_isolate_data.h"
@@ -17,7 +18,6 @@
 #include "office/lok_callback.h"
 #include "office/office_client.h"
 #include "shell/common/gin_helper/dictionary.h"
-#include "third_party/blink/public/web/blink.h"
 #include "v8/include/v8-isolate.h"
 #include "v8/include/v8-json.h"
 #include "v8/include/v8-local-handle.h"
@@ -67,16 +67,23 @@ void EventBus::Emit(const std::string& event_name, v8::Local<v8::Value> data) {
 
   v8::Local<v8::Value> args[] = {data};
 
+  v8::TryCatch try_catch(isolate_);
   for (PersistedFn& callback : vec) {
     if (callback.IsEmpty())
       continue;
 
     v8::HandleScope handle_scope(isolate_);
-    auto local = v8::Local<v8::Function>::New(isolate_, std::move(callback));
-    v8::Local<v8::Context> context = context_.Get(isolate_);
+    v8::Local<v8::Function> fn =
+        v8::Local<v8::Function>::New(isolate_, std::move(callback));
+    v8::Local<v8::Context> context =
+        v8::Local<v8::Context>::New(isolate_, context_);
     v8::Context::Scope context_scope(context);
 
-    std::ignore = local->Call(context, v8::Null(isolate_), 1, args);
+    v8::Local<v8::Value> discarded;
+    if (!fn->Call(context, v8::Null(isolate_), 1, args).ToLocal(&discarded)) {
+      DCHECK(try_catch.HasCaught());
+      try_catch.Reset();
+    }
   }
 }
 
@@ -93,8 +100,9 @@ void EventBus::EmitLibreOfficeEvent(int type, std::string payload) {
   }
 
   std::string type_string = lok_callback::TypeToEventString(type);
-  if (event_listeners_.find(type_string) == event_listeners_.end())
+  if (event_listeners_.find(type_string) == event_listeners_.end()) {
     return;
+  }
 
   if (context_.IsEmpty() || !isolate_) {
     LOG(ERROR) << "CONTEXT IS INVALID";
@@ -102,11 +110,9 @@ void EventBus::EmitLibreOfficeEvent(int type, std::string payload) {
   }
 
   // coming from another thread means the original scope is entirely lost
-  v8::Isolate::Scope isolate_scope(isolate_);
-  v8::HandleScope handle_scope(isolate_);
-  v8::MicrotasksScope microtasks_scope(
-      isolate_, v8::MicrotasksScope::kDoNotRunMicrotasks);
-  v8::Local<v8::Context> context = context_.Get(isolate_);
+  AsyncScope async_scope(isolate_);
+  v8::Local<v8::Context> context =
+      v8::Local<v8::Context>::New(isolate_, context_);
   v8::Context::Scope context_scope(context);
 
   gin_helper::Dictionary dict = gin::Dictionary::CreateEmpty(isolate_);
@@ -125,6 +131,7 @@ void EventBus::SetContext(v8::Isolate* isolate,
                           v8::Local<v8::Context> context) {
   isolate_ = isolate;
   context_.Reset(isolate, context);
+  context_.AnnotateStrongRetainer("office::EventBus::context_");
 }
 
 }  // namespace electron::office

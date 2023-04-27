@@ -23,6 +23,7 @@
 #include "office/event_bus.h"
 #include "office/lok_tilebuffer.h"
 #include "office/office_client.h"
+#include "office/paint_manager.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
@@ -62,7 +63,8 @@ blink::WebPlugin* CreateInternalPlugin(blink::WebPluginParams params,
                                        content::RenderFrame* render_frame);
 }  // namespace office
 
-class OfficeWebPlugin : public blink::WebPlugin {
+class OfficeWebPlugin : public blink::WebPlugin,
+                        public office::PaintManager::Client {
  public:
   OfficeWebPlugin(blink::WebPluginParams params,
                   content::RenderFrame* render_frame);
@@ -156,12 +158,16 @@ class OfficeWebPlugin : public blink::WebPlugin {
 
   // } blink::WebPlugin
 
-  void InvalidatePluginContainer();
+  // PaintManager::Client
+  void InvalidatePluginContainer() override;
 
   content::RenderFrame* render_frame() const;
 
   void TriggerFullRerender();
+  void ScheduleAvailableAreaPaint();
   base::WeakPtr<OfficeWebPlugin> GetWeakPtr();
+  office::TileBuffer* GetTileBuffer() override;
+  base::WeakPtr<office::PaintManager::Client> GetWeakClient() override;
 
  private:
   // call `Destroy()` instead.
@@ -197,14 +203,10 @@ class OfficeWebPlugin : public blink::WebPlugin {
   float GetZoom();
   float TwipToCSSPx(float in);
 
-  void UpdateScrollInTask(int y_position);
-
   // prepares the embed as the document client's mounted viewer
   bool RenderDocument(v8::Isolate* isolate,
                       gin::Handle<office::DocumentClient> client);
   // }
-
-  void ResetTileBuffers();
 
   // LOK event handlers {
   void HandleInvalidateTiles(std::string payload);
@@ -213,6 +215,7 @@ class OfficeWebPlugin : public blink::WebPlugin {
 
   // owns this class
   blink::WebPluginContainer* container_;
+  void InvalidateWeakContainer();
 
   // Painting State {
   // plugin rect in CSS pixels
@@ -233,7 +236,7 @@ class OfficeWebPlugin : public blink::WebPlugin {
   // first paint, requiring the full canvas of tiles to be painted
   bool first_paint_ = true;
   // first paint, requiring the full canvas of tiles to be painted
-  bool reset_canvas_ = false;
+  bool scale_pending_ = false;
   // currently painting, to track deferred invalidates
   bool in_paint_ = false;
   // the offset for input events, adjusted by the scroll position
@@ -260,9 +263,11 @@ class OfficeWebPlugin : public blink::WebPlugin {
   office::DocumentClient* document_client_ = nullptr;
   int view_id_ = -1;
 
-  std::vector<office::TileBuffer> part_tile_buffer_;
+  std::unique_ptr<office::TileBuffer> tile_buffer_;
+  std::unique_ptr<office::PaintManager> paint_manager_;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
+  office::CancelFlagPtr paint_cancel_flag_;
 
   v8::Global<v8::ObjectTemplate> v8_template_;
   v8::Global<v8::Object> v8_object_;

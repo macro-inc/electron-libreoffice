@@ -6,14 +6,16 @@
 #include "LibreOfficeKit/LibreOfficeKit.hxx"
 #include "base/files/file_path.h"
 #include "base/memory/singleton.h"
+#include "base/notreached.h"
 #include "base/path_service.h"
 
 namespace electron::office {
 
 OfficeSingleton::OfficeSingleton() {
   base::FilePath module_path;
-  if (!base::PathService::Get(base::DIR_MODULE, &module_path))
-    return;
+  if (!base::PathService::Get(base::DIR_MODULE, &module_path)) {
+    NOTREACHED();
+  }
 
   base::FilePath libreoffice_path =
       module_path.Append(FILE_PATH_LITERAL("libreofficekit"))
@@ -33,6 +35,7 @@ lok::Office* OfficeSingleton::GetOffice() {
 }
 
 bool OfficeSingleton::IsValid() {
-  return (bool)GetInstance()->instance;
+  OfficeSingleton* optional = base::Singleton<OfficeSingleton>::GetIfExists();
+  return optional && optional->instance;
 }
 }  // namespace electron::office

@@ -9,11 +9,10 @@
 #include <string_view>
 #include <vector>
 #include "LibreOfficeKit/LibreOfficeKit.hxx"
-#include "absl/types/optional.h"
 #include "base/bind.h"
-#include "base/callback_forward.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/pickle.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/task_runner_util.h"
@@ -24,23 +23,16 @@
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
 #include "gin/per_isolate_data.h"
-#include "include/core/SkAlphaType.h"
-#include "include/core/SkBitmap.h"
-#include "include/core/SkColor.h"
-#include "include/core/SkColorType.h"
-#include "include/core/SkPaint.h"
 #include "net/base/filename_util.h"
 #include "office/event_bus.h"
 #include "office/lok_callback.h"
 #include "office/office_client.h"
 #include "shell/common/gin_converters/gfx_converter.h"
-#include "third_party/blink/public/web/blink.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
-#include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -320,19 +312,8 @@ void DocumentClient::OnClipboardChanged() {
 
       writer.WriteText(converted_data);
     } else if (mime_type == "image/png") {
-      std::vector<uint8_t> bitmap_data(
-          reinterpret_cast<uint8_t*>(out_streams[i]),
-          reinterpret_cast<uint8_t*>(out_streams[i]) + buffer_size);
-
-      SkBitmap bitmap;
-
-      if (!gfx::PNGCodec::Decode(bitmap_data.data(), bitmap_data.size(),
-                                 &bitmap)) {
-        LOG(ERROR) << "Unable to set image to system clipboard";
-        continue;
-      }
-
-      writer.WriteImage(bitmap);
+      writer.WritePickledData(base::Pickle(out_streams[i], buffer_size),
+                              ui::ClipboardFormatType::PngType());
     }
   }
 }
@@ -641,24 +622,24 @@ bool DocumentClient::OnPasteEvent(ui::Clipboard* clipboard,
         document_->paste(clipboard_type.c_str(), value, converted_data.size());
     delete value;
   } else if (clipboard_type == "image/png") {
-    absl::optional<std::vector<uint8_t>> image;
-    clipboard->ReadPng(
-        ui::ClipboardBuffer::kCopyPaste, nullptr,
-        base::BindOnce(
-            [](absl::optional<std::vector<uint8_t>>* image,
-               const std::vector<uint8_t>& result) { image->emplace(result); },
-            &image));
+    std::vector<uint8_t> image;
+    clipboard->ReadPng(ui::ClipboardBuffer::kCopyPaste, nullptr,
+                       base::BindOnce(
+                           [](std::vector<uint8_t>* image,
+                              const std::vector<uint8_t>& result) {
+                             *image = std::move(result);
+                           },
+                           &image));
 
-    if (!image.has_value()) {
+    if (image.empty()) {
       LOG(ERROR) << "Unable to get image value";
       return false;
     }
 
-    std::vector<uint8_t> img = image.value();
-
     result = document_->paste(
         clipboard_type.c_str(),
-        static_cast<char*>(reinterpret_cast<char*>(img.data())), img.size());
+        static_cast<char*>(reinterpret_cast<char*>(image.data())),
+        image.size());
   } else {
     LOG(ERROR) << "Unsupported clipboard_type: " << clipboard_type;
   }

@@ -79,6 +79,23 @@ case "$(uname)" in
     ;;
 esac
 
+prepare_for_build() {
+  # Use goma
+  export NUMBER_OF_NINJA_PROCESSES=${2:-200}
+  export GOMA_START_COMPILER_PROXY=true
+  goma.sh start
+  OUT_DIR="${OUT_DIR:-"out/$ELECTRON_OUT_DIR"}"
+
+  # Build electron
+  cd "$BASE_PATH/src"
+  echo "$GN_CONFIG"
+  if [ "$RUN_GN_ONCE" != "true" ] || [ ! -f "$OUT_DIR/.gn_ran" ]; then
+    echo gn gen "$OUT_DIR" --args="import(\"$GN_CONFIG\") import(\"$GN_GOMA_FILE\") $GN_EXTRA_ARGS $GN_BUILDFLAG_ARGS"
+    gn gen "$OUT_DIR" --args="import(\"$GN_CONFIG\") import(\"$GN_GOMA_FILE\") $GN_EXTRA_ARGS $GN_BUILDFLAG_ARGS"
+    if [ "$RUN_GN_ONCE" = "true" ]; then touch "$OUT_DIR/.gn_ran"; fi
+  fi
+}
+
 echo "Running $1 for $OS"
 
 case "$1" in
@@ -94,18 +111,9 @@ case "$1" in
     ;;
   build)
     # Mostly pulled from src/electron/.circleci/config/base.yml -- MIT LICENSE Copyright (c) Electron contributors Copyright (c) 2013-2020 GitHub Inc.
-    # Use goma
-    export NUMBER_OF_NINJA_PROCESSES=${2:-200}
-    export GOMA_START_COMPILER_PROXY=true
-    goma.sh start
+    prepare_for_build "$@"
 
-    # Build electron
-    cd "$BASE_PATH/src"
-    echo "$GN_CONFIG"
-    if [ ! -f out/.gn_ran ]; then
-      gn gen out/Default --args="import(\"$GN_CONFIG\") import(\"$GN_GOMA_FILE\") $GN_EXTRA_ARGS $GN_BUILDFLAG_ARGS"
-      [ "$RUN_GN_ONCE" = "true" ] && touch out/.gn_ran
-    fi
+    if [ "$UPDATE_LOK" = "true" ]; then rm -rf "$OUT_DIR/libreofficekit"; fi
     autoninja -C out/Default electron -j "$NUMBER_OF_NINJA_PROCESSES"
     cp out/Default/.ninja_log out/electron_ninja_log
     node electron/script/check-symlinks.js
@@ -305,8 +313,47 @@ case "$1" in
         MAC_AARCH="aarch64/"
     fi
 
-    cp -rf $LOK_PATH/libreoffice-core/instdir/$MAC_AARCH* $OUT_DIR/libreofficekit
+    cp -rf "$LOK_PATH/libreoffice-core/instdir/$MAC_AARCH"* "$OUT_DIR/libreofficekit"
 
     echo "Complete"
+    ;;
+  test)
+    GDB_PREFIX=""
+    OUT_DIR="out/$ELECTRON_OUT_DIR"
+
+    prepare_for_build
+    if [ "$UPDATE_LOK" = "true" ]; then rm -rf "$OUT_DIR/libreofficekit"; fi
+    autoninja -C "$OUT_DIR" electron/office:office_unittests
+    if [ "$IN_GDB" = "true" ]; then GDB_PREFIX="gdb --args"; fi
+    "$BASE_PATH/src/tools/clang/scripts/generate_compdb.py" -p "$OUT_DIR" > "$BASE_PATH/compile_commands.json"
+    $GDB_PREFIX "$OUT_DIR/office_unittests" "${@:2}"
+    ;;
+  coverage)
+    OUT_DIR="out/coverage"
+    COVERAGE_OUT_DIR="out/coverage-report"
+    COVERAGE_OUT_FILE="$COVERAGE_OUT_DIR/coverage.profdata"
+    TEST_COVERED="$OUT_DIR/office_unittests"
+    GN_EXTRA_ARGS="use_clang_coverage=true"
+    COVERAGE_IGNORE='base|gin|skia|third_party|gen|v8|testing|net|crypto|url|ui|mojo|ipc'
+
+    2>/dev/null mkdir -p "src/$OUT_DIR" || true
+    2>/dev/null rm -rf "src/${COVERAGE_OUT_DIR:?}" || true
+    2>/dev/null mkdir -p "src/$COVERAGE_OUT_DIR" || true
+
+    python3 "$BASE_PATH/src/tools/clang/scripts/update.py" --package=coverage_tools || true
+    export PATH="$BASE_PATH/src/third_party/llvm-build/Release+Asserts/bin:$PATH"
+
+    RUN_GN_ONCE=true
+    prepare_for_build
+    if [ "$UPDATE_LOK" = "true" ]; then rm -rf "$OUT_DIR/libreofficekit"; fi
+    autoninja -C "$OUT_DIR" electron/office:office_unittests
+    export LLVM_PROFILE_FILE="$COVERAGE_OUT_DIR/office_unittests.%4m.profraw"
+    "$TEST_COVERED" "${@:2}"
+
+    cd "$BASE_PATH/src"
+    find "$COVERAGE_OUT_DIR/" -name '*.profraw' -print0 | xargs -0 llvm-profdata merge -o "$COVERAGE_OUT_DIR/coverage.profdata"
+    llvm-cov show -show-branches=count -show-regions -output-dir="$COVERAGE_OUT_DIR" -format=html -instr-profile="$COVERAGE_OUT_FILE" -compilation-dir="$OUT_DIR" -path-equivalence="../..,$(realpath "$BASE_PATH/src")" -ignore-filename-regex='^.*electron[/\\]office[/\\]test[/\\].*$' -ignore-filename-regex='.*_unittests?\.cc$' -ignore-filename-regex='.*\.h$' -ignore-filename-regex=".*[/\\]($COVERAGE_IGNORE)[/\\].*" -object="$TEST_COVERED" "$TEST_COVERED"
+    if [ "$OPEN_AFTER" = true ] && [ "$OS" = "mac" ]; then open "$COVERAGE_OUT_DIR/index.html"; fi
+    if [ "$OPEN_AFTER" = true ] && [ "$OS" = "linux" ]; then xdg-open "$COVERAGE_OUT_DIR/index.html"; fi
     ;;
 esac
