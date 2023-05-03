@@ -128,7 +128,7 @@ class OfficeDoc extends HTMLElement {
     this.cursor.style.height = `${height}px`;
     this.cursor.classList.add('blink');
   }
-  
+
    twipToPx(in_) {
      return this.embed.twipToPx(in_);
    }
