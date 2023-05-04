@@ -297,7 +297,6 @@ bool IsTypeJSON(int type) {
     case LOK_CALLBACK_CALC_FUNCTION_LIST:
     case LOK_CALLBACK_TAB_STOP_LIST:
     case LOK_COMMAND_BLOCKED:
-    case LOK_CALLBACK_HYPERLINK_CLICKED:
     case LOK_CALLBACK_TABLE_SELECTED:
       // }
 
@@ -466,10 +465,6 @@ v8::Local<v8::Value> PayloadToLocalValue(v8::Isolate* isolate,
   }
 
   v8::Local<v8::String> string = maybe_string.ToLocalChecked();
-
-  if(cast_type == LOK_CALLBACK_HYPERLINK_CLICKED){
-    return string;
-  }
 
   if (!IsTypeJSON(type) &&
       !(cast_type == LOK_CALLBACK_STATE_CHANGED && payload[0] == '{')) {
