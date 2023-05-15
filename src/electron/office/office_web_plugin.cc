@@ -644,7 +644,7 @@ void OfficeWebPlugin::UpdateScroll(int y_position) {
       scroll_y_position_, view_height * device_scale_);
   tile_buffer_->SetYPosition(scaled_y);
   // TODO: schedule paint _ahead_ / _prior_ to scroll position
-  paint_manager_->SchedulePaint(document_, scroll_y_position_, view_height,
+  paint_manager_->SchedulePaint(document_, scroll_y_position_, view_height * device_scale_,
                                 TotalScale(), false, {range});
 }
 
