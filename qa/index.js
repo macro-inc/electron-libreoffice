@@ -18,31 +18,18 @@ const thumb = document.getElementById('el-thumb');
 let globalDoc;
 let zoom = 1.0;
 let uri;
+
+const definitionsMap = new Map();
+const definitionReferencesMap = new Map();
+
 picker.onchange = async () => {
   if (picker.files.length === 1) {
-    uri = encodeURI(
-      'file:///' + picker.files[0].path.replace(/\\/g, '/')
-    );
-    runColorizeWorker();
+    uri = encodeURI('file:///' + picker.files[0].path.replace(/\\/g, '/'));
+    // runColorizeWorker();
     const doc = await libreoffice.loadDocument(uri);
     globalDoc = doc;
 
     embed.renderDocument(doc);
-
-    const xTxtDoc = doc.as('text.XTextDocument');
-    const xTxt = xTxtDoc.getText();
-    const wordCursor = xTxt.createTextCursor().as('text.XWordCursor');
-    wordCursor.gotoStart(false);
-    wordCursor.gotoStartOfWord(false);
-    for (let i=0; i < 6; i++) {
-      wordCursor.gotoNextWord(true);
-    }
-    wordCursor.gotoEndOfWord(true);
-    const xTxtR = wordCursor.as('text.XTextRange');
-    const xView = xTxtDoc.getCurrentController();
-    const xLayout = xView.as('text.XTextViewLayoutSupplier');
-    console.log(xLayout.getTextRangeRects(xTxtR));
-
     thumb.renderDocument(doc);
     thumb.setZoom(0.1);
     embed.focus();
@@ -76,10 +63,10 @@ function attachChildrenToNodes(outline, outlineTree) {
 
 function runColorizeWorker() {
   const worker = new Worker(fn2workerURL(colorizeWorker));
-  worker.postMessage({type: 'load', file: uri });
+  worker.postMessage({ type: 'load', file: uri });
   worker.onmessage = (event) => {
     console.log(event.data);
-  }
+  };
 }
 
 function trackChangesWindow() {
@@ -110,54 +97,481 @@ function insertTable() {
   });
 }
 
+async function parseXmlTerms() {
+  const f = await fetch('./testing/example_preprocess.json');
+  const json = JSON.parse(await f.text());
+  const xml = json.defs;
+
+  const terms = new DOMParser()
+    .parseFromString(xml, 'application/xml')
+    .getElementsByTagName('term');
+  const sortedTerms = Array.from(terms)
+    .sort((a, b) => {
+      const aId = a.getAttribute('id') || '';
+      const bId = b.getAttribute('id') || '';
+      return parseInt(aId) - parseInt(bId);
+    })
+    .map((termNode) => {
+      const name = termNode.getAttribute('name') || '';
+      const references = termNode
+        .getElementsByTagName('references')[0]
+        ?.getElementsByTagName('reference');
+      const numRefs =
+        termNode
+          .getElementsByTagName('references')[0]
+          ?.getElementsByTagName('reference')?.length ?? 0;
+      const referenceHexes = [];
+
+      for (let i = 0; i < references.length; i++) {
+        referenceHexes.push({
+          referenceStartHex:
+            references[i].getAttribute('referenceStartHex') ?? '',
+          referenceEndHex: references[i].getAttribute('referenceEndHex') ?? '',
+        });
+      }
+
+      return {
+        name,
+        numRefs,
+        references: referenceHexes,
+        termStartHex: termNode.getAttribute('termStartHex') ?? '',
+        termEndHex: termNode.getAttribute('termEndHex') ?? '',
+      };
+    });
+
+  return sortedTerms;
+}
+
+async function applyDefinitions() {
+  const definitions = await parseXmlTerms();
+
+  // <string, Definition>
+  const definitionsColorMap = new Map();
+  // <string,{referenceStartHex: string;referenceEndHex: string;termStartHex: string;}>
+  const referencesColorMap = new Map();
+
+  for (let i = 0; i < definitions.length; i++) {
+    const definition = definitions[i];
+    if (definitionsColorMap.has(definition.termStartHex)) {
+      console.log('duplicate definition: swapping termStartHex to termEndHex', {
+        termStartHex: definition.termStartHex,
+        first: definitionsColorMap.get(definition.termStartHex),
+        second: {
+          termEndHex: definition.termEndHex,
+          index: i,
+          name: definition.name,
+        },
+      });
+
+      definition.termStartHex = definition.termEndHex;
+    }
+
+    // update references map
+    if (definition.numRefs > 0) {
+      const references = definition.references;
+      for (const ref of references) {
+        referencesColorMap.set(ref.referenceStartHex, {
+          ...ref,
+          termStartHex: definition.termStartHex,
+        });
+      }
+    }
+
+    definitionsColorMap.set(definition.termStartHex, definition);
+  }
+
+  console.log('created definitions color map', {
+    nEntries: definitionsColorMap.size,
+  });
+
+  const xTxtDoc = globalDoc.as('text.XTextDocument');
+  if (!xTxtDoc) {
+    return;
+  }
+  xTxtDoc.startBatchUpdate();
+  const text = xTxtDoc.getText();
+  createOverlayLinks(text, definitionsColorMap, definitionsMap, referencesColorMap, definitionReferencesMap);
+  xTxtDoc.finishBatchUpdate();
+}
+
+function createOverlayLinks(
+  text,
+  definitionsColorMap,
+  definitionsMap,
+  referencesColorMap,
+  definitionReferencesMap,
+) {
+  let definitionCountMatches = 0;
+  let referenceCountMatches = 0;
+  // RGB is 24-bit (0xFFFFFF = (1 << 24) - 1;
+  const MAX_COLOR = 0xffffff;
+  // right-most bits, max # words is 2**WORD_BITS
+  const WORD_BITS = 9;
+  // how much each paragraph increments
+  const PARAGRAPH_SECTION_INCREMENT = 1 << WORD_BITS;
+  // the mask of bits used for the word index
+  const WORD_SECTION_MASK = PARAGRAPH_SECTION_INCREMENT - 1;
+  // the mask of the bits used for the paragraph index (starts with PARAGRAPH_SECTION_INCREMENT)
+  const PARAGRAPH_SECTION_MASK = MAX_COLOR - WORD_SECTION_MASK;
+
+  const paragraphAccess = text.as('container.XEnumerationAccess');
+  if (!paragraphAccess || !paragraphAccess.hasElements()) return;
+
+  const paragraphIter = paragraphAccess.createEnumeration();
+
+  if (!paragraphIter) return;
+
+  let color = PARAGRAPH_SECTION_INCREMENT;
+
+  // Definitions
+  let definitionTextRange = undefined;
+  // The end color of a definition
+  let definitionEndColor = '';
+  // The definition itself
+  let definition = undefined;
+
+  // References
+  let referenceTextRange = undefined;
+  // The end color of a definition
+  let referenceEndColor = '';
+  let reference = undefined;
+
+  while (paragraphIter.hasMoreElements()) {
+    let rawWordCount = 0;
+    const el = paragraphIter.nextElement();
+    const table = el.as('text.XTextTable');
+    if (table) {
+      // TODO: re-enable after reason for crash
+      // visitTextTable(table, colorizeCell, cancelable);
+      continue;
+    }
+    const paragraphTextRange = el.as('text.XTextRange');
+    if (!paragraphTextRange) {
+      continue;
+    }
+
+    const wordCursor = text
+      .createTextCursorByRange(paragraphTextRange)
+      .as('text.XWordCursor');
+    const rangeCompare = text.as('text.XTextRangeCompare');
+    if (!wordCursor || !rangeCompare) continue;
+
+    do {
+      // select the word
+      wordCursor.gotoStartOfWord(false);
+      wordCursor.gotoEndOfWord(true);
+
+      const hexColor = color.toString(16).padStart(6, '0');
+
+      // if (definitionsColorMap.has(hexColor) && definitionEndColor === '') {
+      //   definitionTextRange = wordCursor.getStart();
+      //
+      //   definition = definitionsColorMap.get(hexColor);
+      //   definitionEndColor = definition?.termEndHex ?? '';
+      // }
+      //
+      // if (hexColor === definitionEndColor) {
+      //   if (!definitionTextRange || !definition) {
+      //     console.error(
+      //       'end of definiton reached without all necessary variables'
+      //     );
+      //     continue;
+      //   }
+      //
+      //   // Create new text cursor
+      //   const definitionTextCursor = text.createTextCursor();
+      //
+      //   // Set text cursor to be at the start of the range
+      //   definitionTextCursor.gotoRange(definitionTextRange, false);
+      //
+      //   // Send text cursor to end of current word
+      //   definitionTextCursor.gotoRange(wordCursor.getEnd(), true);
+      //
+      //   const props = definitionTextCursor.as('beans.XPropertySet');
+      //   if (props) {
+      //     props.setPropertyValue(
+      //       'HyperLinkURL',
+      //       `term://${definition.termStartHex}`
+      //     );
+      //     props.setPropertyValue('VisitedCharStyleName', 'Visited Internet Link');
+      //     props.setPropertyValue('UnvisitedCharStyleName', 'Internet Link');
+      //
+      //   }
+      //
+      //   definitionTextRange = definitionTextCursor.as('text.XTextRange');
+      //   if (!definitionTextRange) {
+      //     console.error('definitionTextCursor could not be cast as XTextRange');
+      //     continue;
+      //   }
+      //
+      //   definitionsMap.set(definition.termStartHex, definitionTextRange);
+      //
+      //   // Reset variables
+      //   definitionTextRange = undefined;
+      //   definition = undefined;
+      //   definitionEndColor = '';
+      //   definitionCountMatches++;
+      // }
+
+      if (referencesColorMap.has(hexColor) && referenceEndColor === '') {
+        referenceTextRange = wordCursor.getStart();
+
+        reference = referencesColorMap.get(hexColor);
+
+        if (!reference) {
+          continue;
+        }
+
+        referenceEndColor = reference?.referenceEndHex ?? '';
+
+        // initialize reference map value with empty array
+        if (!definitionReferencesMap.has(reference.termStartHex)) {
+          definitionReferencesMap.set(reference.termStartHex, []);
+        }
+      }
+
+      // End a definition
+      // definition might be 1 word so this could be done within the same loop as the block above
+      if (hexColor === referenceEndColor) {
+        if (!referenceTextRange || !reference) {
+          console.error(
+            'end of reference reached without all necessary variables'
+          );
+          continue;
+        }
+
+        // Create new text cursor
+        const referenceTextCursor = text.createTextCursor();
+
+        // Set text cursor to be at the start of the range
+        referenceTextCursor.gotoRange(referenceTextRange, false);
+
+        // Send text cursor to end of current word
+        referenceTextCursor.gotoRange(wordCursor.getEnd(), true);
+
+        const props = referenceTextCursor.as('beans.XPropertySet');
+        if (props) {
+          props.setPropertyValue(
+            'HyperLinkURL',
+            `termref://${reference.termStartHex}`
+          );
+        }
+
+        referenceTextRange = referenceTextCursor.as('text.XTextRange');
+        if (!referenceTextRange) {
+          console.error('definitionTextCursor could not be cast as XTextRange');
+          continue;
+        }
+
+        // Add referenceTextRange to the definitions references list
+        definitionReferencesMap
+          .get(reference.termStartHex)
+          ?.push(referenceTextRange);
+
+        // Reset variables
+        referenceTextRange = undefined;
+        reference = undefined;
+        referenceEndColor = '';
+        referenceCountMatches++;
+      }
+
+      rawWordCount++;
+      if ((++color & WORD_SECTION_MASK) == 0) {
+        throw (
+          'Ran out of word colors: ' +
+          rawWordCount +
+          '\n' +
+          wordCursor?.getString()
+        );
+      }
+      // despite what the documentation says, this will get stuck on a single word and return TRUE,
+      // for example, in some cases if it precedes a table it will just repeatedly provide the same word
+      wordCursor.gotoNextWord(false);
+    } while (
+      isWordBeforeEndOfParagraph(rangeCompare, wordCursor, paragraphTextRange)
+    );
+
+    color = (color + PARAGRAPH_SECTION_INCREMENT) & PARAGRAPH_SECTION_MASK;
+    if (color == 0) {
+      throw 'Ran out of colors';
+    }
+  }
+
+  console.log(`Results`, { definitionCountMatches, referenceCountMatches });
+  return color;
+}
+
+function isWordBeforeEndOfParagraph(
+  rangeCompare,
+  wordCursor,
+  paragraphTextRange
+) {
+  return (
+    rangeCompare.compareRegionStarts(
+      wordCursor.getStart(),
+      paragraphTextRange.getEnd()
+    ) == 1
+  );
+}
+
+function saveAsOverlays() {
+  const start = Date.now()
+  globalDoc.postUnoCommand('.uno:SaveAs', {
+    URL: {
+      type: 'string',
+      value: `${uri}.fixed.docx`,
+    },
+    FilterName: {
+      type: 'string',
+      value: 'MS Word 2007 XML',
+    },
+  });
+  console.log(`took ${Date.now() - start}ms to save`);
+}
+function saveOverlays() {
+  const start = Date.now()
+  globalDoc.postUnoCommand('.uno:Save');
+  console.log(`took ${Date.now() - start}ms to save`);
+}
+
 function colorizeWorker() {
-  const colorizePalette = [ 0x333333, 0xA47E3B, 0x0F3460, 0xE94560];
   libreoffice.on('status_indicator_set_value', (x) => {
     self.postMessage({ type: 'load_progress', percent: x });
   });
   let doc;
   let shouldStop = false;
-  self.addEventListener('message', async function(e) {
-    var data = e.data;
-    switch (data.type) {
-      case 'load':
-        const timeStart = performance.now();
-        self.postMessage({ type: 'loading', file: data.file });
-        doc = await libreoffice.loadDocument(data.file);
-        self.postMessage({ type: 'loaded', file: data.file });
-        const old = doc.as('text.XTextDocument');
-        delete old;
-        const xDoc = old.createHiddenClone();
-        xDoc.startBatchUpdate();
-        // FormatQuick and FormatLine respect the SwTextFrame::IsLocked, how do we engage that while formatting?
-        const text = xDoc.getText();
-        const cursor = text.createTextCursor();
-        cursor.gotoStart(false);
-        const wordCursor = cursor.as('text.XWordCursor');
-        let i = 0;
-        do {
-          wordCursor.gotoEndOfWord(true);
-          const props = wordCursor.as('beans.XPropertySet');
-          props.setPropertyValue("CharColor", colorizePalette[i++ % colorizePalette.length]);
-        } while (!shouldStop && wordCursor.gotoNextWord(false));
-        // Skip calling finishBatchUpdate because the document will be saved as a PDF and discarded
-        xDoc.as('frame.XStorable').storeToURL(data.file + ".pdf", { FilterName: 'writer_pdf_Export' });
-        xDoc.as('util.XCloseable').close(true);
-        self.postMessage({ type: 'finished', time: (performance.now() - timeStart)/1000 });
-        self.close();
-        break;
-      case 'stop':
-        shouldStop = true;
-        self.postMessage({ type: 'stopped'});
-        self.close(); // Terminates the worker.
-        break;
-      default:
-        console.error('unknown type', data.type);
-    };
-  }, false);
+  function colorize(text) {
+    // RGB is 24-bit (0xFFFFFF = (1 << 24) - 1;
+    const MAX_COLOR = 0xffffff;
+    // right-most bits, max # words is 2**WORD_BITS
+    const WORD_BITS = 9;
+    // how much each paragraph increments
+    const PARAGRAPH_SECTION_INCREMENT = 1 << WORD_BITS;
+    // the mask of bits used for the word index
+    const WORD_SECTION_MASK = PARAGRAPH_SECTION_INCREMENT - 1;
+    // the mask of the bits used for the paragraph index (starts with PARAGRAPH_SECTION_INCREMENT)
+    const PARAGRAPH_SECTION_MASK = MAX_COLOR - WORD_SECTION_MASK;
+
+    const paragraphAccess = text.as('container.XEnumerationAccess');
+    if (!paragraphAccess || !paragraphAccess.hasElements()) return;
+
+    const paragraphIter = paragraphAccess.createEnumeration();
+
+    if (!paragraphIter) return;
+
+    let color = PARAGRAPH_SECTION_INCREMENT;
+
+    while (paragraphIter.hasMoreElements()) {
+      let rawWordCount = 0;
+      const el = paragraphIter.nextElement();
+      const table = el.as('text.XTextTable');
+      if (table) {
+        // TODO: re-enable after reason for crash
+        // visitTextTable(table, colorizeCell, cancelable);
+        continue;
+      }
+      const paragraphTextRange = el.as('text.XTextRange');
+      if (!paragraphTextRange) {
+        continue;
+      }
+
+      const wordCursor = text
+        .createTextCursorByRange(paragraphTextRange)
+        .as('text.XWordCursor');
+      const rangeCompare = text.as('text.XTextRangeCompare');
+      if (!wordCursor || !rangeCompare) continue;
+
+      do {
+        // select the word
+        wordCursor.gotoStartOfWord(false);
+        wordCursor.gotoEndOfWord(true);
+
+        // color it
+        const props = wordCursor.as('beans.XPropertySet');
+        if (!props) continue;
+        props.setPropertyValue('CharColor', color);
+
+        rawWordCount++;
+        if ((++color & WORD_SECTION_MASK) == 0) {
+          throw (
+            'Ran out of word colors: ' +
+            rawWordCount +
+            '\n' +
+            wordCursor?.getString()
+          );
+        }
+        // despite what the documentation says, this will get stuck on a single word and return TRUE,
+        // for example, in some cases if it precedes a table it will just repeatedly provide the same word
+        wordCursor.gotoNextWord(false);
+      } while (
+        isWordBeforeEndOfParagraph(rangeCompare, wordCursor, paragraphTextRange)
+      );
+
+      color = (color + PARAGRAPH_SECTION_INCREMENT) & PARAGRAPH_SECTION_MASK;
+      if (color == 0) {
+        throw 'Ran out of colors';
+      }
+    }
+
+    console.log('Last color was', '0x' + color.toString(16));
+
+    return color;
+  }
+
+  function isWordBeforeEndOfParagraph(
+    rangeCompare,
+    wordCursor,
+    paragraphTextRange
+  ) {
+    return (
+      rangeCompare.compareRegionStarts(
+        wordCursor.getStart(),
+        paragraphTextRange.getEnd()
+      ) == 1
+    );
+  }
+  self.addEventListener(
+    'message',
+    async function(e) {
+      var data = e.data;
+      switch (data.type) {
+        case 'load':
+          const timeStart = performance.now();
+          self.postMessage({ type: 'loading', file: data.file });
+          doc = await libreoffice.loadDocument(data.file, /*read only copy*/ true);
+          console.log(`Loaded document in ${performance.now() - timeStart}ms`)
+          self.postMessage({ type: 'loaded', file: data.file });
+          const old = doc.as('text.XTextDocument');
+          delete old;
+          const xDoc = old.createHiddenClone();
+          xDoc.startBatchUpdate();
+          const text = xDoc.getText();
+          colorize(text, shouldStop);
+          // Skip calling finishBatchUpdate because the document will be saved as a PDF and discarded
+          xDoc.as('frame.XStorable').storeToURL(data.file + '.pdf', {
+            FilterName: 'writer_pdf_Export',
+          });
+          xDoc.as('util.XCloseable').close(true);
+          self.postMessage({
+            type: 'finished',
+            time: (performance.now() - timeStart) / 1000,
+          });
+          self.close();
+          break;
+        case 'stop':
+          shouldStop = true;
+          self.postMessage({ type: 'stopped' });
+          self.close(); // Terminates the worker.
+          break;
+        default:
+          console.error('unknown type', data.type);
+      }
+    },
+    false
+  );
 }
 
 function fn2workerURL(fn) {
-  const blob = new Blob([`(${fn.toString()})()`], { type: "text/javascript" });
+  const blob = new Blob([`(${fn.toString()})()`], { type: 'text/javascript' });
   return URL.createObjectURL(blob);
 }
