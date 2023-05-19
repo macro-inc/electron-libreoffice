@@ -131,7 +131,9 @@ TileRange TileBuffer::InvalidateTilesInRect(const gfx::RectF& rect) {
   DCHECK((unsigned int)tile_rect.bottom() <= rows_);
 
   unsigned int index_start = CoordToIndex(tile_rect.x(), tile_rect.y());
-  unsigned int index_end = CoordToIndex(tile_rect.right(), tile_rect.bottom());
+  unsigned int index_end =
+      CoordToIndex(std::min((unsigned int)tile_rect.right(), columns_ - 1),
+                   std::min((unsigned int)tile_rect.bottom(), rows_ - 1));
   valid_tile_.ResetRange(index_start, index_end);
   return {index_start, index_end};
 }
@@ -158,8 +160,8 @@ std::vector<TileRange> TileBuffer::InvalidRangesRemaining(
 
 TileBuffer::RowLimit TileBuffer::LimitRange(int y_pos,
                                             unsigned int view_height) {
-  unsigned int start_row =
-      std::max(std::floor((double)y_pos / (double)TileBuffer::kTileSizePx), 0.0);
+  unsigned int start_row = std::max(
+      std::floor((double)y_pos / (double)TileBuffer::kTileSizePx), 0.0);
   unsigned int end_row = start_row + std::ceil((double)view_height /
                                                (double)TileBuffer::kTileSizePx);
   return {start_row, std::max(start_row, end_row)};

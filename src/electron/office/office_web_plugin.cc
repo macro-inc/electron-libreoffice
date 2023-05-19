@@ -566,8 +566,7 @@ void OfficeWebPlugin::HandleInvalidateTiles(std::string payload) {
     if (dirty_rect.IsEmpty())
       return;
 
-    float view_height =
-        plugin_rect_.height() / device_scale_ / (float)viewport_zoom_;
+    float view_height = plugin_rect_.height() * device_scale_;
     auto range = tile_buffer_->InvalidateTilesInTwipRect(dirty_rect);
     auto limit = tile_buffer_->LimitIndex(scroll_y_position_, view_height);
 
@@ -644,8 +643,9 @@ void OfficeWebPlugin::UpdateScroll(int y_position) {
       scroll_y_position_, view_height * device_scale_);
   tile_buffer_->SetYPosition(scaled_y);
   // TODO: schedule paint _ahead_ / _prior_ to scroll position
-  paint_manager_->SchedulePaint(document_, scroll_y_position_, view_height * device_scale_,
-                                TotalScale(), false, {range});
+  paint_manager_->SchedulePaint(document_, scroll_y_position_,
+                                view_height * device_scale_, TotalScale(),
+                                false, {range});
 }
 
 bool OfficeWebPlugin::RenderDocument(
@@ -723,9 +723,20 @@ bool OfficeWebPlugin::RenderDocument(
 void OfficeWebPlugin::ScheduleAvailableAreaPaint() {
   gfx::RectF offset_area(available_area_);
   offset_area.Offset(0, scroll_y_position_);
-  paint_manager_->SchedulePaint(
-      document_, scroll_y_position_, offset_area.height(), TotalScale(), true,
-      {tile_buffer_->InvalidateTilesInRect(offset_area)});
+  offset_area.Scale(device_scale_);
+  auto range = tile_buffer_->InvalidateTilesInRect(offset_area);
+  auto limit =
+      tile_buffer_->LimitIndex(scroll_y_position_, offset_area.height());
+
+  // avoid scheduling out of bounds paints
+  if (range.index_start > limit.index_end ||
+      range.index_end < limit.index_start)
+    return;
+  range.index_start = std::max(range.index_start, limit.index_start);
+  range.index_end = std::min(range.index_end, limit.index_end);
+  paint_manager_->SchedulePaint(document_, scroll_y_position_,
+                                offset_area.height(), TotalScale(), true,
+                                {range});
 }
 
 void OfficeWebPlugin::TriggerFullRerender() {
