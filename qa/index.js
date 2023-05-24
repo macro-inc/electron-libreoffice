@@ -188,10 +188,37 @@ async function applyDefinitions() {
   if (!xTxtDoc) {
     return;
   }
+  const start = performance.now();
   xTxtDoc.startBatchUpdate();
   const text = xTxtDoc.getText();
   createOverlayLinks(text, definitionsColorMap, definitionsMap, referencesColorMap, definitionReferencesMap);
   xTxtDoc.finishBatchUpdate();
+  console.log(`Created overlay links in ${performance.now() - start}ms`);
+}
+
+function gotoOverlay() {
+  const xTxtDoc = globalDoc.as('text.XTextDocument');
+
+  if (!xTxtDoc) {
+    return;
+  }
+
+  const supplier = xTxtDoc
+    .getCurrentController()
+    .as('text.XTextViewCursorSupplier');
+
+  if (!supplier) {
+    return;
+  }
+
+  // The supplier comes back as an XInterface so we need to explicitly cast it here
+  const cursor = supplier.getViewCursor();
+  if (!cursor) {
+    return;
+  }
+
+  // Set cursor to TextRange of definiton
+  cursor.gotoRange(definitionsMap.get('012800'), false);
 }
 
 function createOverlayLinks(
@@ -263,55 +290,55 @@ function createOverlayLinks(
 
       const hexColor = color.toString(16).padStart(6, '0');
 
-      // if (definitionsColorMap.has(hexColor) && definitionEndColor === '') {
-      //   definitionTextRange = wordCursor.getStart();
-      //
-      //   definition = definitionsColorMap.get(hexColor);
-      //   definitionEndColor = definition?.termEndHex ?? '';
-      // }
-      //
-      // if (hexColor === definitionEndColor) {
-      //   if (!definitionTextRange || !definition) {
-      //     console.error(
-      //       'end of definiton reached without all necessary variables'
-      //     );
-      //     continue;
-      //   }
-      //
-      //   // Create new text cursor
-      //   const definitionTextCursor = text.createTextCursor();
-      //
-      //   // Set text cursor to be at the start of the range
-      //   definitionTextCursor.gotoRange(definitionTextRange, false);
-      //
-      //   // Send text cursor to end of current word
-      //   definitionTextCursor.gotoRange(wordCursor.getEnd(), true);
-      //
-      //   const props = definitionTextCursor.as('beans.XPropertySet');
-      //   if (props) {
-      //     props.setPropertyValue(
-      //       'HyperLinkURL',
-      //       `term://${definition.termStartHex}`
-      //     );
-      //     props.setPropertyValue('VisitedCharStyleName', 'Visited Internet Link');
-      //     props.setPropertyValue('UnvisitedCharStyleName', 'Internet Link');
-      //
-      //   }
-      //
-      //   definitionTextRange = definitionTextCursor.as('text.XTextRange');
-      //   if (!definitionTextRange) {
-      //     console.error('definitionTextCursor could not be cast as XTextRange');
-      //     continue;
-      //   }
-      //
-      //   definitionsMap.set(definition.termStartHex, definitionTextRange);
-      //
-      //   // Reset variables
-      //   definitionTextRange = undefined;
-      //   definition = undefined;
-      //   definitionEndColor = '';
-      //   definitionCountMatches++;
-      // }
+      if (definitionsColorMap.has(hexColor) && definitionEndColor === '') {
+        definitionTextRange = wordCursor.getStart();
+
+        definition = definitionsColorMap.get(hexColor);
+        definitionEndColor = definition?.termEndHex ?? '';
+      }
+
+      if (hexColor === definitionEndColor) {
+        if (!definitionTextRange || !definition) {
+          console.error(
+            'end of definiton reached without all necessary variables'
+          );
+          continue;
+        }
+
+        // Create new text cursor
+        const definitionTextCursor = text.createTextCursor();
+
+        // Set text cursor to be at the start of the range
+        definitionTextCursor.gotoRange(definitionTextRange, false);
+
+        // Send text cursor to end of current word
+        definitionTextCursor.gotoRange(wordCursor.getEnd(), true);
+
+        const props = definitionTextCursor.as('beans.XPropertySet');
+        if (props) {
+          props.setPropertyValue(
+            'HyperLinkURL',
+            `term://${definition.termStartHex}`
+          );
+          props.setPropertyValue('VisitedCharStyleName', 'Visited Internet Link');
+          props.setPropertyValue('UnvisitedCharStyleName', 'Internet Link');
+
+        }
+
+        definitionTextRange = definitionTextCursor.as('text.XTextRange');
+        if (!definitionTextRange) {
+          console.error('definitionTextCursor could not be cast as XTextRange');
+          continue;
+        }
+
+        definitionsMap.set(definition.termStartHex, definitionTextRange);
+
+        // Reset variables
+        definitionTextRange = undefined;
+        definition = undefined;
+        definitionEndColor = '';
+        definitionCountMatches++;
+      }
 
       if (referencesColorMap.has(hexColor) && referenceEndColor === '') {
         referenceTextRange = wordCursor.getStart();
@@ -364,9 +391,9 @@ function createOverlayLinks(
         }
 
         // Add referenceTextRange to the definitions references list
-        definitionReferencesMap
-          .get(reference.termStartHex)
-          ?.push(referenceTextRange);
+        // definitionReferencesMap
+        //   .get(reference.termStartHex)
+        //   ?.push(referenceTextRange);
 
         // Reset variables
         referenceTextRange = undefined;
