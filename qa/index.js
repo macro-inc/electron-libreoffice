@@ -40,10 +40,16 @@ function zoomIn() {
   zoom += 0.1;
   embed.setZoom(zoom);
 }
+
 function zoomOut() {
   if (zoom < 0.2) return;
   zoom -= 0.1;
   embed.setZoom(zoom);
+}
+
+function saveToMemory() {
+  const res = globalDoc.saveToMemory();
+  console.log('saveToMemory', { res });
 }
 
 // Used as POC to show how to structure outline data

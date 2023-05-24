@@ -241,6 +241,8 @@ declare namespace LibreOffice {
       destRect: string;
     };
 
+    saveToMemory(): ArrayBuffer
+
     /**
      * show/hide a single row/column header outline for Calc documents
      * @param column - if we are dealingg with a column or row group

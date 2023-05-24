@@ -103,6 +103,7 @@ gin::ObjectTemplateBuilder DocumentClient::GetObjectTemplateBuilder(
       .SetMethod("emit", &DocumentClient::Emit)
       .SetMethod("postUnoCommand", &DocumentClient::PostUnoCommand)
       .SetMethod("gotoOutline", &DocumentClient::GotoOutline)
+      .SetMethod("saveToMemory", &DocumentClient::SaveToMemory)
       .SetMethod("getTextSelection", &DocumentClient::GetTextSelection)
       .SetMethod("setTextSelection", &DocumentClient::SetTextSelection)
       .SetMethod("sendDialogEvent", &DocumentClient::SendDialogEvent)
@@ -397,6 +398,18 @@ v8::Local<v8::Value> DocumentClient::GotoOutline(int idx,
   }
 
   return res.ToLocalChecked();
+}
+
+v8::Local<v8::ArrayBuffer> DocumentClient::SaveToMemory(gin::Arguments* args) {
+  char* pOutput = nullptr;
+  size_t size_in_bytes = document_->saveToMemory(&pOutput);
+
+  v8::Isolate* isolate = args->isolate();
+  v8::Local<v8::ArrayBuffer> array_buffer =
+        v8::ArrayBuffer::New(isolate, size_in_bytes);
+  auto backing_store = array_buffer->GetBackingStore();
+  std::memcpy(array_buffer->GetBackingStore()->Data(), pOutput, size_in_bytes);
+  return array_buffer;
 }
 
 void DocumentClient::PostUnoCommand(const std::string& command,
