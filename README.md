@@ -20,8 +20,6 @@ For local testing: `scripts/e build`
 
 For release builds: `IS_RELEASE=true scripts/e build`
 
-For cross-compiling for Apple Silicon from an Intel Mac: `FOR_APPLE_SILICON=true scripts/e build`
-
 ## How do I run this build?
 
 ```shell
