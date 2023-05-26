@@ -371,9 +371,9 @@ declare namespace LibreOffice {
     loadDocument(path: string): Promise<DocumentClient | undefined>;
 
     /**
-     * loads a given document
-     * @param path - the document path
-     * @returns a Promise of the document client if the load succeeded, undefined if the load failed
+     * loads a given document from an ArrayBuffer
+     * @param buffer - the array buffer of the documents contents
+     * @returns a XTextDocument created from the ArrayBuffer
      */
     loadDocumentFromArrayBuffer(buffer: ArrayBuffer): import('./lok_api').text.XTextDocument;
 
