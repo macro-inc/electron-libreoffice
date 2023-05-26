@@ -371,6 +371,14 @@ declare namespace LibreOffice {
     loadDocument(path: string): Promise<DocumentClient | undefined>;
 
     /**
+     * loads a given document
+     * @param path - the document path
+     * @returns a Promise of the document client if the load succeeded, undefined if the load failed
+     */
+    loadDocumentFromArrayBuffer(buffer: ArrayBuffer): import('./lok_api').text.XTextDocument;
+
+
+    /**
      * run a macro
      * @param url - the url for the macro (macro:// URI format)
      * @returns true if it succeeded, false if it failed

@@ -30,6 +30,7 @@
 #include "office/lok_callback.h"
 #include "office/office_singleton.h"
 #include "shell/common/gin_converters/std_converter.h"
+#include "unov8.hxx"
 #include "v8/include/v8-function.h"
 #include "v8/include/v8-isolate.h"
 #include "v8/include/v8-json.h"
@@ -182,7 +183,8 @@ gin::ObjectTemplateBuilder OfficeClient::GetObjectTemplateBuilder(
       .SetMethod("getVersionInfo", &OfficeClient::GetVersionInfo)
       .SetMethod("runMacro", &OfficeClient::RunMacro)
       .SetMethod("sendDialogEvent", &OfficeClient::SendDialogEvent)
-      .SetMethod("loadDocument", &OfficeClient::LoadDocumentAsync);
+      .SetMethod("loadDocument", &OfficeClient::LoadDocumentAsync)
+      .SetMethod("loadDocumentFromArrayBuffer", &OfficeClient::LoadDocumentFromArrayBuffer);
 }
 
 const char* OfficeClient::GetTypeName() {
@@ -346,6 +348,19 @@ void OfficeClient::LoadDocumentComplete(v8::Isolate* isolate,
         "value": "Your Friendly Neighborhood Author"
       }
     })"));
+}
+
+v8::Local<v8::Value> OfficeClient::LoadDocumentFromArrayBuffer(v8::Isolate* isolate, v8::Local<v8::ArrayBuffer> array_buffer) {
+  auto backing_store = array_buffer->GetBackingStore();
+  char* data = static_cast<char*>(backing_store->Data());
+  std::size_t size = backing_store->ByteLength();
+
+  if (size == 0) {
+    return {};
+  }
+
+  void* doc = office_->loadFromMemory(data, size);
+  return convert::As(isolate, doc, "text.XTextDocument");
 }
 
 bool OfficeClient::CloseDocument(const std::string& path) {

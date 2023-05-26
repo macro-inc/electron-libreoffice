@@ -48,8 +48,10 @@ function zoomOut() {
 }
 
 function saveToMemory() {
-  const res = globalDoc.saveToMemory();
-  console.log('saveToMemory', { res });
+  const buffer = globalDoc.saveToMemory();
+  console.log('saveToMemory', { buffer });
+  const newDoc = libreoffice.loadDocumentFromArrayBuffer(buffer);
+  console.log('New doc', {text: newDoc.getText().getString()});
 }
 
 // Used as POC to show how to structure outline data
