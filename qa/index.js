@@ -25,9 +25,9 @@ const definitionReferencesMap = new Map();
 picker.onchange = async () => {
   if (picker.files.length === 1) {
     uri = encodeURI('file:///' + picker.files[0].path.replace(/\\/g, '/'));
-    // runColorizeWorker();
     const doc = await libreoffice.loadDocument(uri);
     globalDoc = doc;
+    runColorizeWorker();
 
     embed.renderDocument(doc);
     thumb.renderDocument(doc);
@@ -70,8 +70,11 @@ function attachChildrenToNodes(outline, outlineTree) {
 }
 
 function runColorizeWorker() {
+  const start = performance.now();
+  const buffer = globalDoc.saveToMemory();
+  console.log(`save to memory took ${performance.now() - start}ms`, {buffer})
   const worker = new Worker(fn2workerURL(colorizeWorker));
-  worker.postMessage({ type: 'load', file: uri });
+  worker.postMessage({ type: 'load', file: uri, data: buffer },[buffer]);
   worker.onmessage = (event) => {
     console.log(event.data);
   };
@@ -469,6 +472,8 @@ function saveOverlays() {
   console.log(`took ${Date.now() - start}ms to save`);
 }
 
+
+/// <reference path="../src/electron/npm/libreoffice.d.ts" />
 function colorizeWorker() {
   libreoffice.on('status_indicator_set_value', (x) => {
     self.postMessage({ type: 'load_progress', percent: x });
@@ -569,16 +574,16 @@ function colorizeWorker() {
     'message',
     async function(e) {
       var data = e.data;
+      console.log(e)
       switch (data.type) {
         case 'load':
           const timeStart = performance.now();
-          self.postMessage({ type: 'loading', file: data.file });
-          doc = await libreoffice.loadDocument(data.file, /*read only copy*/ true);
+          self.postMessage({ type: 'loading', ...data });
+          doc = libreoffice.loadDocumentFromArrayBuffer(data.data);
           console.log(`Loaded document in ${performance.now() - timeStart}ms`)
           self.postMessage({ type: 'loaded', file: data.file });
-          const old = doc.as('text.XTextDocument');
-          delete old;
-          const xDoc = old.createHiddenClone();
+          const xDoc = doc.createHiddenClone();
+          delete doc;
           xDoc.startBatchUpdate();
           const text = xDoc.getText();
           colorize(text, shouldStop);

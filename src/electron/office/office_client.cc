@@ -351,11 +351,19 @@ void OfficeClient::LoadDocumentComplete(v8::Isolate* isolate,
 }
 
 v8::Local<v8::Value> OfficeClient::LoadDocumentFromArrayBuffer(v8::Isolate* isolate, v8::Local<v8::ArrayBuffer> array_buffer) {
+  GetOffice();
   auto backing_store = array_buffer->GetBackingStore();
   char* data = static_cast<char*>(backing_store->Data());
   std::size_t size = backing_store->ByteLength();
 
+  LOG(ERROR) << "SIZE: " << size;
+
   if (size == 0) {
+    return {};
+  }
+
+  if(office_ == nullptr){
+    LOG(ERROR) << "office_ is null";
     return {};
   }
 
