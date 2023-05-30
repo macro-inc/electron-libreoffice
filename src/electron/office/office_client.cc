@@ -356,9 +356,8 @@ v8::Local<v8::Value> OfficeClient::LoadDocumentFromArrayBuffer(v8::Isolate* isol
   char* data = static_cast<char*>(backing_store->Data());
   std::size_t size = backing_store->ByteLength();
 
-  LOG(ERROR) << "SIZE: " << size;
-
   if (size == 0) {
+    LOG(ERROR) << "Empty array buffer provided";
     return {};
   }
 

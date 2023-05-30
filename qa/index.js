@@ -574,7 +574,6 @@ function colorizeWorker() {
     'message',
     async function(e) {
       var data = e.data;
-      console.log(e)
       switch (data.type) {
         case 'load':
           const timeStart = performance.now();
