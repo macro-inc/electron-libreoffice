@@ -97,6 +97,7 @@ class OfficeClient : public gin::Wrappable<OfficeClient> {
                             ThreadedPromiseResolver* resolver,
                             const std::string& path,
                             LOKDocWithViewId client);
+  v8::Local<v8::Value> LoadDocumentFromArrayBuffer(v8::Isolate* isolate, v8::Local<v8::ArrayBuffer> array_buffer);
 
  private:
   OfficeClient();

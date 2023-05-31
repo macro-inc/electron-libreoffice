@@ -241,6 +241,8 @@ declare namespace LibreOffice {
       destRect: string;
     };
 
+    saveToMemory(): ArrayBuffer
+
     /**
      * show/hide a single row/column header outline for Calc documents
      * @param column - if we are dealingg with a column or row group
@@ -367,6 +369,14 @@ declare namespace LibreOffice {
      * @returns a Promise of the document client if the load succeeded, undefined if the load failed
      */
     loadDocument(path: string): Promise<DocumentClient | undefined>;
+
+    /**
+     * loads a given document from an ArrayBuffer
+     * @param buffer - the array buffer of the documents contents
+     * @returns a XTextDocument created from the ArrayBuffer
+     */
+    loadDocumentFromArrayBuffer(buffer: ArrayBuffer): import('./lok_api').text.XTextDocument;
+
 
     /**
      * run a macro
