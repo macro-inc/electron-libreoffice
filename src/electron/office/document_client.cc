@@ -409,6 +409,7 @@ v8::Local<v8::ArrayBuffer> DocumentClient::SaveToMemory(gin::Arguments* args) {
         v8::ArrayBuffer::New(isolate, size_in_bytes);
   auto backing_store = array_buffer->GetBackingStore();
   std::memcpy(array_buffer->GetBackingStore()->Data(), pOutput, size_in_bytes);
+  free(pOutput);
   return array_buffer;
 }
 
