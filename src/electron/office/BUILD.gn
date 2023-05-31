@@ -132,6 +132,7 @@ source_set("office_lib") {
     "//base",
     "//gin",
     "//ui/gfx/geometry", # DocumentClient
+    "//ui/gfx/codec",
   ]
 
   configs += [ ":electron_config" ]

@@ -49,6 +49,7 @@
 #include "v8/include/v8-json.h"
 #include "v8/include/v8-local-handle.h"
 #include "v8/include/v8-primitive.h"
+#include "ui/gfx/codec/png_codec.h"
 
 namespace electron::office {
 gin::WrapperInfo DocumentClient::kWrapperInfo = {gin::kEmbedderNativeGin};
@@ -313,8 +314,9 @@ void DocumentClient::OnClipboardChanged() {
 
       writer.WriteText(converted_data);
     } else if (mime_type == "image/png") {
-      writer.WritePickledData(base::Pickle(out_streams[i], buffer_size),
-                              ui::ClipboardFormatType::PngType());
+      SkBitmap bitmap;
+      gfx::PNGCodec::Decode(reinterpret_cast<unsigned char*>(out_streams[i]), buffer_size, &bitmap);
+      writer.WriteImage(std::move(bitmap));
     }
   }
 }
