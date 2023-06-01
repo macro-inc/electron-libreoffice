@@ -69,6 +69,13 @@ void TileBuffer::PaintTile(CancelFlagPtr cancel_flag,
   static const SkImageInfo image_info_ = SkImageInfo::Make(
       kTileSizePx, kTileSizePx, kBGRA_8888_SkColorType, kPremul_SkAlphaType);
   size_t pool_index;
+  const unsigned int max = columns_ * rows_ - 1;
+  if (tile_index > max) {
+    // TODO: proper fix, this probably occurs after a zoom
+    LOG(ERROR) << "invalid tile index: " << tile_index << ", exceeds max " << max;
+    return;
+  }
+
   if (!CancelFlag::IsCancelled(cancel_flag) &&
       !TileToPoolIndex(tile_index, &pool_index)) {
     InvalidatePoolTile(pool_index);
