@@ -16,11 +16,11 @@ scripts/e sync
 
 ## How do I build it?
 
+You must sync the code first (as stated above) and let it finish first.
+
 For local testing: `scripts/e build`
 
 For release builds: `IS_RELEASE=true scripts/e build`
-
-For cross-compiling for Apple Silicon from an Intel Mac: `FOR_APPLE_SILICON=true scripts/e build`
 
 ## How do I run this build?
 
@@ -61,12 +61,22 @@ scripts/e vs_devenv
 
 Run `scripts/pull-upstream-changes.sh`
 
-## How do I update LibreOfficeKit after compiling it locally?
+## How do I use a local build of [`libreofficekit`](https://github.com/coparse-inc/libreofficekit)?
 
-- After running a build of electron-libreoffice, link the libreofficekit build directory to the electron-libreoffice build directory:
+This assumes you have already synced.
 
-  - `ln -s ../libreofficekit/libreoffice-core/instdir src/out/Default/libreofficekit`
+Do this once:
 
-- Alternatively, run `LOK_PATH=relative_path_to_lok scripts/e update_local_lok`
-  - `LOK_PATH` defaults to ../libreofficekit
-  - example: `LOK_PATH=../../lok scripts/e update_local_lok`
+```shell
+# move the old source for libreofficekit to libreofficekit.old
+mv src/third_party/libreofficekit{,.old}
+# link src/third_party/libreofficekit to your local libreofficekit/libreoffice-core
+ln -s ../libreofficekit/libreoffice-core src/third_party/libreofficekit
+```
+
+When you make a new local build of `libreofficekit`, remove the old build in electron-libreoffice's output:
+```shell
+rm -rf src/out/Default/libreofficekit
+```
+
+Then make a new build as stated in [How do I build it?](#how-do-i-build-it)
