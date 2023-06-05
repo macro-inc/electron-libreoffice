@@ -69,10 +69,10 @@ function attachChildrenToNodes(outline, outlineTree) {
   }
 }
 
-function runColorizeWorker() {
+async function runColorizeWorker() {
   const start = performance.now();
-  const buffer = globalDoc.saveToMemory();
-  console.log(`save to memory took ${performance.now() - start}ms`, {buffer})
+  const buffer = await globalDoc.saveToMemory();
+  console.log(`save to memory took ${performance.now() - start}ms`, buffer.byteLength)
   const worker = new Worker(fn2workerURL(colorizeWorker));
   worker.postMessage({ type: 'load', file: uri, data: buffer },[buffer]);
   worker.onmessage = (event) => {
@@ -581,8 +581,7 @@ function colorizeWorker() {
           doc = libreoffice.loadDocumentFromArrayBuffer(data.data);
           console.log(`Loaded document in ${performance.now() - timeStart}ms`)
           self.postMessage({ type: 'loaded', file: data.file });
-          const xDoc = doc.createHiddenClone();
-          delete doc;
+          const xDoc = doc;
           xDoc.startBatchUpdate();
           const text = xDoc.getText();
           colorize(text, shouldStop);

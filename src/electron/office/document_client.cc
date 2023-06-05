@@ -10,6 +10,7 @@
 #include <vector>
 #include "LibreOfficeKit/LibreOfficeKit.hxx"
 #include "base/bind.h"
+#include "base/containers/span.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/pickle.h"
@@ -24,6 +25,7 @@
 #include "gin/object_template_builder.h"
 #include "gin/per_isolate_data.h"
 #include "net/base/filename_util.h"
+#include "office/async_scope.h"
 #include "office/event_bus.h"
 #include "office/lok_callback.h"
 #include "office/office_client.h"
@@ -33,6 +35,7 @@
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
+#include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -49,7 +52,6 @@
 #include "v8/include/v8-json.h"
 #include "v8/include/v8-local-handle.h"
 #include "v8/include/v8-primitive.h"
-#include "ui/gfx/codec/png_codec.h"
 
 namespace electron::office {
 gin::WrapperInfo DocumentClient::kWrapperInfo = {gin::kEmbedderNativeGin};
@@ -104,7 +106,7 @@ gin::ObjectTemplateBuilder DocumentClient::GetObjectTemplateBuilder(
       .SetMethod("emit", &DocumentClient::Emit)
       .SetMethod("postUnoCommand", &DocumentClient::PostUnoCommand)
       .SetMethod("gotoOutline", &DocumentClient::GotoOutline)
-      .SetMethod("saveToMemory", &DocumentClient::SaveToMemory)
+      .SetMethod("saveToMemory", &DocumentClient::SaveToMemoryAsync)
       .SetMethod("getTextSelection", &DocumentClient::GetTextSelection)
       .SetMethod("setTextSelection", &DocumentClient::SetTextSelection)
       .SetMethod("sendDialogEvent", &DocumentClient::SendDialogEvent)
@@ -315,7 +317,8 @@ void DocumentClient::OnClipboardChanged() {
       writer.WriteText(converted_data);
     } else if (mime_type == "image/png") {
       SkBitmap bitmap;
-      gfx::PNGCodec::Decode(reinterpret_cast<unsigned char*>(out_streams[i]), buffer_size, &bitmap);
+      gfx::PNGCodec::Decode(reinterpret_cast<unsigned char*>(out_streams[i]),
+                            buffer_size, &bitmap);
       writer.WriteImage(std::move(bitmap));
     }
   }
@@ -402,17 +405,48 @@ v8::Local<v8::Value> DocumentClient::GotoOutline(int idx,
   return res.ToLocalChecked();
 }
 
-v8::Local<v8::ArrayBuffer> DocumentClient::SaveToMemory(gin::Arguments* args) {
+base::span<char> DocumentClient::SaveToMemory(v8::Isolate* isolate) {
   char* pOutput = nullptr;
-  size_t size_in_bytes = document_->saveToMemory(&pOutput);
+  size_t size = document_->saveToMemory(&pOutput);
+  if (size < 0) {
+    return {};
+  }
+  return base::span<char>(pOutput, size);
+}
 
-  v8::Isolate* isolate = args->isolate();
+v8::Local<v8::Promise> DocumentClient::SaveToMemoryAsync(v8::Isolate* isolate) {
+  v8::EscapableHandleScope handle_scope(isolate);
+  v8::Local<v8::Promise::Resolver> promise =
+      v8::Promise::Resolver::New(isolate->GetCurrentContext()).ToLocalChecked();
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
+      base::BindOnce(&DocumentClient::SaveToMemory, base::Unretained(this),
+                     isolate),
+      base::BindOnce(&DocumentClient::SaveToMemoryComplete,
+                     weak_factory_.GetWeakPtr(), isolate,
+                     new ThreadedPromiseResolver(isolate, promise)));
+  return handle_scope.Escape(promise->GetPromise());
+}
+
+void DocumentClient::SaveToMemoryComplete(v8::Isolate* isolate,
+                                          ThreadedPromiseResolver* resolver,
+                                          base::span<char> buffer) {
+  AsyncScope async(isolate);
+  v8::Local<v8::Context> context = resolver->GetCreationContext(isolate);
+  v8::Context::Scope context_scope(context);
+  if (buffer.empty()) {
+    resolver->Resolve(isolate, {});
+    return;
+  }
+
+  // since buffer.data() is from a dangling malloc, add a free(...) deleter
+  auto backing_store = v8::ArrayBuffer::NewBackingStore(
+      buffer.data(), buffer.size(),
+      [](void* data, size_t, void*) { free(data); }, nullptr);
   v8::Local<v8::ArrayBuffer> array_buffer =
-        v8::ArrayBuffer::New(isolate, size_in_bytes);
-  auto backing_store = array_buffer->GetBackingStore();
-  std::memcpy(array_buffer->GetBackingStore()->Data(), pOutput, size_in_bytes);
-  free(pOutput);
-  return array_buffer;
+      v8::ArrayBuffer::New(isolate, std::move(backing_store));
+
+  resolver->Resolve(isolate, array_buffer);
 }
 
 void DocumentClient::PostUnoCommand(const std::string& command,

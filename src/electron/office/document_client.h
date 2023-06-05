@@ -19,6 +19,7 @@
 #include "gin/handle.h"
 #include "gin/wrappable.h"
 #include "office/event_bus.h"
+#include "office/threaded_promise_resolver.h"
 #include "shell/common/gin_helper/pinnable.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkImage.h"
@@ -29,10 +30,6 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "v8/include/v8-persistent-handle.h"
-
-namespace base {
-class SequencedTaskRunner;
-}
 
 namespace lok {
 class Document;
@@ -80,7 +77,7 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
                               char* json_buffer,
                               bool notifyWhenFinished);
   v8::Local<v8::Value> GotoOutline(int idx, gin::Arguments* args);
-  v8::Local<v8::ArrayBuffer> SaveToMemory(gin::Arguments* args);
+  v8::Local<v8::Promise> SaveToMemoryAsync(v8::Isolate* isolate);
   std::vector<std::string> GetTextSelection(const std::string& mime_type,
                                             gin::Arguments* args);
   void SetTextSelection(int n_type, int n_x, int n_y);
@@ -160,6 +157,10 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   bool IsMounted();
 
   void EmitReady(v8::Isolate* isolate, v8::Global<v8::Context> context);
+  base::span<char> SaveToMemory(v8::Isolate* isolate);
+  void SaveToMemoryComplete(v8::Isolate* isolate,
+                            ThreadedPromiseResolver* resolver,
+                            base::span<char> buffer);
 
   // has a
   lok::Document* document_ = nullptr;
