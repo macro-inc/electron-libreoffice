@@ -104,6 +104,8 @@ class OfficeClient : public gin::Wrappable<OfficeClient> {
   ~OfficeClient() override;
 
   void EmitLibreOfficeEvent(int type, const char* payload);
+  void Destroy();
+  bool destroyed_ = false;
 
   lok::Office* office_ = nullptr;
   std::unordered_map<std::string, lok::Document*> document_map_;

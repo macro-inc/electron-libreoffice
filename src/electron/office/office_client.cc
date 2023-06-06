@@ -156,10 +156,7 @@ OfficeClient::OfficeClient() {
 // TODO: try to save docs in a separate thread in the background if they are
 // opened and destroyed
 OfficeClient::~OfficeClient() {
-  for (auto& i : document_contexts_) {
-    i.second->invalid.Set();
-  }
-  lazy_tls.Pointer()->Set(nullptr);
+  Destroy();
 };
 
 gin::ObjectTemplateBuilder OfficeClient::GetObjectTemplateBuilder(
@@ -184,7 +181,21 @@ gin::ObjectTemplateBuilder OfficeClient::GetObjectTemplateBuilder(
       .SetMethod("runMacro", &OfficeClient::RunMacro)
       .SetMethod("sendDialogEvent", &OfficeClient::SendDialogEvent)
       .SetMethod("loadDocument", &OfficeClient::LoadDocumentAsync)
-      .SetMethod("loadDocumentFromArrayBuffer", &OfficeClient::LoadDocumentFromArrayBuffer);
+      .SetMethod("loadDocumentFromArrayBuffer",
+                 &OfficeClient::LoadDocumentFromArrayBuffer)
+      .SetMethod("_beforeunload", &OfficeClient::Destroy);
+}
+
+void OfficeClient::Destroy()
+{
+  if (destroyed_) return;
+
+  destroyed_ = true;
+  auto it = document_map_.cbegin();
+  while (it != document_map_.cend()) {
+    CloseDocument(it++->first);
+  }
+  lazy_tls.Pointer()->Set(nullptr);
 }
 
 const char* OfficeClient::GetTypeName() {
@@ -350,7 +361,9 @@ void OfficeClient::LoadDocumentComplete(v8::Isolate* isolate,
     })"));
 }
 
-v8::Local<v8::Value> OfficeClient::LoadDocumentFromArrayBuffer(v8::Isolate* isolate, v8::Local<v8::ArrayBuffer> array_buffer) {
+v8::Local<v8::Value> OfficeClient::LoadDocumentFromArrayBuffer(
+    v8::Isolate* isolate,
+    v8::Local<v8::ArrayBuffer> array_buffer) {
   GetOffice();
   auto backing_store = array_buffer->GetBackingStore();
   char* data = static_cast<char*>(backing_store->Data());
@@ -361,7 +374,7 @@ v8::Local<v8::Value> OfficeClient::LoadDocumentFromArrayBuffer(v8::Isolate* isol
     return {};
   }
 
-  if(office_ == nullptr){
+  if (office_ == nullptr) {
     LOG(ERROR) << "office_ is null";
     return {};
   }
@@ -379,7 +392,11 @@ bool OfficeClient::CloseDocument(const std::string& path) {
   if (doc_context_it != document_contexts_.end())
     doc_context_it->second->invalid.Set();
   documents_mounted_.erase(doc);
-  return document_map_.erase(path) == 1;
+
+  document_map_.erase(path);
+  delete doc;
+
+  return true;
 }
 
 void OfficeClient::EmitLibreOfficeEvent(int type, const char* payload) {

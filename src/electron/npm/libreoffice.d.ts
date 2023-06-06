@@ -243,6 +243,9 @@ declare namespace LibreOffice {
 
     saveToMemory(): Promise<ArrayBuffer | undefined>;
 
+    /** cleanup for window.beforeunload, do not call in any other circumstance */
+    _beforeunload(): void;
+
     /**
      * show/hide a single row/column header outline for Calc documents
      * @param column - if we are dealingg with a column or row group
