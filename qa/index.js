@@ -15,6 +15,10 @@ const thumb = document.getElementById('el-thumb');
 //   console.log('lo', x);
 // });
 
+window.addEventListener('beforeunload', () => {
+  libreoffice._beforeunload();
+});
+
 let globalDoc;
 let zoom = 1.0;
 let uri;
