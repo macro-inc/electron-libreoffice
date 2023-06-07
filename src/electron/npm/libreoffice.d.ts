@@ -243,9 +243,6 @@ declare namespace LibreOffice {
 
     saveToMemory(): Promise<ArrayBuffer | undefined>;
 
-    /** cleanup for window.beforeunload, do not call in any other circumstance */
-    _beforeunload(): void;
-
     /**
      * show/hide a single row/column header outline for Calc documents
      * @param column - if we are dealingg with a column or row group
@@ -378,8 +375,7 @@ declare namespace LibreOffice {
      * @param buffer - the array buffer of the documents contents
      * @returns a XTextDocument created from the ArrayBuffer
      */
-    loadDocumentFromArrayBuffer(buffer: ArrayBuffer): import('./lok_api').text.XTextDocument;
-
+    loadDocumentFromArrayBuffer(buffer: ArrayBuffer): import('./lok_api').text.XTextDocument | undefined;
 
     /**
      * run a macro
@@ -389,5 +385,8 @@ declare namespace LibreOffice {
     runMacro(url: string): boolean;
 
     api: typeof import('./lok_api');
+
+    /** cleanup for window.beforeunload, do not call in any other circumstance */
+    _beforeunload(): void;
   }
 }
