@@ -30,6 +30,11 @@
       </button>
       <button type="button" onclick="acceptTrackChange()">Accept TC</button>
       <button type="button" onclick="rejectTrackChange()">Reject TC</button>
+      <div style="display: flex; flex-direction: column;">
+        <label for="change-index">TC Index</label>
+        <input type="number" id="change-index" />
+        <button type="button" onclick="jumpToTrackChange()">Jump To</button>
+      </div>
     </div>
     <div style="display: flex">
       <button type="button" onclick="gotoOutline()">Goto Outline</button>

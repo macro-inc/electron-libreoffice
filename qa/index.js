@@ -3,6 +3,18 @@ const picker = document.getElementById('el-picker');
 const embed = document.getElementById('el-embed');
 const thumb = document.getElementById('el-thumb');
 
+/** @type {HTMLInputElement} */
+const changeInput = document.getElementById('change-index')
+
+let jumpToIndex = 1;
+changeInput.value = jumpToIndex;
+changeInput.onchange = () => {
+  const num = Number(changeInput.value);
+  if (!isNaN(num)) {
+    jumpToIndex = num;
+  }
+}
+
 // libreoffice.on('status_indicator_set_value', (x) => {
 //   console.log(x);
 // });
@@ -55,7 +67,7 @@ function saveToMemory() {
   const buffer = globalDoc.saveToMemory();
   console.log('saveToMemory', { buffer });
   const newDoc = libreoffice.loadDocumentFromArrayBuffer(buffer);
-  console.log('New doc', {text: newDoc.getText().getString()});
+  console.log('New doc', { text: newDoc.getText().getString() });
 }
 
 // Used as POC to show how to structure outline data
@@ -78,7 +90,7 @@ async function runColorizeWorker() {
   const buffer = await globalDoc.saveToMemory();
   console.log(`save to memory took ${performance.now() - start}ms`, buffer.byteLength)
   const worker = new Worker(fn2workerURL(colorizeWorker));
-  worker.postMessage({ type: 'load', file: uri, data: buffer },[buffer]);
+  worker.postMessage({ type: 'load', file: uri, data: buffer }, [buffer]);
   worker.onmessage = (event) => {
     console.log(event.data);
   };
@@ -95,6 +107,12 @@ function acceptTrackChange() {
 }
 function rejectTrackChange() {
   globalDoc.postUnoCommand('.uno:RejectTrackedChange');
+}
+function jumpToTrackChange() {
+  console.log('Jump to', jumpToIndex);
+  globalDoc.postUnoCommand('.uno:NextTrackedChange', {
+    NextTrackedChange: { type: 'long', value: jumpToIndex },
+  })
 }
 function gotoOutline() {
   const outline = doc.getCommandValues('.uno:GetOutline');
