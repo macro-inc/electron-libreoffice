@@ -55,9 +55,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Temporarily disabling x64 Mac to speed up dev release builds
-          # - name: x86_64
-          #   runner: macro-x641
+          - name: x86_64
+            runner: macro-x641
           - name: arm64
             runner: macro-arm1
     needs: [check_version]
