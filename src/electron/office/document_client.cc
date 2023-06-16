@@ -154,36 +154,6 @@ gfx::Size DocumentClient::DocumentSizeTwips() {
   return gfx::Size(document_width_in_twips_, document_height_in_twips_);
 }
 
-namespace {
-void SaveBackup(const std::string& path) {
-  GURL url(path);
-  base::FilePath file_path;
-  if (!url.SchemeIsFile()) {
-    LOG(ERROR) << "Unable to make backup. Expected a URL as a path, but got: "
-               << path;
-    return;
-  }
-  if (!net::FileURLToFilePath(url, &file_path)) {
-    LOG(ERROR) << "Unable to make backup. Unable to make file URL into path: "
-               << path;
-    return;
-  }
-
-  auto now = base::Time::Now();
-  base::Time::Exploded exploded;
-  now.UTCExplode(&exploded);
-  // ex: .bak.2022-11-07-154601
-  auto backup_suffix =
-      base::StringPrintf(FILE_PATH_LITERAL(".bak.%04d-%02d-%02d-%02d%02d%02d"),
-                         exploded.year, exploded.month, exploded.day_of_month,
-                         exploded.hour, exploded.minute, exploded.second);
-
-  base::FilePath backup_path = file_path.InsertBeforeExtension(backup_suffix);
-
-  base::CopyFile(file_path, backup_path);
-}
-}  // namespace
-
 bool DocumentClient::IsMounted() {
   return !mounted_.IsEmpty();
 }
@@ -214,9 +184,6 @@ int DocumentClient::Mount(v8::Isolate* isolate) {
       base::BindOnce(
           &DocumentClient::EmitReady, GetWeakPtr(), isolate,
           v8::Global<v8::Context>(isolate, isolate->GetCurrentContext())));
-
-  // save a backup before we continue
-  SaveBackup(path_);
 
   return ViewId();
 }
