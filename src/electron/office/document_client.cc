@@ -374,7 +374,7 @@ v8::Local<v8::Value> DocumentClient::GotoOutline(int idx,
 
 base::span<char> DocumentClient::SaveToMemory(v8::Isolate* isolate) {
   char* pOutput = nullptr;
-  size_t size = document_->saveToMemory(&pOutput);
+  size_t size = document_->saveToMemory(&pOutput, malloc);
   if (size < 0) {
     return {};
   }
