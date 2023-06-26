@@ -28,6 +28,10 @@ _Windows_:
     .\scripts\toolchain\install.ps1
     Set-ExecutionPolicy Restricted
     ```
+    - You might need to install the powershell visual studio tools if the above command is failing because of missing `VSSetup`
+    ``` powershell
+        Install-Module VSSetup -Scope CurrentUser
+    ```
 
 - [Git](https://git-scm.com/download/win)
 

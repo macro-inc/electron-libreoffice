@@ -14,6 +14,12 @@ cd electron-libreoffice
 scripts/e sync
 ```
 
+Run before syncing on Windows:
+```powershell
+cmd /c call .\depot_tools\cipd_bin_setup.bat
+cmd /c call .\depot_tools\bootstrap\win_tools.bat
+```
+
 ## How do I build it?
 
 You must sync the code first (as stated above) and let it finish first.
@@ -70,9 +76,20 @@ Do this once:
 ```shell
 # move the old source for libreofficekit to libreofficekit.old
 mv src/third_party/libreofficekit{,.old}
+```
+
+Linux/MacOs
+```bash
 # link src/third_party/libreofficekit to your local libreofficekit/libreoffice-core
 ln -s ../libreofficekit/libreoffice-core src/third_party/libreofficekit
 ```
+
+Windows
+```bash
+# note you must use an administrator command prompt, and the source and target are flipped
+mklink /D ".\src\third_party\libreofficekit" "..\libreofficekit\libreoffice-core"
+```
+
 
 When you make a new local build of `libreofficekit`, remove the old build in electron-libreoffice's output:
 ```shell
