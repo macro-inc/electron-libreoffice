@@ -1,6 +1,7 @@
 declare const libreoffice: LibreOffice.OfficeClient;
 
-interface HTMLLibreOfficeEmbed extends HTMLEmbedElement {
+interface HTMLLibreOfficeEmbed<Client = LibreOffice.DocumentClient>
+  extends HTMLEmbedElement {
   /**
    * updates the scroll to the yPosition in pixels
    * @param yPosition the position in CSS pixels: [0, the height of document in CSS pixels]
@@ -11,7 +12,7 @@ interface HTMLLibreOfficeEmbed extends HTMLEmbedElement {
    * @param doc the DocumentClient to be rendered
    * @returns a Promise which is true if render succeeded or false if render failed
    */
-  renderDocument(doc: LibreOffice.DocumentClient): Promise<boolean>;
+  renderDocument(doc: Client): Promise<boolean>;
   /**
    * description converts twip to a css px
    * @param input - twip
@@ -73,7 +74,7 @@ declare namespace LibreOffice {
     | string
     | { commandId: string; value: any; viewId?: number };
 
-  type DocumentEvents = {
+  interface DocumentEvents {
     document_size_changed: EventPayload<TwipsRect>;
     invalidate_visible_cursor: EventPayload<TwipsRect>;
     cursor_visible: EventPayload<boolean>;
@@ -91,21 +92,48 @@ declare namespace LibreOffice {
     redline_table_entry_modified: any;
     redline_table_size_changed: any;
     invalidate_tiles: any;
+  }
+
+  type DocumentEventHandler<
+    Events extends DocumentEvents = DocumentEvents,
+    Event extends keyof Events = keyof Events
+  > = (arg: Events[Event]) => void;
+
+  export type NumberString<T extends number = number> = `${T}`;
+
+  export type UnoString = { type: 'string'; value: string };
+  export type UnoBoolean = { type: 'boolean'; value: boolean };
+  export type UnoLong = { type: 'long'; value: number };
+  export type UnoFloat = { type: 'float'; value: NumberString };
+  export type UnoStringifiedNumber = { type: 'string'; value: NumberString };
+
+  interface UnoCommands {
+    '.uno:SetPageColor': { ColorHex: UnoString };
+    '.uno:FontColor': { FontColor: UnoLong };
+  }
+
+  type CommandValueResult<R = { [name: string]: any }> = {
+    commandValues: R;
   };
 
-  type DocumentEventHandler<Event extends keyof DocumentEvents> = (
-    arg: DocumentEvents[Event]
-  ) => void;
+  interface GetCommands {
+    '.uno:PageColor': string;
+  }
 
-  interface DocumentClient {
+  interface DocumentClient<
+    Events extends DocumentEvents = DocumentEvents,
+    Commands extends string | number = keyof UnoCommands,
+    CommandMap extends { [K in Commands]?: any } = UnoCommands,
+    GCV extends GetCommands = GetCommands
+  > {
     /**
      * add an event listener
      * @param eventName - the name of the event
      * @param callback - the callback function
      */
-    on<K extends keyof DocumentEvents = keyof DocumentEvents>(
+    on<K extends keyof Events = keyof Events>(
       eventName: K,
-      callback: DocumentEventHandler<K>
+      callback: DocumentEventHandler<Events, K>
     ): void;
 
     /**
@@ -113,9 +141,9 @@ declare namespace LibreOffice {
      * @param eventName - the name of the event
      * @param callback - the callback function
      */
-    off<K extends keyof DocumentEvents = keyof DocumentEvents>(
+    off<K extends keyof Events = keyof Events>(
       eventName: K,
-      callback: DocumentEventHandler<K>
+      callback: DocumentEventHandler<Events, K>
     ): void;
 
     /**
@@ -123,9 +151,9 @@ declare namespace LibreOffice {
      * @param eventName - the name of the event
      * @param callback - the callback function
      */
-    emit<K extends keyof DocumentEvents = keyof DocumentEvents>(
+    emit<K extends keyof Events = keyof Events>(
       eventName: K,
-      callback: DocumentEventHandler<K>
+      callback: DocumentEventHandler<Events, K>
     ): void;
 
     /**
@@ -133,7 +161,12 @@ declare namespace LibreOffice {
      * @param command - the uno command to be posted
      * @param args - arguments for the uno command
      */
-    postUnoCommand(command: string, args?: { [name: string]: any }): void;
+    postUnoCommand<K extends Commands>(
+      command: K,
+      args?: K extends keyof NonNullable<CommandMap>
+        ? NonNullable<CommandMap>[K]
+        : never
+    ): void;
 
     /**
      * get the current parts name
@@ -154,7 +187,7 @@ declare namespace LibreOffice {
      * @param windowId - the id of the window to notify
      * @param args - the arguments for the event
      */
-    sendDialogEvent(windowId: number, args: string): void;
+    sendDialogEvent(windowId: number, args: { [name: string]: any }): void;
 
     /**
      * sets the start or end of a text selection
@@ -227,10 +260,7 @@ declare namespace LibreOffice {
      * @param command - the UNO command for which possible values are requested
      * @returns the command object with possible values
      */
-    getCommandValues(command: string): {
-      commandName: string;
-      commandValues: { [name: string]: any };
-    };
+    getCommandValues<K extends keyof GCV = keyof GCV>(command: K): GCV[K];
 
     /**
      * sets the cursor to a given outline node
@@ -368,14 +398,16 @@ declare namespace LibreOffice {
      * @param path - the document path
      * @returns a Promise of the document client if the load succeeded, undefined if the load failed
      */
-    loadDocument(path: string): Promise<DocumentClient | undefined>;
+    loadDocument<C = DocumentClient>(path: string): Promise<C | undefined>;
 
     /**
      * loads a given document from an ArrayBuffer
      * @param buffer - the array buffer of the documents contents
      * @returns a XTextDocument created from the ArrayBuffer
      */
-    loadDocumentFromArrayBuffer(buffer: ArrayBuffer): import('./lok_api').text.XTextDocument | undefined;
+    loadDocumentFromArrayBuffer(
+      buffer: ArrayBuffer
+    ): import('./lok_api').text.XTextDocument | undefined;
 
     /**
      * run a macro
