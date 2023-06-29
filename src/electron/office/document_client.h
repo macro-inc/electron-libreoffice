@@ -74,7 +74,7 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   gfx::Size Size() const;
   void PostUnoCommand(const std::string& command, gin::Arguments* args);
   void PostUnoCommandInternal(const std::string& command,
-                              char* json_buffer,
+                              std::unique_ptr<char[]> json_buffer,
                               bool notifyWhenFinished);
   v8::Local<v8::Value> GotoOutline(int idx, gin::Arguments* args);
   v8::Local<v8::Promise> SaveToMemoryAsync(v8::Isolate* isolate);
