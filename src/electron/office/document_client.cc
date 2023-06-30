@@ -355,21 +355,14 @@ v8::Local<v8::Value> DocumentClient::GotoOutline(int idx,
     return v8::Undefined(isolate);
   }
 
-  v8::MaybeLocal<v8::String> maybe_res_json_str =
-      v8::String::NewFromUtf8(isolate, result);
+  v8::Local<v8::String> json_str;
 
-  if (maybe_res_json_str.IsEmpty()) {
+  if (!v8::String::NewFromUtf8(isolate, result).ToLocal(&json_str)) {
     return v8::Undefined(isolate);
   }
 
-  v8::MaybeLocal<v8::Value> res = v8::JSON::Parse(
-      args->GetHolderCreationContext(), maybe_res_json_str.ToLocalChecked());
-
-  if (res.IsEmpty()) {
-    return v8::Undefined(isolate);
-  }
-
-  return res.ToLocalChecked();
+  return v8::JSON::Parse(args->GetHolderCreationContext(), json_str)
+      .FromMaybe(v8::Local<v8::Value>());
 }
 
 base::span<char> DocumentClient::SaveToMemory(v8::Isolate* isolate) {
@@ -416,38 +409,62 @@ void DocumentClient::SaveToMemoryComplete(v8::Isolate* isolate,
   resolver->Resolve(isolate, array_buffer);
 }
 
+namespace {
+
+std::unique_ptr<char[]> stringify(const v8::Local<v8::Context>& context,
+                                  const v8::Local<v8::Value>& val) {
+  v8::Isolate* isolate = context->GetIsolate();
+  v8::Context::Scope context_scope(context);
+  v8::HandleScope scope(isolate);
+  v8::TryCatch try_catch(isolate);
+
+  v8::Local<v8::String> str;
+  if (!val->ToString(context).ToLocal(&str))
+    return {};
+
+  uint32_t len = str->Utf8Length(isolate);
+  char* buf = new (std::nothrow) char[len + 1];
+  if (!buf)
+    return {};
+  std::unique_ptr<char[]> ptr(buf);
+  str->WriteUtf8(isolate, buf);
+  buf[len] = '\0';
+
+  return ptr;
+}
+
+std::unique_ptr<char[]> jsonStringify(const v8::Local<v8::Context>& context,
+                                      const v8::Local<v8::Value>& val) {
+  v8::Local<v8::String> str_object;
+  if (!v8::JSON::Stringify(context, val).ToLocal(&str_object))
+    return {};
+  return stringify(context, str_object);
+}
+
+}  // namespace
+
 void DocumentClient::PostUnoCommand(const std::string& command,
                                     gin::Arguments* args) {
   v8::Local<v8::Value> arguments;
-  v8::MaybeLocal<v8::String> maybe_args_json;
-  char* json_buffer = nullptr;
+  std::unique_ptr<char[]> json_buffer;
 
   bool notifyWhenFinished;
   if (args->GetNext(&arguments)) {
-    // Convert JSON object into stringifed JSON
-    maybe_args_json =
-        v8::JSON::Stringify(args->GetHolderCreationContext(), arguments);
-
-    if (!maybe_args_json.IsEmpty()) {
-      auto args_json = maybe_args_json.ToLocalChecked();
-      uint32_t len = args_json->Utf8Length(args->isolate());
-      json_buffer = new char[len];
-      args_json->WriteUtf8(args->isolate(), json_buffer);
-    }
+    json_buffer = jsonStringify(args->GetHolderCreationContext(), arguments);
+    if (!json_buffer)
+      return;
   }
 
   args->GetNext(&notifyWhenFinished);
 
-  PostUnoCommandInternal(command, json_buffer, notifyWhenFinished);
-
-  if (json_buffer)
-    delete[] json_buffer;
+  PostUnoCommandInternal(command, std::move(json_buffer), notifyWhenFinished);
 }
 
 void DocumentClient::PostUnoCommandInternal(const std::string& command,
-                                            char* json_buffer,
+                                            std::unique_ptr<char[]> json_buffer,
                                             bool notifyWhenFinished) {
-  document_->postUnoCommand(command.c_str(), json_buffer, notifyWhenFinished);
+  document_->postUnoCommand(command.c_str(), json_buffer.get(),
+                            notifyWhenFinished);
 }
 
 std::vector<std::string> DocumentClient::GetTextSelection(
@@ -483,22 +500,17 @@ v8::Local<v8::Value> DocumentClient::GetPartHash(int n_part,
   return gin::StringToV8(args->isolate(), part_hash);
 }
 
-// TODO: Investigate correct type of args here
 void DocumentClient::SendDialogEvent(uint64_t n_window_id,
                                      gin::Arguments* args) {
   v8::Local<v8::Value> arguments;
-  v8::MaybeLocal<v8::String> maybe_arguments_str;
-  char* p_arguments = nullptr;
 
-  if (args->GetNext(&arguments)) {
-    maybe_arguments_str = arguments->ToString(args->GetHolderCreationContext());
-    if (!maybe_arguments_str.IsEmpty()) {
-      v8::String::Utf8Value p_arguments_utf8(
-          args->isolate(), maybe_arguments_str.ToLocalChecked());
-      p_arguments = *p_arguments_utf8;
-    }
-  }
-  document_->sendDialogEvent(n_window_id, p_arguments);
+  if (!args->GetNext(&arguments))
+    return;
+  auto json = jsonStringify(args->GetHolderCreationContext(), arguments);
+  if (!json)
+    return;
+
+  document_->sendDialogEvent(n_window_id, json.get());
 }
 
 v8::Local<v8::Value> DocumentClient::GetSelectionTypeAndText(
@@ -681,7 +693,7 @@ void DocumentClient::ResetSelection() {
 v8::Local<v8::Value> DocumentClient::GetCommandValues(
     const std::string& command,
     gin::Arguments* args) {
-  char* result = document_->getCommandValues(command.c_str());
+  std::unique_ptr<char[]> result(document_->getCommandValues(command.c_str()));
 
   v8::Isolate* isolate = args->isolate();
 
@@ -689,21 +701,13 @@ v8::Local<v8::Value> DocumentClient::GetCommandValues(
     return v8::Undefined(isolate);
   }
 
-  v8::MaybeLocal<v8::String> maybe_res_json_str =
-      v8::String::NewFromUtf8(isolate, result);
+  v8::Local<v8::String> res_json_str;
+  if (!v8::String::NewFromUtf8(isolate, result.get()).ToLocal(&res_json_str)) {
+    return {};
+  };
 
-  if (maybe_res_json_str.IsEmpty()) {
-    return v8::Undefined(isolate);
-  }
-
-  v8::MaybeLocal<v8::Value> res = v8::JSON::Parse(
-      args->GetHolderCreationContext(), maybe_res_json_str.ToLocalChecked());
-
-  if (res.IsEmpty()) {
-    return v8::Undefined(isolate);
-  }
-
-  return res.ToLocalChecked();
+  return v8::JSON::Parse(args->GetHolderCreationContext(), res_json_str)
+      .FromMaybe(v8::Local<v8::Value>());
 }
 
 void DocumentClient::SetOutlineState(bool column,
@@ -742,22 +746,11 @@ void DocumentClient::SendFormFieldEvent(const std::string& arguments) {
 bool DocumentClient::SendContentControlEvent(
     const v8::Local<v8::Object>& arguments,
     gin::Arguments* args) {
-  v8::MaybeLocal<v8::String> maybe_str_object =
-      v8::JSON::Stringify(args->GetHolderCreationContext(), arguments);
-
-  if (maybe_str_object.IsEmpty()) {
+  std::unique_ptr<char[]> json_buffer =
+      jsonStringify(args->GetHolderCreationContext(), arguments);
+  if (!json_buffer)
     return false;
-  }
-
-  v8::Local<v8::String> str_object = maybe_str_object.ToLocalChecked();
-
-  uint32_t len = str_object->Utf8Length(args->isolate());
-  char* json_buffer = new char[len];
-  str_object->WriteUtf8(args->isolate(), json_buffer);
-
-  document_->sendContentControlEvent(json_buffer);
-
-  delete[] json_buffer;
+  document_->sendContentControlEvent(json_buffer.get());
 
   return true;
 }
