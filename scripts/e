@@ -240,7 +240,7 @@ case "$1" in
   run)
     OUT_DIR="out/$ELECTRON_OUT_DIR"
     LAST_RUN_STAMP="$BASE_PATH/.last_run_stamp"
-    export RUN_GN_ONCE=true
+    export RUN_GN_ONCE="${RUN_GN_ONCE:true}"
 
     # Only build if there are changes to src/electron since the last successful build
     if [ -e "$LAST_RUN_STAMP" ] && find "$BASE_PATH/src/electron" -newer "$LAST_RUN_STAMP" -exec false {} +
