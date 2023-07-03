@@ -16,6 +16,7 @@
 #include <vector>
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
 #include "cc/paint/paint_image.h"
 #include "gin/handle.h"
 #include "include/core/SkImage.h"
@@ -268,6 +269,7 @@ class OfficeWebPlugin : public blink::WebPlugin,
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
   office::CancelFlagPtr paint_cancel_flag_;
+  base::TimeTicks last_full_invalidation_time_ = base::TimeTicks();
 
   v8::Global<v8::ObjectTemplate> v8_template_;
   v8::Global<v8::Object> v8_object_;
