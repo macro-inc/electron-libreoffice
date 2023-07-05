@@ -222,7 +222,7 @@ declare namespace LibreOffice {
      * the mimeTypes should include the charset if you are going to pass them in for filtering the clipboard data ex.) text/plain;charset=utf-8
      * @returns an array of clipboard items
      */
-    getClipboard(mimeTypes?: string[]): ClipboardItem[];
+    getClipboard(mimeTypes?: string[]): Array<ClipboardItem | undefined>;
 
     /**
      * populates the clipboard for this view with multiple types of content
