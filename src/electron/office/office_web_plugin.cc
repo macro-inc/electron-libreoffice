@@ -302,11 +302,17 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
       case office::DomCode::US_W:
         return blink::WebInputEventResult::kNotHandled;
       case office::DomCode::US_C:
-        return HandleCutCopyEvent(".uno:Copy");
+        return type == blink::WebInputEvent::Type::kRawKeyDown
+                   ? blink::WebInputEventResult::kHandledApplication
+                   : HandleCutCopyEvent(".uno:Copy");
       case office::DomCode::US_V:
-        return HandlePasteEvent();
+        return type == blink::WebInputEvent::Type::kKeyUp
+                   ? blink::WebInputEventResult::kHandledApplication
+                   : HandlePasteEvent();
       case office::DomCode::US_X:
-        return HandleCutCopyEvent(".uno:Cut");
+        return type == blink::WebInputEvent::Type::kKeyUp
+                   ? blink::WebInputEventResult::kHandledApplication
+                   : HandleCutCopyEvent(".uno:Cut");
     }
   }
 
@@ -558,13 +564,15 @@ void OfficeWebPlugin::HandleInvalidateTiles(std::string payload) {
   // TODO: handle non-text document types for parts
   if (payload_sv == "EMPTY") {
     base::TimeTicks now = base::TimeTicks::Now();
-    if (last_full_invalidation_time_.is_null() || (now - last_full_invalidation_time_) > base::Milliseconds(10)) {
+    if (last_full_invalidation_time_.is_null() ||
+        (now - last_full_invalidation_time_) > base::Milliseconds(10)) {
       ScheduleAvailableAreaPaint();
       last_full_invalidation_time_ = now;
     }
-   // weirdly, LOK seems to be issuing a full tile invalidation FOR EVERY PAGE, then the whole document
-   // skip those page invalidations which are of the form "EMPTY, #, #"
-   // rendering was getting N+1 full document re-renders where N=number of pages, that's bad
+    // weirdly, LOK seems to be issuing a full tile invalidation FOR EVERY PAGE,
+    // then the whole document skip those page invalidations which are of the
+    // form "EMPTY, #, #" rendering was getting N+1 full document re-renders
+    // where N=number of pages, that's bad
   } else if (payload_sv.substr(0, 5) != "EMPTY") {
     std::string_view::const_iterator start = payload_sv.begin();
     gfx::Rect dirty_rect =
