@@ -6,6 +6,7 @@
 #include <sys/types.h>
 
 #include <iterator>
+#include <memory>
 #include <string_view>
 #include <vector>
 #include "LibreOfficeKit/LibreOfficeKit.hxx"
@@ -29,6 +30,7 @@
 #include "office/event_bus.h"
 #include "office/lok_callback.h"
 #include "office/office_client.h"
+#include "office/office_singleton.h"
 #include "shell/common/gin_converters/gfx_converter.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
@@ -55,6 +57,23 @@
 
 namespace electron::office {
 gin::WrapperInfo DocumentClient::kWrapperInfo = {gin::kEmbedderNativeGin};
+
+namespace {
+
+void lok_free(void* b) {
+  // this seems scary, because it is, but LOK's freeError is really just the
+  // LOK-friendly std::free we do this because Chromium has a special std::free
+  // override that breaks things on Windows
+  OfficeSingleton::GetOffice()->freeError((char*)b);
+}
+
+struct LokFree {
+  void operator()(void* b) { lok_free(b); }
+};
+
+typedef std::unique_ptr<char[], LokFree> LokStrPtr;
+
+}  // namespace
 
 DocumentClient::DocumentClient(base::WeakPtr<OfficeClient> office_client,
                                lok::Document* document,
@@ -274,7 +293,7 @@ void DocumentClient::OnClipboardChanged() {
 
   for (size_t i = 0; i < mime_types.size(); ++i) {
     size_t buffer_size = out_sizes[i];
-    std::string mime_type = out_mime_types[i];
+    std::string_view mime_type = out_mime_types[i];
     if (buffer_size <= 0) {
       continue;
     }
@@ -288,7 +307,16 @@ void DocumentClient::OnClipboardChanged() {
                             buffer_size, &bitmap);
       writer.WriteImage(std::move(bitmap));
     }
+
+    // free the clipboard item, can't use std::unique_ptr without a
+    // wrapper class since it needs to be size aware
+    lok_free(out_streams[i]);
+    lok_free(out_mime_types[i]);
   }
+  // free the clipboard item containers
+  lok_free(out_sizes);
+  lok_free(out_streams);
+  lok_free(out_mime_types);
 }
 
 void DocumentClient::HandleUnoCommandResult(std::string payload) {
@@ -317,10 +345,10 @@ void DocumentClient::RefreshSize() {
   document_->getDocumentSize(&document_width_in_twips_,
                              &document_height_in_twips_);
 
-  std::string_view page_rect_sv(document_->getPartPageRectangles());
+  LokStrPtr page_rect = LokStrPtr(document_->getPartPageRectangles());
+  std::string_view page_rect_sv(page_rect.get());
   std::string_view::const_iterator start = page_rect_sv.begin();
   int new_size = GetNumberOfPages();
-  // TODO: is there a better way, like updating a page only when it changes?
   page_rects_ =
       lok_callback::ParseMultipleRects(start, page_rect_sv.end(), new_size);
 }
@@ -348,7 +376,7 @@ DocumentClient::DocumentClient() = default;
 
 v8::Local<v8::Value> DocumentClient::GotoOutline(int idx,
                                                  gin::Arguments* args) {
-  char* result = document_->gotoOutline(idx);
+  LokStrPtr result = LokStrPtr(document_->gotoOutline(idx));
   v8::Isolate* isolate = args->isolate();
 
   if (!result) {
@@ -357,7 +385,7 @@ v8::Local<v8::Value> DocumentClient::GotoOutline(int idx,
 
   v8::Local<v8::String> json_str;
 
-  if (!v8::String::NewFromUtf8(isolate, result).ToLocal(&json_str)) {
+  if (!v8::String::NewFromUtf8(isolate, result.get()).ToLocal(&json_str)) {
     return v8::Undefined(isolate);
   }
 
@@ -471,11 +499,13 @@ std::vector<std::string> DocumentClient::GetTextSelection(
     const std::string& mime_type,
     gin::Arguments* args) {
   char* used_mime_type;
-  char* text_selection;
-  text_selection =
-      document_->getTextSelection(mime_type.c_str(), &used_mime_type);
 
-  return {text_selection, used_mime_type};
+  LokStrPtr text_selection(
+      document_->getTextSelection(mime_type.c_str(), &used_mime_type));
+
+  LokStrPtr u_used_mime_type(used_mime_type);
+
+  return {text_selection.get(), u_used_mime_type.get()};
 }
 
 void DocumentClient::SetTextSelection(int n_type, int n_x, int n_y) {
@@ -484,20 +514,20 @@ void DocumentClient::SetTextSelection(int n_type, int n_x, int n_y) {
 
 v8::Local<v8::Value> DocumentClient::GetPartName(int n_part,
                                                  gin::Arguments* args) {
-  char* part_name = document_->getPartName(n_part);
+  LokStrPtr part_name(document_->getPartName(n_part));
   if (!part_name)
     return v8::Undefined(args->isolate());
 
-  return gin::StringToV8(args->isolate(), part_name);
+  return gin::StringToV8(args->isolate(), part_name.get());
 }
 
 v8::Local<v8::Value> DocumentClient::GetPartHash(int n_part,
                                                  gin::Arguments* args) {
-  char* part_hash = document_->getPartHash(n_part);
+  LokStrPtr part_hash(document_->getPartHash(n_part));
   if (!part_hash)
     return v8::Undefined(args->isolate());
 
-  return gin::StringToV8(args->isolate(), part_hash);
+  return gin::StringToV8(args->isolate(), part_hash.get());
 }
 
 void DocumentClient::SendDialogEvent(uint64_t n_window_id,
@@ -521,6 +551,9 @@ v8::Local<v8::Value> DocumentClient::GetSelectionTypeAndText(
 
   int selection_type = document_->getSelectionTypeAndText(
       mime_type.c_str(), &p_text_char, &used_mime_type);
+  
+  // to safely de-allocate the strings
+  LokStrPtr a(used_mime_type), b(p_text_char);
 
   v8::Isolate* isolate = args->isolate();
   if (!p_text_char || !used_mime_type)
@@ -576,6 +609,7 @@ v8::Local<v8::Value> DocumentClient::GetClipboard(gin::Arguments* args) {
 
   for (size_t i = 0; i < out_count; ++i) {
     size_t buffer_size = out_sizes[i];
+    if (buffer_size <= 0) continue;
 
     // allocate a new ArrayBuffer and copy the stream to the backing store
     v8::Local<v8::ArrayBuffer> buffer =
@@ -591,7 +625,16 @@ v8::Local<v8::Value> DocumentClient::GetClipboard(gin::Arguments* args) {
     v8::Local<v8::Value> object =
         v8::Object::New(isolate, v8::Null(isolate), names, values, 2);
     std::ignore = result->Set(context, i, object);
+
+    // free the clipboard item, can't use std::unique_ptr without a
+    // wrapper class since it needs to be size aware
+    lok_free(out_streams[i]);
+    lok_free(out_mime_types[i]);
   }
+  // free the clipboard item containers
+  lok_free(out_sizes);
+  lok_free(out_streams);
+  lok_free(out_mime_types);
 
   return result;
 }
@@ -693,12 +736,12 @@ void DocumentClient::ResetSelection() {
 v8::Local<v8::Value> DocumentClient::GetCommandValues(
     const std::string& command,
     gin::Arguments* args) {
-  std::unique_ptr<char[]> result(document_->getCommandValues(command.c_str()));
+  LokStrPtr result(document_->getCommandValues(command.c_str()));
 
   v8::Isolate* isolate = args->isolate();
 
   if (!result) {
-    return v8::Undefined(isolate);
+    return {};
   }
 
   v8::Local<v8::String> res_json_str;
