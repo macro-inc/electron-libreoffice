@@ -21,6 +21,8 @@ class PaintManager {
   class Client {
    public:
     virtual void InvalidatePluginContainer() = 0;
+    virtual void UpdateSnapshot(sk_sp<SkImage> snapshot,
+                                float snapshot_scale) = 0;
     virtual base::WeakPtr<Client> GetWeakClient() = 0;
     virtual office::TileBuffer* GetTileBuffer() = 0;
   };
@@ -82,7 +84,10 @@ class PaintManager {
   };
 
   void PostCurrentTask();
-  static void CurrentTaskComplete(Client* client, CancelFlagPtr cancel_flag);
+  static void CurrentTaskComplete(Client* client,
+                                  CancelFlagPtr cancel_flag,
+                                  bool full_paint,
+                                  float scale);
   static void PaintTile(TileBuffer* tile_buffer,
                         CancelFlagPtr cancel_flag,
                         lok::Document* document,

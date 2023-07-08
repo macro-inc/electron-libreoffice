@@ -491,6 +491,7 @@ void DocumentClient::PostUnoCommand(const std::string& command,
 void DocumentClient::PostUnoCommandInternal(const std::string& command,
                                             std::unique_ptr<char[]> json_buffer,
                                             bool notifyWhenFinished) {
+  SetView();
   document_->postUnoCommand(command.c_str(), json_buffer.get(),
                             notifyWhenFinished);
 }

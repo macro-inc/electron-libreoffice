@@ -18,6 +18,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "cc/paint/paint_image.h"
+#include "cc/paint/paint_image_builder.h"
 #include "gin/handle.h"
 #include "include/core/SkImage.h"
 #include "office/document_client.h"
@@ -161,6 +162,7 @@ class OfficeWebPlugin : public blink::WebPlugin,
 
   // PaintManager::Client
   void InvalidatePluginContainer() override;
+  void UpdateSnapshot(sk_sp<SkImage> snapshot, float snapshot_scale) override;
 
   content::RenderFrame* render_frame() const;
 
@@ -264,8 +266,14 @@ class OfficeWebPlugin : public blink::WebPlugin,
   office::DocumentClient* document_client_ = nullptr;
   int view_id_ = -1;
 
+  // painting
   std::unique_ptr<office::TileBuffer> tile_buffer_;
   std::unique_ptr<office::PaintManager> paint_manager_;
+  bool take_snapshot_ = false;
+  float snapshot_scale_;
+  cc::PaintImage snapshot_;
+
+  bool visible_;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
   office::CancelFlagPtr paint_cancel_flag_;

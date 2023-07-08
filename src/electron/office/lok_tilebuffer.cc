@@ -12,7 +12,10 @@
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_image.h"
 #include "cc/paint/paint_image_builder.h"
+#include "cc/paint/skia_paint_canvas.h"
 #include "electron/office/lok_tilebuffer.h"
+#include "include/core/SkImageInfo.h"
+#include "include/core/SkSurface.h"
 #include "include/core/SkTextBlob.h"
 #include "office/cancellation_flag.h"
 #include "office/lok_callback.h"
@@ -37,6 +40,22 @@ TileBuffer::TileBuffer() : valid_tile_(0) {
 }
 
 TileBuffer::~TileBuffer() = default;
+
+void TileBuffer::ResetSnapshotSurface(long width_twips, long height_twips, float scale) {
+  int width_scaled = lok_callback::TwipToPixel(width_twips, scale);
+  int height_scaled = lok_callback::TwipToPixel(height_twips, scale);
+  int columns = std::ceil(static_cast<double>(width_scaled) / kTileSizePx);
+  int rows = std::ceil(static_cast<double>(height_scaled) / kTileSizePx);
+  int width = columns * kTileSizePx;
+  int height = rows * kTileSizePx;
+
+  base::TimeTicks start = base::TimeTicks::Now();
+  sk_sp<SkSurface> current = surfaces_[current_surface_];
+  if (!current || width != current->width() || height != current->height()) {
+    surfaces_[current_surface_] = SkSurface::MakeRasterN32Premul(width, height);
+    LOG(ERROR) << "RESIZE TOOK: (ms)" << (base::TimeTicks::Now() - start).InMilliseconds();
+  }
+}
 
 void TileBuffer::Resize(long width_twips, long height_twips, float scale) {
   doc_width_twips_ = width_twips;
@@ -72,7 +91,8 @@ void TileBuffer::PaintTile(CancelFlagPtr cancel_flag,
   const unsigned int max = columns_ * rows_ - 1;
   if (tile_index > max) {
     // TODO: proper fix, this probably occurs after a zoom
-    LOG(ERROR) << "invalid tile index: " << tile_index << ", exceeds max " << max;
+    LOG(ERROR) << "invalid tile index: " << tile_index << ", exceeds max "
+               << max;
     return;
   }
 
@@ -357,5 +377,86 @@ size_t TileCount(std::vector<TileRange> tile_ranges_) {
   }
   return result;
 }
+
+sk_sp<SkImage> TileBuffer::MakeSnapshot(CancelFlagPtr cancel_flag, const gfx::Rect& rect) {
+  if (!surfaces_[current_surface_]) {
+    LOG(ERROR) << "NO SURFACE";
+    return {};
+  }
+  cc::PaintFlags flags;
+  flags.setBlendMode(SkBlendMode::kSrc);
+  sk_sp<SkSurface> surface = surfaces_[current_surface_];
+  cc::SkiaPaintCanvas canvas(surface->getCanvas());
+  canvas.translate(0, -y_pos_);
+
+  auto offset_rect = gfx::RectF(rect);
+  offset_rect.Offset(0, y_pos_);
+  gfx::Rect tile_rect = TileRect(offset_rect, doc_width_scaled_px_,
+                                 doc_height_scaled_px_, kTileSizePx);
+
+  DCHECK(tile_rect.x() >= 0);
+  DCHECK(tile_rect.y() >= 0);
+  DCHECK(tile_rect.width() >= 0);
+  DCHECK(tile_rect.height() >= 0);
+  DCHECK((unsigned int)tile_rect.right() <= columns_);
+  DCHECK((unsigned int)tile_rect.bottom() <= rows_);
+
+  unsigned int row_start = (unsigned int)tile_rect.y();
+  unsigned int row_end = (unsigned int)tile_rect.bottom();
+  unsigned int column_start = (unsigned int)tile_rect.x();
+  unsigned int column_end = (unsigned int)tile_rect.right();
+
+  for (unsigned int row = row_start; row < row_end; ++row) {
+    for (unsigned int column = column_start; column < column_end; ++column) {
+      if (CancelFlag::IsCancelled(cancel_flag))
+        return {};
+      unsigned int tile_index = CoordToIndex(column, row);
+      size_t pool_index;
+
+      if (!TileToPoolIndex(tile_index, &pool_index)) {
+        LOG(ERROR) << "This shouldn't happen";
+        return {};
+      }
+
+      canvas.drawImage(pool_paint_images_[pool_index], kTileSizePx * column,
+                        kTileSizePx * row,
+                        SkSamplingOptions(SkFilterMode::kNearest), &flags);
+
+#ifdef TILEBUFFER_DEBUG_PAINT
+      cc::PaintFlags debugPaint;
+      debugPaint.setColor(SK_ColorRED);
+      debugPaint.setStrokeWidth(1);
+      SkRect debugRect{(float)kTileSizePx * column, (float)kTileSizePx * row,
+                       (float)kTileSizePx * (column + 1),
+                       (float)kTileSizePx * (row + 1)};
+
+      SkFont font;
+      font.setScaleX(0.5);
+      font.setSize(12);
+      canvas->drawTextBlob(
+          SkTextBlob::MakeFromString(std::to_string(tile_index).c_str(), font),
+          debugRect.left(), debugRect.bottom(), debugPaint);
+
+      canvas->drawLine(debugRect.left(), debugRect.top(), debugRect.right(),
+                       debugRect.top(), debugPaint);
+      canvas->drawLine(debugRect.right(), debugRect.top(), debugRect.right(),
+                       debugRect.bottom(), debugPaint);
+      canvas->drawLine(debugRect.right(), debugRect.bottom(), debugRect.left(),
+                       debugRect.bottom(), debugPaint);
+      canvas->drawLine(debugRect.left(), debugRect.top(), debugRect.left(),
+                       debugRect.bottom(), debugPaint);
+#endif
+    }
+  }
+
+  return surface->makeImageSnapshot();
+
+  // is this necessary? it's in the chromium code
+  // surface->getCanvas()->drawImage(snapshot.get(), /*x=*/0, /*y=*/0,
+  //                                  SkSamplingOptions(), /*paint=*/nullptr);
+
+  // return {};
+}
+
 
 }  // namespace electron::office

@@ -73,6 +73,9 @@ class TileBuffer {
   std::vector<TileRange> PaintToCanvas(CancelFlagPtr cancel_flag,
                                        cc::PaintCanvas* canvas,
                                        const gfx::Rect& rect);
+  void ResetSnapshotSurface(long width_twips, long height_twips, float scale);
+  sk_sp<SkImage> MakeSnapshot(CancelFlagPtr cancel_flag,
+                               const gfx::Rect& rect);
   void PaintTile(CancelFlagPtr cancel_flag,
                  lok::Document* document,
                  unsigned int tile_index);
@@ -81,8 +84,10 @@ class TileBuffer {
   void Resize(long width_twips, long heigh_twips, float scale);
   void ResetScale(float scale);
   TileRange LimitIndex(int y_pos, unsigned int view_height);
-  std::vector<TileRange> InvalidRangesRemaining(std::vector<TileRange> tile_ranges);
-  std::vector<TileRange> ClipRanges(std::vector<TileRange> ranges, TileRange range_limit);
+  std::vector<TileRange> InvalidRangesRemaining(
+      std::vector<TileRange> tile_ranges);
+  std::vector<TileRange> ClipRanges(std::vector<TileRange> ranges,
+                                    TileRange range_limit);
 
  private:
   unsigned int CoordToIndex(unsigned int x, unsigned int y) {
@@ -122,6 +127,11 @@ class TileBuffer {
            pool_index_to_tile_index_[result] == tile_index;
   }
 
+  int CurrentSurface() { return current_surface_; }
+  int NextSurface() {
+    return current_surface_ = current_surface_ + 1 % sizeof(surfaces_);
+  }
+
   struct RowLimit {
     unsigned int start;
     unsigned int end;
@@ -139,6 +149,10 @@ class TileBuffer {
   float doc_height_scaled_px_;
 
   AtomicBitset valid_tile_;
+
+  // snapshots
+  int current_surface_ = 0;
+  sk_sp<SkSurface> surfaces_[2];
 
   // ring pool (in order to prevent OOM crash on invididual tile allocations)
 

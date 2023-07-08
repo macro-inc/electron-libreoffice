@@ -34,7 +34,7 @@ PaintManager::Task::~Task() {
 
 PaintManager::PaintManager(Client* client)
     : task_runner_(base::ThreadPool::CreateTaskRunner(
-          {base::MayBlock(), base::TaskPriority::USER_VISIBLE})),
+          {base::TaskPriority::USER_VISIBLE})),
       client_(client) {}
 
 PaintManager::PaintManager() = default;
@@ -154,8 +154,10 @@ void PaintManager::PostCurrentTask() {
   auto simplified_ranges = SimplifyRanges(current_task_->tile_ranges_);
   auto tile_count = TileCount(simplified_ranges);
   base::RepeatingClosure completed = base::BarrierClosure(
-      tile_count, base::BindOnce(&PaintManager::CurrentTaskComplete, client_,
-                                 current_task_->task_cancel_flag_));
+      tile_count,
+      base::BindOnce(&PaintManager::CurrentTaskComplete, client_,
+                     current_task_->task_cancel_flag_,
+                     current_task_->full_paint_, current_task_->scale_));
   for (auto& it : simplified_ranges) {
     task_runner_->PostTask(
         FROM_HERE,
@@ -166,7 +168,9 @@ void PaintManager::PostCurrentTask() {
 }
 
 void PaintManager::CurrentTaskComplete(Client* client,
-                                       CancelFlagPtr cancel_flag) {
+                                       CancelFlagPtr cancel_flag,
+                                       bool full_paint,
+                                       float scale) {
   if (!CancelFlag::IsCancelled(cancel_flag)) {
     client->InvalidatePluginContainer();
   }

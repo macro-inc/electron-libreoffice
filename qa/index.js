@@ -34,8 +34,8 @@ picker.onchange = async () => {
     runColorizeWorker();
 
     embed.renderDocument(doc);
-    thumb.renderDocument(doc);
-    thumb.setZoom(0.1);
+    // thumb.renderDocument(doc);
+    // thumb.setZoom(0.1);
     embed.focus();
   }
 };
