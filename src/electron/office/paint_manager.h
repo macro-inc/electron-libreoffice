@@ -21,8 +21,6 @@ class PaintManager {
   class Client {
    public:
     virtual void InvalidatePluginContainer() = 0;
-    virtual void UpdateSnapshot(sk_sp<SkImage> snapshot,
-                                float snapshot_scale) = 0;
     virtual base::WeakPtr<Client> GetWeakClient() = 0;
     virtual office::TileBuffer* GetTileBuffer() = 0;
   };

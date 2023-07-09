@@ -162,15 +162,15 @@ class OfficeWebPlugin : public blink::WebPlugin,
 
   // PaintManager::Client
   void InvalidatePluginContainer() override;
-  void UpdateSnapshot(sk_sp<SkImage> snapshot, float snapshot_scale) override;
+  base::WeakPtr<office::PaintManager::Client> GetWeakClient() override;
+  office::TileBuffer* GetTileBuffer() override;
 
   content::RenderFrame* render_frame() const;
 
   void TriggerFullRerender();
   void ScheduleAvailableAreaPaint();
   base::WeakPtr<OfficeWebPlugin> GetWeakPtr();
-  office::TileBuffer* GetTileBuffer() override;
-  base::WeakPtr<office::PaintManager::Client> GetWeakClient() override;
+  void UpdateSnapshot(const office::Snapshot snapshot);
 
  private:
   // call `Destroy()` instead.
@@ -270,8 +270,8 @@ class OfficeWebPlugin : public blink::WebPlugin,
   std::unique_ptr<office::TileBuffer> tile_buffer_;
   std::unique_ptr<office::PaintManager> paint_manager_;
   bool take_snapshot_ = false;
-  float snapshot_scale_;
-  cc::PaintImage snapshot_;
+  office::Snapshot snapshot_;
+  base::TimeTicks last_snapshot_time_ = base::TimeTicks();
 
   bool visible_;
 

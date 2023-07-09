@@ -5,11 +5,7 @@
 #ifndef OFFICE_LOK_TILEBUFFER_H_
 #define OFFICE_LOK_TILEBUFFER_H_
 
-#include <atomic>
-#include <chrono>
-#include <limits>
-#include <map>
-#include <unordered_set>
+#include <vector>
 #include "base/memory/weak_ptr.h"
 #include "cc/paint/paint_canvas.h"
 #include "office/atomic_bitset.h"
@@ -49,6 +45,25 @@ std::vector<TileRange> SimplifyRanges(std::vector<TileRange> tile_ranges_);
 // is simplified
 size_t TileCount(std::vector<TileRange> tile_ranges_);
 
+struct Snapshot {
+  std::vector<cc::PaintImage> tiles;
+  float scale = 0.0;
+  unsigned int column_start = 0;
+  unsigned int column_end = 0;
+  unsigned int row_start = 0;
+  unsigned int row_end = 0;
+
+  Snapshot(std::vector<cc::PaintImage> tiles_,
+           float scale_,
+           int column_start_,
+           int column_end_,
+           int row_start_,
+           int row_end_);
+
+  Snapshot();
+  ~Snapshot();
+};
+
 class TileBuffer {
  public:
   TileBuffer();
@@ -72,10 +87,9 @@ class TileBuffer {
   void InvalidateAllTiles();
   std::vector<TileRange> PaintToCanvas(CancelFlagPtr cancel_flag,
                                        cc::PaintCanvas* canvas,
+                                       const Snapshot& snapshot,
                                        const gfx::Rect& rect);
-  void ResetSnapshotSurface(long width_twips, long height_twips, float scale);
-  sk_sp<SkImage> MakeSnapshot(CancelFlagPtr cancel_flag,
-                               const gfx::Rect& rect);
+  const Snapshot MakeSnapshot(CancelFlagPtr cancel_flag, const gfx::Rect& rect);
   void PaintTile(CancelFlagPtr cancel_flag,
                  lok::Document* document,
                  unsigned int tile_index);
@@ -91,7 +105,11 @@ class TileBuffer {
 
  private:
   unsigned int CoordToIndex(unsigned int x, unsigned int y) {
-    return y * columns_ + x;
+    return CoordToIndex(columns_, x, y);
+  };
+
+  static unsigned int CoordToIndex(int columns, unsigned int x, unsigned int y) {
+    return y * columns + x;
   };
 
   std::pair<unsigned int, unsigned int> IndexToCoord(unsigned int index) {
@@ -127,11 +145,6 @@ class TileBuffer {
            pool_index_to_tile_index_[result] == tile_index;
   }
 
-  int CurrentSurface() { return current_surface_; }
-  int NextSurface() {
-    return current_surface_ = current_surface_ + 1 % sizeof(surfaces_);
-  }
-
   struct RowLimit {
     unsigned int start;
     unsigned int end;
@@ -149,10 +162,6 @@ class TileBuffer {
   float doc_height_scaled_px_;
 
   AtomicBitset valid_tile_;
-
-  // snapshots
-  int current_surface_ = 0;
-  sk_sp<SkSurface> surfaces_[2];
 
   // ring pool (in order to prevent OOM crash on invididual tile allocations)
 

@@ -33,7 +33,7 @@ PaintManager::Task::~Task() {
 }
 
 PaintManager::PaintManager(Client* client)
-    : task_runner_(base::ThreadPool::CreateTaskRunner(
+    : task_runner_(base::ThreadPool::CreateSequencedTaskRunner(
           {base::TaskPriority::USER_VISIBLE})),
       client_(client) {}
 

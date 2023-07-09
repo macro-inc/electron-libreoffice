@@ -158,17 +158,14 @@ bool OfficeWebPlugin::SupportsKeyboardFocus() const {
 void OfficeWebPlugin::UpdateAllLifecyclePhases(
     blink::DocumentUpdateReason reason) {}
 
-// TODO: rework snapshots so that it stores the snapshot as the original tiles, the bounds of the tiles, and the scale of the snapshot
-// this way there is no additional render work as the tiles are already stored and the context is likely already cached as a GPU texture
-void OfficeWebPlugin::UpdateSnapshot(sk_sp<SkImage> snapshot,
-                                     float snapshot_scale) {
-  if (!snapshot)
+// TODO: rework snapshots so that it stores the snapshot as the original tiles,
+// the bounds of the tiles, and the scale of the snapshot this way there is no
+// additional render work as the tiles are already stored and the context is
+// likely already cached as a GPU texture
+void OfficeWebPlugin::UpdateSnapshot(const office::Snapshot snapshot) {
+  if (snapshot.tiles.empty())
     return;
-  snapshot_scale_ = snapshot_scale;
-  snapshot_ = cc::PaintImageBuilder::WithDefault()
-                  .set_image(snapshot, cc::PaintImage::GetNextContentId())
-                  .set_id(cc::PaintImage::GetNextId())
-                  .TakePaintImage();
+  snapshot_ = std::move(snapshot);
 }
 
 void OfficeWebPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
@@ -193,41 +190,26 @@ void OfficeWebPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
   if (!plugin_rect_.origin().IsOrigin())
     canvas->translate(plugin_rect_.x(), plugin_rect_.y());
 
-  if (scale_pending_) {
-    canvas->scale(TotalScale() / snapshot_scale_);
-  }
-
   document_->setView(view_id_);
 
   gfx::Rect size(rect.size());
-  std::vector<office::TileRange> missing;
-  // tile_buffer_->PaintToCanvas(paint_cancel_flag_, canvas, size);
-  if (missing.size() == 0 && take_snapshot_) {
+  std::vector<office::TileRange> missing =
+      tile_buffer_->PaintToCanvas(paint_cancel_flag_, canvas, snapshot_, size);
+  if (missing.size() == 0 && take_snapshot_ && (base::TimeTicks::Now() - last_snapshot_time_) > base::Milliseconds(16)) {
+    last_snapshot_time_ = base::TimeTicks::Now();
     base::TimeTicks start = base::TimeTicks::Now();
     LOG(ERROR) << "TAKING SNAPSHOT";
-    UpdateSnapshot(tile_buffer_->MakeSnapshot(paint_cancel_flag_, plugin_rect_),
-                   zoom_);
+    UpdateSnapshot(
+        tile_buffer_->MakeSnapshot(paint_cancel_flag_, size));
     LOG(ERROR) << "SNAPSHOT TOOK: (ms)"
                << (base::TimeTicks::Now() - start).InMilliseconds();
     take_snapshot_ = false;
   }
-  if (missing.size() != 0 || scale_pending_) {
-    cc::PaintFlags flags;
-    flags.setBlendMode(SkBlendMode::kSrc);
-
-    // LOG(ERROR) << "Missing tiles: " << ;
-    canvas->drawImage(snapshot_, 0, 0, SkSamplingOptions(SkFilterMode::kLinear),
-                      &flags);
-  }
 
   // the temporary scale is painted, now
   if (scale_pending_) {
-    // scale_pending_ = false;
-    base::TimeTicks start = base::TimeTicks::Now();
-    LOG(ERROR) << "RESETTING SCALE";
+    scale_pending_ = false;
     tile_buffer_->ResetScale(TotalScale());
-    LOG(ERROR) << "RESET SCALE TOOK"
-               << (base::TimeTicks::Now() - start).InMilliseconds();
     ScheduleAvailableAreaPaint();
     first_paint_ = false;
   } else {
@@ -521,20 +503,11 @@ void OfficeWebPlugin::OnGeometryChanged(double old_zoom,
                                         float old_device_scale) {
   if (!document_client_)
     return;
-  LOG(ERROR) << "SHOULD RESET" << plugin_rect_.size().ToString();
 
   available_area_ = gfx::Rect(plugin_rect_.size());
   gfx::Size doc_size = GetDocumentPixelSize();
   if (doc_size.width() < available_area_.width()) {
     available_area_.set_width(doc_size.width());
-  }
-
-  auto surface_area_twips = gfx::ScaleToEnclosingRect(
-      available_area_, office::lok_callback::kTwipPerPx);
-  tile_buffer_->ResetSnapshotSurface(surface_area_twips.width(),
-                                     surface_area_twips.height(), TotalScale());
-  if (viewport_zoom_ != old_zoom || device_scale_ != old_device_scale) {
-    tile_buffer_->ResetScale(TotalScale());
   }
 
   // The distance between top of the plugin and the bottom of the document in
@@ -545,6 +518,10 @@ void OfficeWebPlugin::OnGeometryChanged(double old_zoom,
 
   available_area_twips_ = gfx::ScaleToEnclosingRect(
       available_area_, office::lok_callback::kTwipPerPx);
+
+  if (viewport_zoom_ != old_zoom || device_scale_ != old_device_scale) {
+    tile_buffer_->ResetScale(TotalScale());
+  }
 }
 
 std::vector<gfx::Rect> OfficeWebPlugin::PageRects() const {

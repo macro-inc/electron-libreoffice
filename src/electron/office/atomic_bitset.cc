@@ -5,6 +5,9 @@
 #include "atomic_bitset.h"
 #include "base/check_op.h"
 
+
+namespace electron::office {
+
 AtomicBitset::AtomicBitset() : size_(0), container_count_(0) {}
 AtomicBitset::AtomicBitset(size_t size)
     : size_(size),
@@ -30,7 +33,7 @@ bool AtomicBitset::Set(size_t index, std::memory_order order) {
   DCHECK_LT(index, size_);
   DCHECK_GE(index, 0ul);
   DCHECK(data_);
-  Container mask = kSetBit << bit_index(index);
+  BitSetContainer mask = kSetBit << bit_index(index);
   return data_[container_index(index)].fetch_or(mask, order) & mask;
 }
 
@@ -38,7 +41,7 @@ bool AtomicBitset::Reset(size_t index, std::memory_order order) {
   DCHECK_LT(index, size_);
   DCHECK_GE(index, 0ul);
   DCHECK(data_);
-  Container mask = kSetBit << bit_index(index);
+  BitSetContainer mask = kSetBit << bit_index(index);
   return data_[container_index(index)].fetch_and(~mask, order) & mask;
 }
 
@@ -56,14 +59,14 @@ void AtomicBitset::ResetRange(size_t index_start,
   const size_t container_end = container_index(index_end);
   // single container case
   if (container_end == container_start) {
-    Container mask = (kAllBitsSet << index_start) ^
+    BitSetContainer mask = (kAllBitsSet << index_start) ^
                      (kAllBitsSet >> (kBitsPerContainer - index_end - 1));
     data_[container_start].fetch_and(mask, order);
     return;
   }
 
   // all bits at and left to the index are kept
-  Container mask = ~(kAllBitsSet << bit_index(index_start));
+  BitSetContainer mask = ~(kAllBitsSet << bit_index(index_start));
   data_[container_start].fetch_and(mask, order);
 
   // the middle containers will be cleared
@@ -87,10 +90,12 @@ bool AtomicBitset::IsSet(size_t index, std::memory_order order) const {
   DCHECK_LT(index, size_);
   DCHECK_GE(index, 0ul);
   DCHECK(data_);
-  Container mask = kSetBit << bit_index(index);
+  BitSetContainer mask = kSetBit << bit_index(index);
   return data_[container_index(index)].load(order) & mask;
 }
 
 bool AtomicBitset::operator[](size_t index) const {
   return IsSet(index);
+}
+
 }

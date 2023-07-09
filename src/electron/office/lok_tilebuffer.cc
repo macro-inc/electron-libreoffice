@@ -2,8 +2,7 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
-#include <chrono>
-
+#include "electron/office/lok_tilebuffer.h"
 #include "LibreOfficeKit/LibreOfficeKit.hxx"
 #include "base/auto_reset.h"
 #include "base/check.h"
@@ -13,7 +12,6 @@
 #include "cc/paint/paint_image.h"
 #include "cc/paint/paint_image_builder.h"
 #include "cc/paint/skia_paint_canvas.h"
-#include "electron/office/lok_tilebuffer.h"
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTextBlob.h"
@@ -39,23 +37,23 @@ TileBuffer::TileBuffer() : valid_tile_(0) {
   std::fill_n(pool_index_to_tile_index_, kPoolSize, kInvalidTileIndex);
 }
 
+Snapshot::Snapshot(std::vector<cc::PaintImage> tiles_,
+                   float scale_,
+                   int column_start_,
+                   int column_end_,
+                   int row_start_,
+                   int row_end_)
+    : tiles(std::move(tiles_)),
+      scale(scale_),
+      column_start(column_start_),
+      column_end(column_end_),
+      row_start(row_start_),
+      row_end(row_end_) {}
+
+Snapshot::Snapshot() = default;
+Snapshot::~Snapshot() = default;
+
 TileBuffer::~TileBuffer() = default;
-
-void TileBuffer::ResetSnapshotSurface(long width_twips, long height_twips, float scale) {
-  int width_scaled = lok_callback::TwipToPixel(width_twips, scale);
-  int height_scaled = lok_callback::TwipToPixel(height_twips, scale);
-  int columns = std::ceil(static_cast<double>(width_scaled) / kTileSizePx);
-  int rows = std::ceil(static_cast<double>(height_scaled) / kTileSizePx);
-  int width = columns * kTileSizePx;
-  int height = rows * kTileSizePx;
-
-  base::TimeTicks start = base::TimeTicks::Now();
-  sk_sp<SkSurface> current = surfaces_[current_surface_];
-  if (!current || width != current->width() || height != current->height()) {
-    surfaces_[current_surface_] = SkSurface::MakeRasterN32Premul(width, height);
-    LOG(ERROR) << "RESIZE TOOK: (ms)" << (base::TimeTicks::Now() - start).InMilliseconds();
-  }
-}
 
 void TileBuffer::Resize(long width_twips, long height_twips, float scale) {
   doc_width_twips_ = width_twips;
@@ -102,7 +100,8 @@ void TileBuffer::PaintTile(CancelFlagPtr cancel_flag,
     pool_index_to_tile_index_[pool_index] = tile_index;
   }
 
-  if (!CancelFlag::IsCancelled(cancel_flag) && !valid_tile_[tile_index]) {
+  if (!CancelFlag::IsCancelled(cancel_flag) &&
+      tile_index < valid_tile_.Size() && !valid_tile_[tile_index]) {
     std::pair<int, int> coord = IndexToCoord(tile_index);
     int column = coord.first;
     int row = coord.second;
@@ -171,7 +170,8 @@ std::vector<TileRange> TileBuffer::InvalidRangesRemaining(
 
   size_t pool_index;
   for (auto& it : tile_ranges) {
-    for (unsigned int i = it.index_start; i <= it.index_end; i++) {
+    for (unsigned int i = it.index_start;
+         i <= it.index_end && i < valid_tile_.Size(); i++) {
       if (!valid_tile_[i] || !TileToPoolIndex(i, &pool_index)) {
         if (!result.empty() && result.back().index_end == i - 1) {
           result.back().index_end = i;
@@ -263,6 +263,7 @@ void TileBuffer::SetYPosition(float y) {
 
 std::vector<TileRange> TileBuffer::PaintToCanvas(CancelFlagPtr cancel_flag,
                                                  cc::PaintCanvas* canvas,
+                                                 const Snapshot& snapshot,
                                                  const gfx::Rect& rect) {
   base::AutoReset<bool> auto_reset_in_paint(&in_paint_, true);
   cc::PaintFlags flags;
@@ -287,10 +288,9 @@ std::vector<TileRange> TileBuffer::PaintToCanvas(CancelFlagPtr cancel_flag,
   unsigned int column_start = (unsigned int)tile_rect.x();
   unsigned int column_end = (unsigned int)tile_rect.right();
 
+  // dry run to check for missing tiles
   for (unsigned int row = row_start; row < row_end; ++row) {
     for (unsigned int column = column_start; column < column_end; ++column) {
-      if (CancelFlag::IsCancelled(cancel_flag))
-        return missing_ranges;
       unsigned int tile_index = CoordToIndex(column, row);
       size_t pool_index;
 
@@ -303,10 +303,6 @@ std::vector<TileRange> TileBuffer::PaintToCanvas(CancelFlagPtr cancel_flag,
         }
         continue;
       }
-
-      canvas->drawImage(pool_paint_images_[pool_index], kTileSizePx * column,
-                        kTileSizePx * row,
-                        SkSamplingOptions(SkFilterMode::kLinear), &flags);
 
 #ifdef TILEBUFFER_DEBUG_PAINT
       cc::PaintFlags debugPaint;
@@ -322,6 +318,68 @@ std::vector<TileRange> TileBuffer::PaintToCanvas(CancelFlagPtr cancel_flag,
       canvas->drawTextBlob(
           SkTextBlob::MakeFromString(std::to_string(tile_index).c_str(), font),
           debugRect.left(), debugRect.bottom(), debugPaint);
+
+      canvas->drawLine(debugRect.left(), debugRect.top(), debugRect.right(),
+                       debugRect.top(), debugPaint);
+      canvas->drawLine(debugRect.right(), debugRect.top(), debugRect.right(),
+                       debugRect.bottom(), debugPaint);
+      canvas->drawLine(debugRect.right(), debugRect.bottom(), debugRect.left(),
+                       debugRect.bottom(), debugPaint);
+      canvas->drawLine(debugRect.left(), debugRect.top(), debugRect.left(),
+                       debugRect.bottom(), debugPaint);
+#endif
+    }
+  }
+
+  // draw the tiles if none are missing
+  if (missing_ranges.empty()) {
+    for (unsigned int row = row_start; row < row_end; ++row) {
+      for (unsigned int column = column_start; column < column_end; ++column) {
+        if (CancelFlag::IsCancelled(cancel_flag))
+          return missing_ranges;
+
+        unsigned int tile_index = CoordToIndex(column, row);
+        size_t pool_index;
+
+        if (!TileToPoolIndex(tile_index, &pool_index))
+          continue;
+        canvas->drawImage(pool_paint_images_[pool_index], kTileSizePx * column,
+                          kTileSizePx * row,
+                          SkSamplingOptions(SkFilterMode::kLinear), &flags);
+      }
+    }
+    return missing_ranges;
+  }
+
+  // there are missing tiles, paint the snapshot (unless it isn't set)
+  if (snapshot.tiles.empty()) {
+    return missing_ranges;
+  }
+
+  canvas->scale(scale_ / snapshot.scale);
+  std::vector<cc::PaintImage>::const_iterator it = snapshot.tiles.cbegin();
+  for (unsigned int row = snapshot.row_start; row < snapshot.row_end; ++row) {
+    for (unsigned int column = snapshot.column_start;
+         column < snapshot.column_end; ++column) {
+      canvas->drawImage(*it++, kTileSizePx * column, kTileSizePx * row,
+                        SkSamplingOptions(SkFilterMode::kLinear), &flags);
+#ifdef TILEBUFFER_DEBUG_PAINT
+      cc::PaintFlags debugPaint;
+      debugPaint.setColor(SK_ColorBLUE);
+      debugPaint.setStrokeWidth(1);
+      SkRect debugRect{(float)kTileSizePx * column, (float)kTileSizePx * row,
+                       (float)kTileSizePx * (column + 1),
+                       (float)kTileSizePx * (row + 1)};
+      std::string coord;
+      coord += std::to_string(column);
+      coord += "x";
+      coord += std::to_string(row);
+
+      SkFont font;
+      font.setScaleX(0.5);
+      font.setSize(12);
+      canvas->drawTextBlob(SkTextBlob::MakeFromString(coord.c_str(), font),
+                           debugRect.left(), debugRect.bottom(), debugPaint);
 
       canvas->drawLine(debugRect.left(), debugRect.top(), debugRect.right(),
                        debugRect.top(), debugPaint);
@@ -378,16 +436,9 @@ size_t TileCount(std::vector<TileRange> tile_ranges_) {
   return result;
 }
 
-sk_sp<SkImage> TileBuffer::MakeSnapshot(CancelFlagPtr cancel_flag, const gfx::Rect& rect) {
-  if (!surfaces_[current_surface_]) {
-    LOG(ERROR) << "NO SURFACE";
-    return {};
-  }
-  cc::PaintFlags flags;
-  flags.setBlendMode(SkBlendMode::kSrc);
-  sk_sp<SkSurface> surface = surfaces_[current_surface_];
-  cc::SkiaPaintCanvas canvas(surface->getCanvas());
-  canvas.translate(0, -y_pos_);
+const Snapshot TileBuffer::MakeSnapshot(CancelFlagPtr cancel_flag,
+                                        const gfx::Rect& rect) {
+  std::vector<cc::PaintImage> tiles;
 
   auto offset_rect = gfx::RectF(rect);
   offset_rect.Offset(0, y_pos_);
@@ -408,55 +459,20 @@ sk_sp<SkImage> TileBuffer::MakeSnapshot(CancelFlagPtr cancel_flag, const gfx::Re
 
   for (unsigned int row = row_start; row < row_end; ++row) {
     for (unsigned int column = column_start; column < column_end; ++column) {
-      if (CancelFlag::IsCancelled(cancel_flag))
-        return {};
       unsigned int tile_index = CoordToIndex(column, row);
       size_t pool_index;
 
       if (!TileToPoolIndex(tile_index, &pool_index)) {
         LOG(ERROR) << "This shouldn't happen";
-        return {};
+        return Snapshot();
       }
 
-      canvas.drawImage(pool_paint_images_[pool_index], kTileSizePx * column,
-                        kTileSizePx * row,
-                        SkSamplingOptions(SkFilterMode::kNearest), &flags);
-
-#ifdef TILEBUFFER_DEBUG_PAINT
-      cc::PaintFlags debugPaint;
-      debugPaint.setColor(SK_ColorRED);
-      debugPaint.setStrokeWidth(1);
-      SkRect debugRect{(float)kTileSizePx * column, (float)kTileSizePx * row,
-                       (float)kTileSizePx * (column + 1),
-                       (float)kTileSizePx * (row + 1)};
-
-      SkFont font;
-      font.setScaleX(0.5);
-      font.setSize(12);
-      canvas->drawTextBlob(
-          SkTextBlob::MakeFromString(std::to_string(tile_index).c_str(), font),
-          debugRect.left(), debugRect.bottom(), debugPaint);
-
-      canvas->drawLine(debugRect.left(), debugRect.top(), debugRect.right(),
-                       debugRect.top(), debugPaint);
-      canvas->drawLine(debugRect.right(), debugRect.top(), debugRect.right(),
-                       debugRect.bottom(), debugPaint);
-      canvas->drawLine(debugRect.right(), debugRect.bottom(), debugRect.left(),
-                       debugRect.bottom(), debugPaint);
-      canvas->drawLine(debugRect.left(), debugRect.top(), debugRect.left(),
-                       debugRect.bottom(), debugPaint);
-#endif
+      tiles.emplace_back(pool_paint_images_[pool_index]);
     }
   }
 
-  return surface->makeImageSnapshot();
-
-  // is this necessary? it's in the chromium code
-  // surface->getCanvas()->drawImage(snapshot.get(), /*x=*/0, /*y=*/0,
-  //                                  SkSamplingOptions(), /*paint=*/nullptr);
-
-  // return {};
+  return Snapshot(std::move(tiles), scale_, column_start, column_end, row_start,
+                  row_end);
 }
-
 
 }  // namespace electron::office
