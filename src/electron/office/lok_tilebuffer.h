@@ -5,11 +5,7 @@
 #ifndef OFFICE_LOK_TILEBUFFER_H_
 #define OFFICE_LOK_TILEBUFFER_H_
 
-#include <atomic>
-#include <chrono>
-#include <limits>
-#include <map>
-#include <unordered_set>
+#include <vector>
 #include "base/memory/weak_ptr.h"
 #include "cc/paint/paint_canvas.h"
 #include "office/atomic_bitset.h"
@@ -49,6 +45,25 @@ std::vector<TileRange> SimplifyRanges(std::vector<TileRange> tile_ranges_);
 // is simplified
 size_t TileCount(std::vector<TileRange> tile_ranges_);
 
+struct Snapshot {
+  std::vector<cc::PaintImage> tiles;
+  float scale = 0.0;
+  unsigned int column_start = 0;
+  unsigned int column_end = 0;
+  unsigned int row_start = 0;
+  unsigned int row_end = 0;
+
+  Snapshot(std::vector<cc::PaintImage> tiles_,
+           float scale_,
+           int column_start_,
+           int column_end_,
+           int row_start_,
+           int row_end_);
+
+  Snapshot();
+  ~Snapshot();
+};
+
 class TileBuffer {
  public:
   TileBuffer();
@@ -64,7 +79,7 @@ class TileBuffer {
   void InvalidateTile(unsigned int column, unsigned int row);
   void InvalidateTile(size_t pool_index);
   // returns the TileRange of invalidated tiles in the rect
-  TileRange InvalidateTilesInRect(const gfx::RectF& rect);
+  TileRange InvalidateTilesInRect(const gfx::RectF& rect, bool dry_run = false);
   // returns the TileRange of invalidated tiles in the rect
   TileRange InvalidateTilesInTwipRect(const gfx::Rect& rect_twips);
   // returns the TileRange of tiles for a predicted scroll range
@@ -72,7 +87,12 @@ class TileBuffer {
   void InvalidateAllTiles();
   std::vector<TileRange> PaintToCanvas(CancelFlagPtr cancel_flag,
                                        cc::PaintCanvas* canvas,
-                                       const gfx::Rect& rect);
+                                       const Snapshot& snapshot,
+                                       const gfx::Rect& rect,
+                                       float total_scale,
+                                       bool scale_pending,
+                                       bool scrolling);
+  const Snapshot MakeSnapshot(CancelFlagPtr cancel_flag, const gfx::Rect& rect);
   void PaintTile(CancelFlagPtr cancel_flag,
                  lok::Document* document,
                  unsigned int tile_index);
@@ -81,12 +101,20 @@ class TileBuffer {
   void Resize(long width_twips, long heigh_twips, float scale);
   void ResetScale(float scale);
   TileRange LimitIndex(int y_pos, unsigned int view_height);
-  std::vector<TileRange> InvalidRangesRemaining(std::vector<TileRange> tile_ranges);
-  std::vector<TileRange> ClipRanges(std::vector<TileRange> ranges, TileRange range_limit);
+  std::vector<TileRange> InvalidRangesRemaining(
+      std::vector<TileRange> tile_ranges);
+  std::vector<TileRange> ClipRanges(std::vector<TileRange> ranges,
+                                    TileRange range_limit);
 
  private:
   unsigned int CoordToIndex(unsigned int x, unsigned int y) {
-    return y * columns_ + x;
+    return CoordToIndex(columns_, x, y);
+  };
+
+  static unsigned int CoordToIndex(int columns,
+                                   unsigned int x,
+                                   unsigned int y) {
+    return y * columns + x;
   };
 
   std::pair<unsigned int, unsigned int> IndexToCoord(unsigned int index) {

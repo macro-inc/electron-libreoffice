@@ -18,6 +18,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "cc/paint/paint_image.h"
+#include "cc/paint/paint_image_builder.h"
 #include "gin/handle.h"
 #include "include/core/SkImage.h"
 #include "office/document_client.h"
@@ -161,14 +162,15 @@ class OfficeWebPlugin : public blink::WebPlugin,
 
   // PaintManager::Client
   void InvalidatePluginContainer() override;
+  base::WeakPtr<office::PaintManager::Client> GetWeakClient() override;
+  office::TileBuffer* GetTileBuffer() override;
 
   content::RenderFrame* render_frame() const;
 
   void TriggerFullRerender();
-  void ScheduleAvailableAreaPaint();
+  void ScheduleAvailableAreaPaint(bool invalidate = true);
   base::WeakPtr<OfficeWebPlugin> GetWeakPtr();
-  office::TileBuffer* GetTileBuffer() override;
-  base::WeakPtr<office::PaintManager::Client> GetWeakClient() override;
+  void UpdateSnapshot(const office::Snapshot snapshot);
 
  private:
   // call `Destroy()` instead.
@@ -199,10 +201,13 @@ class OfficeWebPlugin : public blink::WebPlugin,
 
   // Exposed methods {
   gfx::Size GetDocumentCSSPixelSize();
-  std::vector<gfx::Rect> PageRects() const;
+  std::vector<gfx::Rect> PageRects();
   void SetZoom(float zoom);
   float GetZoom();
   float TwipToCSSPx(float in);
+
+  // updates the first and last intersecting page number within view
+  void UpdateIntersectingPages();
 
   // prepares the embed as the document client's mounted viewer
   bool RenderDocument(v8::Isolate* isolate,
@@ -242,7 +247,6 @@ class OfficeWebPlugin : public blink::WebPlugin,
   bool in_paint_ = false;
   // the offset for input events, adjusted by the scroll position
   int scroll_y_position_ = 0;
-
   // If this is true, then don't scroll the plugin in response to calls to
   // `UpdateScroll()`. This will be true when the extension page is in the
   // process of zooming the plugin so that flickering doesn't occur while
@@ -264,8 +268,17 @@ class OfficeWebPlugin : public blink::WebPlugin,
   office::DocumentClient* document_client_ = nullptr;
   int view_id_ = -1;
 
+  // painting
   std::unique_ptr<office::TileBuffer> tile_buffer_;
   std::unique_ptr<office::PaintManager> paint_manager_;
+  bool take_snapshot_ = true;
+  office::Snapshot snapshot_;
+  bool scrolling_ = false;
+  std::vector<gfx::Rect> page_rects_cached_;
+  int first_intersect_ = -1;
+  int last_intersect_ = -1;
+
+  bool visible_;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
   office::CancelFlagPtr paint_cancel_flag_;

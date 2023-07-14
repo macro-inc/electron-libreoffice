@@ -28,13 +28,13 @@ inline bool IsCancelled(const CancelFlagPtr& flag) {
   return flag && flag->data.IsSet();
 }
 
-inline void Cancel(const CancelFlagPtr& flag) {
+inline void Set(const CancelFlagPtr& flag) {
   if (flag) flag->data.Set();
 }
 
 // cancels the flag and resets the shared pointer to a new one
 inline void CancelAndReset(CancelFlagPtr& flag) {
-  Cancel(flag);
+  Set(flag);
   flag = Create();
 }
 

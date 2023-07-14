@@ -85,7 +85,7 @@ blink::WebPlugin* CreateInternalPlugin(blink::WebPluginParams params,
 
 OfficeWebPlugin::OfficeWebPlugin(blink::WebPluginParams params,
                                  content::RenderFrame* render_frame)
-    : render_frame_(render_frame),
+    : render_frame_(render_frame), page_rects_cached_(),
       task_runner_(render_frame->GetTaskRunner(
           blink::TaskType::kInternalMediaRealTime)) {
   tile_buffer_ = std::make_unique<office::TileBuffer>();
@@ -104,6 +104,9 @@ bool OfficeWebPlugin::Initialize(blink::WebPluginContainer* container) {
 }
 
 void OfficeWebPlugin::Destroy() {
+  // TODO: handle destruction in the case where an embed is destroyed but a
+  // document is still mounted to it
+  paint_manager_->ClearTasks();
   delete this;
 }
 
@@ -155,8 +158,20 @@ bool OfficeWebPlugin::SupportsKeyboardFocus() const {
 void OfficeWebPlugin::UpdateAllLifecyclePhases(
     blink::DocumentUpdateReason reason) {}
 
+// TODO: rework snapshots so that it stores the snapshot as the original tiles,
+// the bounds of the tiles, and the scale of the snapshot this way there is no
+// additional render work as the tiles are already stored and the context is
+// likely already cached as a GPU texture
+void OfficeWebPlugin::UpdateSnapshot(const office::Snapshot snapshot) {
+  if (snapshot.tiles.empty())
+    return;
+  snapshot_ = std::move(snapshot);
+}
+
 void OfficeWebPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
   base::AutoReset<bool> auto_reset_in_paint(&in_paint_, true);
+  if (!visible_)
+    return;
 
   SkRect invalidate_rect =
       gfx::RectToSkRect(gfx::IntersectRects(css_plugin_rect_, rect));
@@ -174,14 +189,16 @@ void OfficeWebPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
   if (!plugin_rect_.origin().IsOrigin())
     canvas->translate(plugin_rect_.x(), plugin_rect_.y());
 
-  if (scale_pending_) {
-    canvas->scale(zoom_ / old_zoom_);
-  }
-
   document_->setView(view_id_);
 
+  gfx::Rect size(invalidate_rect.width(), invalidate_rect.height());
   std::vector<office::TileRange> missing = tile_buffer_->PaintToCanvas(
-      paint_cancel_flag_, canvas, gfx::Rect(rect.size()));
+      paint_cancel_flag_, canvas, snapshot_, size, TotalScale(), scale_pending_, scrolling_);
+
+  if (missing.size() == 0 && take_snapshot_ && !scrolling_) {
+    UpdateSnapshot(tile_buffer_->MakeSnapshot(paint_cancel_flag_, size));
+    take_snapshot_ = false;
+  }
 
   // the temporary scale is painted, now
   if (scale_pending_) {
@@ -193,6 +210,7 @@ void OfficeWebPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
     paint_manager_->ScheduleNextPaint(missing);
     first_paint_ = false;
   }
+  scrolling_ = false;
 }
 
 void OfficeWebPlugin::UpdateGeometry(const gfx::Rect& window_rect,
@@ -220,7 +238,9 @@ void OfficeWebPlugin::UpdateFocus(bool focused,
   has_focus_ = focused;
 }
 
-void OfficeWebPlugin::UpdateVisibility(bool visibility) {}
+void OfficeWebPlugin::UpdateVisibility(bool visibility) {
+  visible_ = visibility;
+}
 
 blink::WebInputEventResult OfficeWebPlugin::HandleInputEvent(
     const blink::WebCoalescedInputEvent& event,
@@ -463,7 +483,9 @@ content::RenderFrame* OfficeWebPlugin::render_frame() const {
 OfficeWebPlugin::~OfficeWebPlugin() = default;
 
 void OfficeWebPlugin::InvalidateWeakContainer() {
-  container_->Invalidate();
+  if (!in_paint_) {
+    container_->Invalidate();
+  }
 }
 
 void OfficeWebPlugin::InvalidatePluginContainer() {
@@ -499,7 +521,7 @@ void OfficeWebPlugin::OnGeometryChanged(double old_zoom,
       available_area_, office::lok_callback::kTwipPerPx);
 }
 
-std::vector<gfx::Rect> OfficeWebPlugin::PageRects() const {
+std::vector<gfx::Rect> OfficeWebPlugin::PageRects() {
   std::vector<gfx::Rect> result;
 
   if (!document_client_)
@@ -511,6 +533,8 @@ std::vector<gfx::Rect> OfficeWebPlugin::PageRects() const {
     result.emplace_back(gfx::ScaleToCeiledPoint(rect.origin(), scale),
                         gfx::ScaleToCeiledSize(rect.size(), scale));
   }
+  page_rects_cached_.assign(result.begin(), result.end());
+  UpdateIntersectingPages();
   return result;
 }
 
@@ -550,8 +574,9 @@ void OfficeWebPlugin::OnViewportChanged(
   if (!document_client_)
     return;
 
-  if (need_fresh_paint)
-    ScheduleAvailableAreaPaint();
+  if (need_fresh_paint) {
+    ScheduleAvailableAreaPaint(false);
+  }
 }
 
 void OfficeWebPlugin::HandleInvalidateTiles(std::string payload) {
@@ -562,7 +587,20 @@ void OfficeWebPlugin::HandleInvalidateTiles(std::string payload) {
   std::string_view payload_sv(payload);
 
   // TODO: handle non-text document types for parts
-  if (payload_sv == "EMPTY") {
+  if (payload_sv.substr(0, 5) == "EMPTY") {
+    auto num_payload = payload_sv.substr(5);
+    // if there is a page number, skip every invalidation that isn't the last visible page
+    // this allows earlier paints on large documents
+    if (!num_payload.empty()) {
+      std::string_view::const_iterator start = num_payload.begin();
+      auto num = office::lok_callback::ParseCSV(start, payload_sv.end());
+      if (num.empty()) {
+        return;
+      } else if ((int)num[0] != last_intersect_) {
+        return;
+      }
+    }
+
     base::TimeTicks now = base::TimeTicks::Now();
     if (last_full_invalidation_time_.is_null() ||
         (now - last_full_invalidation_time_) > base::Milliseconds(10)) {
@@ -581,7 +619,9 @@ void OfficeWebPlugin::HandleInvalidateTiles(std::string payload) {
     if (dirty_rect.IsEmpty())
       return;
 
-    float view_height = plugin_rect_.height() * device_scale_;
+    gfx::RectF offset_area(available_area_);
+    offset_area.Offset(0, scroll_y_position_ * device_scale_);
+    auto view_height = offset_area.height();
     auto range = tile_buffer_->InvalidateTilesInTwipRect(dirty_rect);
     auto limit = tile_buffer_->LimitIndex(scroll_y_position_, view_height);
 
@@ -623,7 +663,9 @@ void OfficeWebPlugin::SetZoom(float zoom) {
   scale_pending_ = true;
 
   // immediately flush the container to scale without invalidating tiles
-  InvalidatePluginContainer();
+  if (!in_paint_) {
+    InvalidatePluginContainer();
+  }
 }
 
 float OfficeWebPlugin::GetZoom() {
@@ -636,6 +678,29 @@ float OfficeWebPlugin::TwipToPx(float in) {
 
 float OfficeWebPlugin::TwipToCSSPx(float in) {
   return ceil(office::lok_callback::TwipToPixel(in, zoom_));
+}
+
+void OfficeWebPlugin::UpdateIntersectingPages() {
+  float view_height =
+      plugin_rect_.height() / device_scale_ / (float)viewport_zoom_;
+  gfx::Rect scroll_rect(gfx::Point(0, scroll_y_position_ / device_scale_), gfx::Size(800, view_height));
+  int i = 0;
+  first_intersect_ = -1;
+  last_intersect_ = -1;
+
+  for (auto& it: page_rects_cached_) {
+    if (first_intersect_ == -1 && it.Intersects(scroll_rect)) {
+      first_intersect_ = i;
+    }
+    if (first_intersect_ != -1) {
+      if (!it.Intersects(scroll_rect)) {
+         break;
+      } else {
+        last_intersect_ = i;
+      }
+    }
+    i++;
+  }
 }
 
 void OfficeWebPlugin::UpdateScroll(int y_position) {
@@ -651,16 +716,17 @@ void OfficeWebPlugin::UpdateScroll(int y_position) {
   float scaled_y = base::clamp((float)y_position, 0.0f, max_y) * device_scale_;
   scroll_y_position_ = scaled_y;
 
-  office::CancelFlag::CancelAndReset(paint_cancel_flag_);
-
   // TODO: paint PRIOR not ahead for scroll up
   office::TileRange range = tile_buffer_->NextScrollTileRange(
-      scroll_y_position_, view_height * device_scale_);
+      scroll_y_position_, view_height);
   tile_buffer_->SetYPosition(scaled_y);
   // TODO: schedule paint _ahead_ / _prior_ to scroll position
   paint_manager_->SchedulePaint(document_, scroll_y_position_,
                                 view_height * device_scale_, TotalScale(),
                                 false, {range});
+  UpdateIntersectingPages();
+  scrolling_ = true;
+  take_snapshot_ = true;
 }
 
 bool OfficeWebPlugin::RenderDocument(
@@ -731,26 +797,32 @@ bool OfficeWebPlugin::RenderDocument(
         FROM_HERE,
         base::BindOnce(&OfficeWebPlugin::OnGeometryChanged,
                        base::Unretained(this), viewport_zoom_, device_scale_));
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&OfficeWebPlugin::UpdateScroll,
+                       base::Unretained(this), 0));
   }
   return true;
 }
 
-void OfficeWebPlugin::ScheduleAvailableAreaPaint() {
+void OfficeWebPlugin::ScheduleAvailableAreaPaint(bool invalidate) {
   gfx::RectF offset_area(available_area_);
-  offset_area.Offset(0, scroll_y_position_);
-  offset_area.Scale(device_scale_);
-  auto range = tile_buffer_->InvalidateTilesInRect(offset_area);
+  offset_area.Offset(0, scroll_y_position_ * device_scale_);
+  auto view_height = offset_area.height();
+  auto range = tile_buffer_->InvalidateTilesInRect(offset_area, !invalidate);
   auto limit =
-      tile_buffer_->LimitIndex(scroll_y_position_, offset_area.height());
+      tile_buffer_->LimitIndex(scroll_y_position_, view_height);
 
   // avoid scheduling out of bounds paints
   if (range.index_start > limit.index_end ||
-      range.index_end < limit.index_start)
+      range.index_end < limit.index_start) {
     return;
+  }
+  take_snapshot_ = true;
   range.index_start = std::max(range.index_start, limit.index_start);
   range.index_end = std::min(range.index_end, limit.index_end);
   paint_manager_->SchedulePaint(document_, scroll_y_position_,
-                                offset_area.height(), TotalScale(), true,
+                                view_height, TotalScale(), true,
                                 {range});
 }
 

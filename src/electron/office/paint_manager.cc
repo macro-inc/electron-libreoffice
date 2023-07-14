@@ -26,15 +26,15 @@ PaintManager::Task::Task(lok::Document* document,
       scale_(scale),
       full_paint_(full_paint),
       tile_ranges_(std::move(tile_ranges)),
-      task_cancel_flag_(CancelFlag::Create()) {}
+      skip_paint_flag_(CancelFlag::Create()),
+      skip_invalidation_flag_(CancelFlag::Create()) {}
 
 PaintManager::Task::~Task() {
-  CancelFlag::Cancel(task_cancel_flag_);
 }
 
 PaintManager::PaintManager(Client* client)
     : task_runner_(base::ThreadPool::CreateTaskRunner(
-          {base::MayBlock(), base::TaskPriority::USER_VISIBLE})),
+          {base::TaskPriority::USER_VISIBLE})),
       client_(client) {}
 
 PaintManager::PaintManager() = default;
@@ -54,7 +54,6 @@ void PaintManager::SchedulePaint(lok::Document* document,
     return;
   }
 
-  bool reschedule = false;
   if (next_task_ && next_task_->document_ == document) {
     tile_ranges_.insert(tile_ranges_.end(), next_task_->tile_ranges_.begin(),
                         next_task_->tile_ranges_.end());
@@ -65,16 +64,12 @@ void PaintManager::SchedulePaint(lok::Document* document,
                           current_task_->tile_ranges_.begin(),
                           current_task_->tile_ranges_.end());
       full_paint = full_paint || current_task_->full_paint_;
-      reschedule = full_paint;
     }
   }
 
   next_task_ = std::make_unique<Task>(document, y_pos, view_height, scale,
                                       full_paint, SimplifyRanges(tile_ranges_));
-
-  if (reschedule) {
-    ScheduleNextPaint();
-  }
+  ScheduleNextPaint();
 }
 
 bool PaintManager::Task::CanMergeWith(Task& other) {
@@ -143,8 +138,32 @@ void PaintManager::ScheduleNextPaint(std::vector<TileRange> tile_ranges_) {
     next_task_ = next_task_->MergeWith({}, *client_->GetTileBuffer());
   }
 
-  current_task_.reset();
+  if (next_task_ && current_task_) {
+    bool is_same_task = current_task_->document_ == next_task_->document_;
+    auto n_it = next_task_->tile_ranges_.cbegin();
+    for (auto& it : current_task_->tile_ranges_) {
+      is_same_task = is_same_task && n_it != next_task_->tile_ranges_.end() &&
+                     it == *n_it++;
+    }
+
+    if (!is_same_task) {
+      // LOG(ERROR) << "NOT SAME TASK";
+      // y-pos are different, so assume scrolling and not an in-place update
+      if (current_task_->y_pos_ != next_task_->y_pos_) {
+        CancelFlag::Set(current_task_->skip_paint_flag_);
+        CancelFlag::Set(current_task_->skip_invalidation_flag_);
+      }
+      current_task_.reset();
+    } else {
+      // LOG(ERROR) << "DUPLICATE TASK";
+      current_task_.reset();
+    }
+  } else if (current_task_ && !next_task_) {
+    // LOG(ERROR) << "NO NEXT TASK";
+    current_task_.reset();
+  }
   current_task_.swap(next_task_);
+
   if (current_task_) {
     PostCurrentTask();
   }
@@ -154,19 +173,23 @@ void PaintManager::PostCurrentTask() {
   auto simplified_ranges = SimplifyRanges(current_task_->tile_ranges_);
   auto tile_count = TileCount(simplified_ranges);
   base::RepeatingClosure completed = base::BarrierClosure(
-      tile_count, base::BindOnce(&PaintManager::CurrentTaskComplete, client_,
-                                 current_task_->task_cancel_flag_));
+      tile_count,
+      base::BindOnce(&PaintManager::CurrentTaskComplete, base::Unretained(this),
+                     client_, current_task_->skip_invalidation_flag_,
+                     current_task_->full_paint_, current_task_->scale_));
   for (auto& it : simplified_ranges) {
     task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&PaintManager::PaintTileRange, client_->GetTileBuffer(),
-                       current_task_->task_cancel_flag_,
+                       current_task_->skip_paint_flag_,
                        current_task_->document_, it, completed));
   }
 }
 
 void PaintManager::CurrentTaskComplete(Client* client,
-                                       CancelFlagPtr cancel_flag) {
+                                       CancelFlagPtr cancel_flag,
+                                       bool full_paint,
+                                       float scale) {
   if (!CancelFlag::IsCancelled(cancel_flag)) {
     client->InvalidatePluginContainer();
   }
@@ -188,10 +211,8 @@ void PaintManager::PaintTile(TileBuffer* tile_buffer,
                              lok::Document* document,
                              unsigned int tile_index,
                              base::RepeatingClosure completed) {
-  if (!CancelFlag::IsCancelled(cancel_flag)) {
-    tile_buffer->PaintTile(cancel_flag, document, tile_index);
-    completed.Run();
-  }
+  tile_buffer->PaintTile(cancel_flag, document, tile_index);
+  completed.Run();
 }
 
 void PaintManager::ClearTasks() {

@@ -10,6 +10,8 @@
 #include <limits>
 #include <memory>
 
+namespace electron::office {
+
 // A mostly thread-safe bitset that initializes with all bits unset.
 // This bitset assumes that its lifetime will outlast the threads using it or that the threads will verify it exists first.
 class AtomicBitset {
@@ -41,14 +43,14 @@ class AtomicBitset {
 
  private:
 #if ATOMIC_LLONG_LOCK_FREE == 2
-  typedef unsigned long long Container;
+  typedef unsigned long long BitSetContainer;
 #elif ATOMIC_LONG_LOCK_FREE == 2
   typedef unsigned long Container;
 #else
   // fallback to unsigned 32-bit
   typedef unsigned int Container;
 #endif
-  typedef std::atomic<Container> AtomicContainer;
+  typedef std::atomic<BitSetContainer> AtomicContainer;
 
   static constexpr size_t container_index(size_t index) {
     return index / kBitsPerContainer;
@@ -58,12 +60,14 @@ class AtomicBitset {
     return index % kBitsPerContainer;
   }
 
-  static constexpr Container kSetBit = 1;
-  static constexpr Container kAllBitsSet = ~0;
+  static constexpr BitSetContainer kSetBit = 1;
+  static constexpr BitSetContainer kAllBitsSet = ~0;
   static constexpr size_t kBitsPerContainer =
-      std::numeric_limits<Container>::digits;
+      std::numeric_limits<BitSetContainer>::digits;
   size_t size_;
   size_t container_count_;
   std::unique_ptr<AtomicContainer[]> data_;
 };
+
+}
 #endif  // OFFICE_ATOMIC_BITSET_H_
