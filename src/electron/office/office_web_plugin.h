@@ -168,7 +168,7 @@ class OfficeWebPlugin : public blink::WebPlugin,
   content::RenderFrame* render_frame() const;
 
   void TriggerFullRerender();
-  void ScheduleAvailableAreaPaint();
+  void ScheduleAvailableAreaPaint(bool invalidate = true);
   base::WeakPtr<OfficeWebPlugin> GetWeakPtr();
   void UpdateSnapshot(const office::Snapshot snapshot);
 
@@ -201,10 +201,13 @@ class OfficeWebPlugin : public blink::WebPlugin,
 
   // Exposed methods {
   gfx::Size GetDocumentCSSPixelSize();
-  std::vector<gfx::Rect> PageRects() const;
+  std::vector<gfx::Rect> PageRects();
   void SetZoom(float zoom);
   float GetZoom();
   float TwipToCSSPx(float in);
+
+  // updates the first and last intersecting page number within view
+  void UpdateIntersectingPages();
 
   // prepares the embed as the document client's mounted viewer
   bool RenderDocument(v8::Isolate* isolate,
@@ -244,7 +247,6 @@ class OfficeWebPlugin : public blink::WebPlugin,
   bool in_paint_ = false;
   // the offset for input events, adjusted by the scroll position
   int scroll_y_position_ = 0;
-
   // If this is true, then don't scroll the plugin in response to calls to
   // `UpdateScroll()`. This will be true when the extension page is in the
   // process of zooming the plugin so that flickering doesn't occur while
@@ -269,9 +271,12 @@ class OfficeWebPlugin : public blink::WebPlugin,
   // painting
   std::unique_ptr<office::TileBuffer> tile_buffer_;
   std::unique_ptr<office::PaintManager> paint_manager_;
-  bool take_snapshot_ = false;
+  bool take_snapshot_ = true;
   office::Snapshot snapshot_;
-  base::TimeTicks last_snapshot_time_ = base::TimeTicks();
+  bool scrolling_ = false;
+  std::vector<gfx::Rect> page_rects_cached_;
+  int first_intersect_ = -1;
+  int last_intersect_ = -1;
 
   bool visible_;
 

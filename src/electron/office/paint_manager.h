@@ -69,7 +69,8 @@ class PaintManager {
     const float scale_;
     const bool full_paint_;
     const std::vector<TileRange> tile_ranges_;
-    const CancelFlagPtr task_cancel_flag_;
+    const CancelFlagPtr skip_paint_flag_;
+    const CancelFlagPtr skip_invalidation_flag_;
 
     bool CanMergeWith(Task& other);
 
@@ -82,7 +83,7 @@ class PaintManager {
   };
 
   void PostCurrentTask();
-  static void CurrentTaskComplete(Client* client,
+  void CurrentTaskComplete(Client* client,
                                   CancelFlagPtr cancel_flag,
                                   bool full_paint,
                                   float scale);
@@ -97,14 +98,12 @@ class PaintManager {
                              TileRange range,
                              base::RepeatingClosure completed);
 
-  // aim for 60fps (~16.67ms per frame)
-  static constexpr std::chrono::milliseconds kFrameDeadline{16};
-
   const scoped_refptr<base::TaskRunner> task_runner_;
   Client* client_;
 
   std::unique_ptr<Task> current_task_ = nullptr;
   std::unique_ptr<Task> next_task_ = nullptr;
+  base::TimeTicks last_paint_time_ = {};
 };
 
 }  // namespace electron::office

@@ -79,7 +79,7 @@ class TileBuffer {
   void InvalidateTile(unsigned int column, unsigned int row);
   void InvalidateTile(size_t pool_index);
   // returns the TileRange of invalidated tiles in the rect
-  TileRange InvalidateTilesInRect(const gfx::RectF& rect);
+  TileRange InvalidateTilesInRect(const gfx::RectF& rect, bool dry_run = false);
   // returns the TileRange of invalidated tiles in the rect
   TileRange InvalidateTilesInTwipRect(const gfx::Rect& rect_twips);
   // returns the TileRange of tiles for a predicted scroll range
@@ -88,7 +88,10 @@ class TileBuffer {
   std::vector<TileRange> PaintToCanvas(CancelFlagPtr cancel_flag,
                                        cc::PaintCanvas* canvas,
                                        const Snapshot& snapshot,
-                                       const gfx::Rect& rect);
+                                       const gfx::Rect& rect,
+                                       float total_scale,
+                                       bool scale_pending,
+                                       bool scrolling);
   const Snapshot MakeSnapshot(CancelFlagPtr cancel_flag, const gfx::Rect& rect);
   void PaintTile(CancelFlagPtr cancel_flag,
                  lok::Document* document,
@@ -108,7 +111,9 @@ class TileBuffer {
     return CoordToIndex(columns_, x, y);
   };
 
-  static unsigned int CoordToIndex(int columns, unsigned int x, unsigned int y) {
+  static unsigned int CoordToIndex(int columns,
+                                   unsigned int x,
+                                   unsigned int y) {
     return y * columns + x;
   };
 
