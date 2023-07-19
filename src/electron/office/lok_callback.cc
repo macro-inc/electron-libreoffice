@@ -376,7 +376,7 @@ v8::Local<v8::Value> ParseJSON(v8::Isolate* isolate,
     return v8::Null(isolate);
 
   v8::TryCatch try_catch(isolate);
-  v8::Local<v8::Context> context = v8::Context::New(isolate);
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
   auto maybe_value = v8::JSON::Parse(context, json);
 
   if (maybe_value.IsEmpty() || try_catch.HasCaught()) {
@@ -407,7 +407,7 @@ v8::Local<v8::Value> GraphicSelectionPayloadToLocalValue(v8::Isolate* isolate,
   auto numbers_v8 =
       gin::Converter<std::vector<uint64_t>>::ToV8(isolate, numbers);
 
-  v8::Local<v8::Context> context = v8::Context::New(isolate);
+  v8::Local<v8::Context> context = isolate->GetCurrentContext();
   auto result_array = v8::Array::New(isolate, 2);
   std::ignore = result_array->Set(context, 0, numbers_v8);
 
