@@ -55,7 +55,7 @@ function saveToMemory() {
   const buffer = globalDoc.saveToMemory();
   console.log('saveToMemory', { buffer });
   const newDoc = libreoffice.loadDocumentFromArrayBuffer(buffer);
-  console.log('New doc', {text: newDoc.getText().getString()});
+  console.log('New doc', { text: newDoc.getText().getString() });
 }
 
 // Used as POC to show how to structure outline data
@@ -78,7 +78,7 @@ async function runColorizeWorker() {
   const buffer = await globalDoc.saveToMemory();
   console.log(`save to memory took ${performance.now() - start}ms`, buffer.byteLength)
   const worker = new Worker(fn2workerURL(colorizeWorker));
-  worker.postMessage({ type: 'load', file: uri, data: buffer },[buffer]);
+  worker.postMessage({ type: 'load', file: uri, data: buffer }, [buffer]);
   worker.onmessage = (event) => {
     console.log(event.data);
   };
@@ -87,15 +87,37 @@ async function runColorizeWorker() {
 function trackChangesWindow() {
   globalDoc.postUnoCommand('.uno:AcceptTrackedChanges');
 }
+
 function toggleTrackChanges() {
   globalDoc.postUnoCommand('.uno:TrackChanges');
 }
+
+function insertAnnotation() {
+  globalDoc.postUnoCommand('.uno:InsertAnnotation', {
+    Text: { type: 'string', value: 'TEST COMMENT' },
+  });
+}
+
+function changeAuthor() {
+    globalDoc.setAuthor('New author');
+}
+
+function getTrackChanges() {
+  console.log('TC INFO', globalDoc.getCommandValues('.uno:ViewTrackChangesInformation'));
+}
+
+function getComments() {
+  console.log('COMMENT INFO', { comments });
+}
+
 function acceptTrackChange() {
   globalDoc.postUnoCommand('.uno:AcceptTrackedChange');
 }
+
 function rejectTrackChange() {
   globalDoc.postUnoCommand('.uno:RejectTrackedChange');
 }
+
 function gotoOutline() {
   const outline = doc.getCommandValues('.uno:GetOutline');
 
