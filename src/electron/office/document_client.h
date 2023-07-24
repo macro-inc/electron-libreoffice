@@ -72,6 +72,7 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   bool IsReady() const;
   std::vector<gfx::Rect> PageRects() const;
   gfx::Size Size() const;
+  void SetAuthor(const std::string& author, gin::Arguments* args);
   void PostUnoCommand(const std::string& command, gin::Arguments* args);
   void PostUnoCommandInternal(const std::string& command,
                               std::unique_ptr<char[]> json_buffer,

@@ -124,6 +124,7 @@ gin::ObjectTemplateBuilder DocumentClient::GetObjectTemplateBuilder(
       .SetMethod("off", &DocumentClient::Off)
       .SetMethod("emit", &DocumentClient::Emit)
       .SetMethod("postUnoCommand", &DocumentClient::PostUnoCommand)
+      .SetMethod("setAuthor", &DocumentClient::SetAuthor)
       .SetMethod("gotoOutline", &DocumentClient::GotoOutline)
       .SetMethod("saveToMemory", &DocumentClient::SaveToMemoryAsync)
       .SetMethod("getTextSelection", &DocumentClient::GetTextSelection)
@@ -471,6 +472,11 @@ std::unique_ptr<char[]> jsonStringify(const v8::Local<v8::Context>& context,
 
 }  // namespace
 
+void DocumentClient::SetAuthor(const std::string& author,
+                                    gin::Arguments* args) {
+  document_->setAuthor(author.c_str());
+}
+
 void DocumentClient::PostUnoCommand(const std::string& command,
                                     gin::Arguments* args) {
   v8::Local<v8::Value> arguments;
@@ -552,7 +558,7 @@ v8::Local<v8::Value> DocumentClient::GetSelectionTypeAndText(
 
   int selection_type = document_->getSelectionTypeAndText(
       mime_type.c_str(), &p_text_char, &used_mime_type);
-  
+
   // to safely de-allocate the strings
   LokStrPtr a(used_mime_type), b(p_text_char);
 

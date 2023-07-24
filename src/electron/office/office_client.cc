@@ -356,7 +356,7 @@ void OfficeClient::LoadDocumentComplete(v8::Isolate* isolate,
       },
       ".uno:Author": {
         "type": "string",
-        "value": "Your Friendly Neighborhood Author"
+        "value": "Macro User"
       }
     })"));
 }

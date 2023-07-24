@@ -157,6 +157,14 @@ declare namespace LibreOffice {
     ): void;
 
     /**
+     * Sets the author of the document
+     * @param author - the new authors name
+     */
+    setAuthor(
+      author: string,
+    ): void;
+
+    /**
      * posts a UNO command to the document
      * @param command - the uno command to be posted
      * @param args - arguments for the uno command
