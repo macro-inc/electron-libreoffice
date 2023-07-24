@@ -110,6 +110,8 @@ jobs:
       - name: Create tarballs for all platforms
         if: ${{ runner.os == 'Linux' && steps.check_cache.outputs.build_cache == 'true' }}
         run: |
+          sudo apt update
+          sudo apt-get install --only-upgrade curl libcurl3-gnutls libcurl4
           cd /r/el
           scripts/prepare-cross-sync-tar.sh
           cp -rf *.tzstd "$GITHUB_WORKSPACE"
