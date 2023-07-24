@@ -23,6 +23,14 @@ fi
 git apply "$SCRIPT_DIR/gclient-fix.patch"
 git apply "$SCRIPT_DIR/override-ninja-win-path.patch"
 
+if [ "$(uname)" == "Darwin" ] || [ "$(uname)" == "Linux" ]; then
+  source "$DEPOT_TOOLS_PATH/bootstrap_python3"
+  bootstrap_python3
+  source "$DEPOT_TOOLS_PATH/cipd_bin_setup.sh"
+  cipd_bin_setup
+fi
+
+
 # Don't trust the system Python
 ln -s vpython3 python3
 ln -s vpython3.bat python3.bat
