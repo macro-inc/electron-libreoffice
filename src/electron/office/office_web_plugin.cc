@@ -106,7 +106,6 @@ bool OfficeWebPlugin::Initialize(blink::WebPluginContainer* container) {
 void OfficeWebPlugin::Destroy() {
   // TODO: handle destruction in the case where an embed is destroyed but a
   // document is still mounted to it
-  paint_manager_->ClearTasks();
   delete this;
 }
 

@@ -29,8 +29,7 @@ PaintManager::Task::Task(lok::Document* document,
       skip_paint_flag_(CancelFlag::Create()),
       skip_invalidation_flag_(CancelFlag::Create()) {}
 
-PaintManager::Task::~Task() {
-}
+PaintManager::Task::~Task() = default;
 
 PaintManager::PaintManager(Client* client)
     : task_runner_(base::ThreadPool::CreateTaskRunner(
@@ -38,7 +37,9 @@ PaintManager::PaintManager(Client* client)
       client_(client) {}
 
 PaintManager::PaintManager() = default;
-PaintManager::~PaintManager() = default;
+PaintManager::~PaintManager() {
+  ClearTasks();
+}
 
 void PaintManager::SchedulePaint(lok::Document* document,
                                  int y_pos,
@@ -216,7 +217,11 @@ void PaintManager::PaintTile(TileBuffer* tile_buffer,
 }
 
 void PaintManager::ClearTasks() {
+  CancelFlag::Set(current_task_->skip_paint_flag_);
+  CancelFlag::Set(current_task_->skip_invalidation_flag_);
   current_task_.reset();
+  CancelFlag::Set(next_task_->skip_paint_flag_);
+  CancelFlag::Set(next_task_->skip_invalidation_flag_);
   next_task_.reset();
 }
 
