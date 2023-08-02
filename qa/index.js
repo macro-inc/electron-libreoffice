@@ -32,10 +32,11 @@ picker.onchange = async () => {
     const doc = await libreoffice.loadDocument(uri);
     globalDoc = doc;
     runColorizeWorker();
+    const thumb_doc = doc.newView();
 
     embed.renderDocument(doc);
-    thumb.renderDocument(doc);
-    thumb.setZoom(0.1);
+    thumb.renderDocument(thumb_doc);
+    thumb.setZoom(0.2);
     embed.focus();
   }
 };
