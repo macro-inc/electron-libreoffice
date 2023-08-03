@@ -217,11 +217,15 @@ void PaintManager::PaintTile(TileBuffer* tile_buffer,
 }
 
 void PaintManager::ClearTasks() {
-  CancelFlag::Set(current_task_->skip_paint_flag_);
-  CancelFlag::Set(current_task_->skip_invalidation_flag_);
+  if (current_task_) {
+    CancelFlag::Set(current_task_->skip_paint_flag_);
+    CancelFlag::Set(current_task_->skip_invalidation_flag_);
+  }
   current_task_.reset();
-  CancelFlag::Set(next_task_->skip_paint_flag_);
-  CancelFlag::Set(next_task_->skip_invalidation_flag_);
+  if (next_task_) {
+    CancelFlag::Set(next_task_->skip_paint_flag_);
+    CancelFlag::Set(next_task_->skip_invalidation_flag_);
+  }
   next_task_.reset();
 }
 
