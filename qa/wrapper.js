@@ -152,8 +152,11 @@ class OfficeDoc extends HTMLElement {
     this.doc = doc;
     this._refreshSize();
     doc.on('document_size_changed', this._refreshSize);
+    let lastTime = Date.now();
     const logit = (x) => {
-      console.log(x);
+      const now = Date.now();
+      console.log(lastTime - now, x);
+      lastTime = now;
     };
     doc.on('invalidate_visible_cursor', ({ payload }) => {
       this._cursor_payload = payload;
@@ -165,7 +168,7 @@ class OfficeDoc extends HTMLElement {
     doc.on('hyperlink_clicked', logit);
     doc.on('cursor_visible', logit);
     doc.on('set_part', logit);
-    // doc.on('state_changed', logit);
+    doc.on('state_changed', logit);
     doc.on('window', logit);
     doc.on('jsdialog', logit);
     doc.on('uno_command_result', logit);
@@ -178,6 +181,9 @@ class OfficeDoc extends HTMLElement {
     doc.on('unload', logit);
     doc.on('title_changed', logit);
     doc.on('mode_changed', logit);
+    doc.on('redline_table_size_changed', logit);
+    doc.on('redline_table_entry_modified', logit);
+    doc.on('comment', logit);
   }
 
   focus() {

@@ -77,7 +77,10 @@ function attachChildrenToNodes(outline, outlineTree) {
 async function runColorizeWorker() {
   const start = performance.now();
   const buffer = await globalDoc.saveToMemory();
-  console.log(`save to memory took ${performance.now() - start}ms`, buffer.byteLength)
+  console.log(
+    `save to memory took ${performance.now() - start}ms`,
+    buffer.byteLength
+  );
   const worker = new Worker(fn2workerURL(colorizeWorker));
   worker.postMessage({ type: 'load', file: uri, data: buffer }, [buffer]);
   worker.onmessage = (event) => {
@@ -90,6 +93,7 @@ function trackChangesWindow() {
 }
 
 function toggleTrackChanges() {
+  embed.focus();
   globalDoc.postUnoCommand('.uno:TrackChanges');
 }
 
@@ -99,16 +103,46 @@ function insertAnnotation() {
   });
 }
 
+function deleteFirstComment() {
+  const tcEnabled = globalDoc
+    .as('beans.XPropertySet')
+    .getPropertyValue('RecordChanges');
+  if (tcEnabled)
+    globalDoc.as('beans.XPropertySet').setPropertyValue('RecordChanges', false);
+  const { comments } = globalDoc.getCommandValues('.uno:ViewAnnotations');
+  console.log('before', comments);
+  if (comments.length) {
+    embed.focus();
+    globalDoc.postUnoCommand('.uno:DeleteCommentThread', {
+      Id: { type: 'string', value: String(comments[0].id) },
+    });
+  }
+  if (tcEnabled)
+    globalDoc
+      .as('beans.XPropertySet')
+      .setPropertyValue('RecordChanges', true);
+  console.log(
+    'after',
+    globalDoc.getCommandValues('.uno:ViewAnnotations').comments
+  );
+}
+
 function changeAuthor() {
-    globalDoc.setAuthor('New author');
+  globalDoc.setAuthor('New author');
 }
 
 function getTrackChanges() {
-  console.log('TC INFO', globalDoc.getCommandValues('.uno:ViewTrackChangesInformation'));
+  console.log(
+    'TC INFO',
+    globalDoc.getCommandValues('.uno:ViewTrackChangesInformation')
+  );
 }
 
 function getComments() {
-  console.log('COMMENT INFO', { comments });
+  console.log(
+    'COMMENT INFO',
+    globalDoc.getCommandValues('.uno:ViewAnnotations').comments
+  );
 }
 
 function acceptTrackChange() {
@@ -229,7 +263,13 @@ async function applyDefinitions() {
   const start = performance.now();
   xTxtDoc.startBatchUpdate();
   const text = xTxtDoc.getText();
-  createOverlayLinks(text, definitionsColorMap, definitionsMap, referencesColorMap, definitionReferencesMap);
+  createOverlayLinks(
+    text,
+    definitionsColorMap,
+    definitionsMap,
+    referencesColorMap,
+    definitionReferencesMap
+  );
   xTxtDoc.finishBatchUpdate();
   console.log(`Created overlay links in ${performance.now() - start}ms`);
 }
@@ -264,7 +304,7 @@ function createOverlayLinks(
   definitionsColorMap,
   definitionsMap,
   referencesColorMap,
-  definitionReferencesMap,
+  definitionReferencesMap
 ) {
   let definitionCountMatches = 0;
   let referenceCountMatches = 0;
@@ -358,9 +398,11 @@ function createOverlayLinks(
             'HyperLinkURL',
             `term://${definition.termStartHex}`
           );
-          props.setPropertyValue('VisitedCharStyleName', 'Visited Internet Link');
+          props.setPropertyValue(
+            'VisitedCharStyleName',
+            'Visited Internet Link'
+          );
           props.setPropertyValue('UnvisitedCharStyleName', 'Internet Link');
-
         }
 
         definitionTextRange = definitionTextCursor.as('text.XTextRange');
@@ -480,7 +522,7 @@ function isWordBeforeEndOfParagraph(
 }
 
 function saveAsOverlays() {
-  const start = Date.now()
+  const start = Date.now();
   globalDoc.postUnoCommand('.uno:SaveAs', {
     URL: {
       type: 'string',
@@ -494,11 +536,10 @@ function saveAsOverlays() {
   console.log(`took ${Date.now() - start}ms to save`);
 }
 function saveOverlays() {
-  const start = Date.now()
+  const start = Date.now();
   globalDoc.postUnoCommand('.uno:Save');
   console.log(`took ${Date.now() - start}ms to save`);
 }
-
 
 /// <reference path="../src/electron/npm/libreoffice.d.ts" />
 function colorizeWorker() {
@@ -599,14 +640,14 @@ function colorizeWorker() {
   }
   self.addEventListener(
     'message',
-    async function(e) {
+    async function (e) {
       var data = e.data;
       switch (data.type) {
         case 'load':
           const timeStart = performance.now();
           self.postMessage({ type: 'loading', ...data });
           doc = libreoffice.loadDocumentFromArrayBuffer(data.data);
-          console.log(`Loaded document in ${performance.now() - timeStart}ms`)
+          console.log(`Loaded document in ${performance.now() - timeStart}ms`);
           self.postMessage({ type: 'loaded', file: data.file });
           const xDoc = doc;
           xDoc.startBatchUpdate();
