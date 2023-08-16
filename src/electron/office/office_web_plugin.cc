@@ -6,6 +6,7 @@
 
 #include <chrono>
 #include <memory>
+#include <string_view>
 
 #include "LibreOfficeKit/LibreOfficeKit.hxx"
 #include "base/auto_reset.h"
@@ -85,7 +86,8 @@ blink::WebPlugin* CreateInternalPlugin(blink::WebPluginParams params,
 
 OfficeWebPlugin::OfficeWebPlugin(blink::WebPluginParams params,
                                  content::RenderFrame* render_frame)
-    : render_frame_(render_frame), page_rects_cached_(),
+    : render_frame_(render_frame),
+      page_rects_cached_(),
       task_runner_(render_frame->GetTaskRunner(
           blink::TaskType::kInternalMediaRealTime)) {
   tile_buffer_ = std::make_unique<office::TileBuffer>();
@@ -191,8 +193,9 @@ void OfficeWebPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
   document_->setView(view_id_);
 
   gfx::Rect size(invalidate_rect.width(), invalidate_rect.height());
-  std::vector<office::TileRange> missing = tile_buffer_->PaintToCanvas(
-      paint_cancel_flag_, canvas, snapshot_, size, TotalScale(), scale_pending_, scrolling_);
+  std::vector<office::TileRange> missing =
+      tile_buffer_->PaintToCanvas(paint_cancel_flag_, canvas, snapshot_, size,
+                                  TotalScale(), scale_pending_, scrolling_);
 
   if (missing.size() == 0 && take_snapshot_ && !scrolling_) {
     UpdateSnapshot(tile_buffer_->MakeSnapshot(paint_cancel_flag_, size));
@@ -230,8 +233,30 @@ void OfficeWebPlugin::UpdateGeometry(const gfx::Rect& window_rect,
 
 void OfficeWebPlugin::UpdateFocus(bool focused,
                                   blink::mojom::FocusType focus_type) {
-  if (has_focus_ != focused) {
-    // TODO: update focus, input state, and selection bounds
+  // focusing without cursor interaction doesn't register with LOK, so for JS to
+  // register a .focus() on the embed, simply simulate a click at the last
+  // cursor position
+  if (view_id_ != -1 && document_ != nullptr && focused &&
+      focus_type == blink::mojom::FocusType::kScript) {
+    if (last_cursor_.empty())
+      return;
+
+    std::string_view payload_sv(last_cursor_);
+    std::string_view::const_iterator start = payload_sv.begin();
+    gfx::Rect pos = office::lok_callback::ParseRect(start, payload_sv.end());
+    task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&lok::Document::setView,
+                                  base::Unretained(document_), view_id_));
+    task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&lok::Document::postMouseEvent,
+                                  base::Unretained(document_),
+                                  LOK_MOUSEEVENT_MOUSEBUTTONDOWN, pos.x(),
+                                  pos.y(), 1, 1, 0));
+    task_runner_->PostTask(FROM_HERE,
+                           base::BindOnce(&lok::Document::postMouseEvent,
+                                          base::Unretained(document_),
+                                          LOK_MOUSEEVENT_MOUSEBUTTONUP, pos.x(),
+                                          pos.y(), 1, 1, 0));
   }
 
   has_focus_ = focused;
@@ -588,8 +613,8 @@ void OfficeWebPlugin::HandleInvalidateTiles(std::string payload) {
   // TODO: handle non-text document types for parts
   if (payload_sv.substr(0, 5) == "EMPTY") {
     auto num_payload = payload_sv.substr(5);
-    // if there is a page number, skip every invalidation that isn't the last visible page
-    // this allows earlier paints on large documents
+    // if there is a page number, skip every invalidation that isn't the last
+    // visible page this allows earlier paints on large documents
     if (!num_payload.empty()) {
       std::string_view::const_iterator start = num_payload.begin();
       auto num = office::lok_callback::ParseCSV(start, payload_sv.end());
@@ -644,6 +669,12 @@ void OfficeWebPlugin::HandleDocumentSizeChanged(std::string payload) {
   tile_buffer_->Resize(width, height);
 }
 
+void OfficeWebPlugin::HandleCursorInvalidated(std::string payload) {
+  if (!payload.empty()) {
+    last_cursor_ = std::move(payload);
+  }
+}
+
 float OfficeWebPlugin::TotalScale() {
   return zoom_ * device_scale_ * viewport_zoom_;
 }
@@ -682,18 +713,19 @@ float OfficeWebPlugin::TwipToCSSPx(float in) {
 void OfficeWebPlugin::UpdateIntersectingPages() {
   float view_height =
       plugin_rect_.height() / device_scale_ / (float)viewport_zoom_;
-  gfx::Rect scroll_rect(gfx::Point(0, scroll_y_position_ / device_scale_), gfx::Size(800, view_height));
+  gfx::Rect scroll_rect(gfx::Point(0, scroll_y_position_ / device_scale_),
+                        gfx::Size(800, view_height));
   int i = 0;
   first_intersect_ = -1;
   last_intersect_ = -1;
 
-  for (auto& it: page_rects_cached_) {
+  for (auto& it : page_rects_cached_) {
     if (first_intersect_ == -1 && it.Intersects(scroll_rect)) {
       first_intersect_ = i;
     }
     if (first_intersect_ != -1) {
       if (!it.Intersects(scroll_rect)) {
-         break;
+        break;
       } else {
         last_intersect_ = i;
       }
@@ -716,8 +748,8 @@ void OfficeWebPlugin::UpdateScroll(int y_position) {
   scroll_y_position_ = scaled_y;
 
   // TODO: paint PRIOR not ahead for scroll up
-  office::TileRange range = tile_buffer_->NextScrollTileRange(
-      scroll_y_position_, view_height);
+  office::TileRange range =
+      tile_buffer_->NextScrollTileRange(scroll_y_position_, view_height);
   tile_buffer_->SetYPosition(scaled_y);
   // TODO: schedule paint _ahead_ / _prior_ to scroll position
   paint_manager_->SchedulePaint(document_, scroll_y_position_,
@@ -790,16 +822,19 @@ bool OfficeWebPlugin::RenderDocument(
         LOK_CALLBACK_INVALIDATE_TILES,
         base::BindRepeating(&OfficeWebPlugin::HandleInvalidateTiles,
                             base::Unretained(this)));
+    event_bus->Handle(
+        LOK_CALLBACK_INVALIDATE_VISIBLE_CURSOR,
+        base::BindRepeating(&OfficeWebPlugin::HandleCursorInvalidated,
+                            base::Unretained(this)));
   }
   if (needs_reset) {
     task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&OfficeWebPlugin::OnGeometryChanged,
                        base::Unretained(this), viewport_zoom_, device_scale_));
-    task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(&OfficeWebPlugin::UpdateScroll,
-                       base::Unretained(this), 0));
+    task_runner_->PostTask(FROM_HERE,
+                           base::BindOnce(&OfficeWebPlugin::UpdateScroll,
+                                          base::Unretained(this), 0));
   }
   return true;
 }
@@ -809,8 +844,7 @@ void OfficeWebPlugin::ScheduleAvailableAreaPaint(bool invalidate) {
   offset_area.Offset(0, scroll_y_position_ * device_scale_);
   auto view_height = offset_area.height();
   auto range = tile_buffer_->InvalidateTilesInRect(offset_area, !invalidate);
-  auto limit =
-      tile_buffer_->LimitIndex(scroll_y_position_, view_height);
+  auto limit = tile_buffer_->LimitIndex(scroll_y_position_, view_height);
 
   // avoid scheduling out of bounds paints
   if (range.index_start > limit.index_end ||
@@ -820,9 +854,8 @@ void OfficeWebPlugin::ScheduleAvailableAreaPaint(bool invalidate) {
   take_snapshot_ = true;
   range.index_start = std::max(range.index_start, limit.index_start);
   range.index_end = std::min(range.index_end, limit.index_end);
-  paint_manager_->SchedulePaint(document_, scroll_y_position_,
-                                view_height, TotalScale(), true,
-                                {range});
+  paint_manager_->SchedulePaint(document_, scroll_y_position_, view_height,
+                                TotalScale(), true, {range});
 }
 
 void OfficeWebPlugin::TriggerFullRerender() {

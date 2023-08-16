@@ -217,6 +217,7 @@ class OfficeWebPlugin : public blink::WebPlugin,
   // LOK event handlers {
   void HandleInvalidateTiles(std::string payload);
   void HandleDocumentSizeChanged(std::string payload);
+  void HandleCursorInvalidated(std::string payload);
   // }
 
   // owns this class
@@ -258,6 +259,7 @@ class OfficeWebPlugin : public blink::WebPlugin,
   // current cursor
   ui::mojom::CursorType cursor_type_ = ui::mojom::CursorType::kPointer;
   bool has_focus_;
+  std::string last_cursor_;
   // }
 
   // owned by
