@@ -39,6 +39,9 @@
 #include "v8/include/v8-persistent-handle.h"
 #include "v8/include/v8-primitive.h"
 
+// Uncomment to log all document events
+// #define DEBUG_EVENTS
+
 namespace electron::office {
 
 namespace {
@@ -79,6 +82,10 @@ void OfficeClient::HandleDocumentCallback(int type,
       static_cast<DocumentCallbackContext*>(callback_context);
   if (context->invalid.IsSet() || !context->client.MaybeValid())
     return;
+
+#ifdef DEBUG_EVENTS
+  LOG(ERROR) << lok_callback::TypeToEventString(type) << " " << payload;
+#endif
 
   context->task_runner->PostTask(
       FROM_HERE,
@@ -186,9 +193,9 @@ gin::ObjectTemplateBuilder OfficeClient::GetObjectTemplateBuilder(
       .SetMethod("_beforeunload", &OfficeClient::Destroy);
 }
 
-void OfficeClient::Destroy()
-{
-  if (destroyed_) return;
+void OfficeClient::Destroy() {
+  if (destroyed_)
+    return;
 
   destroyed_ = true;
   auto it = document_map_.cbegin();

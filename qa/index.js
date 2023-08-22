@@ -1,6 +1,9 @@
 /// <reference path="../src/electron/npm/libreoffice.d.ts" />
+/// <reference path="../qa/wrapper.js" />
 const picker = document.getElementById('el-picker');
+/** @type OfficeDoc */
 const embed = document.getElementById('el-embed');
+/** @type OfficeDoc */
 const thumb = document.getElementById('el-thumb');
 
 // libreoffice.on('status_indicator_set_value', (x) => {
@@ -32,11 +35,10 @@ picker.onchange = async () => {
     const doc = await libreoffice.loadDocument(uri);
     globalDoc = doc;
     runColorizeWorker();
-    const thumb_doc = doc.newView();
-
     embed.renderDocument(doc);
-    thumb.renderDocument(thumb_doc);
+    thumb.renderDocument(doc);
     thumb.setZoom(0.2);
+    thumb.debounceUpdates(300);
     embed.focus();
   }
 };

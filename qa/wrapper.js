@@ -142,6 +142,10 @@ class OfficeDoc extends HTMLElement {
     if (this._cursor_payload) this._setCursor(this._cursor_payload);
   }
 
+  debounceUpdates(interval) {
+    this.embed.debounceUpdates(interval);
+  }
+
   /**
    * @param {any} doc DocumentClient object to render
    */
@@ -168,7 +172,7 @@ class OfficeDoc extends HTMLElement {
     doc.on('hyperlink_clicked', logit);
     doc.on('cursor_visible', logit);
     doc.on('set_part', logit);
-    doc.on('state_changed', logit);
+    // doc.on('state_changed', logit);
     doc.on('window', logit);
     doc.on('jsdialog', logit);
     doc.on('uno_command_result', logit);
@@ -181,9 +185,9 @@ class OfficeDoc extends HTMLElement {
     doc.on('unload', logit);
     doc.on('title_changed', logit);
     doc.on('mode_changed', logit);
-    doc.on('redline_table_size_changed', logit);
-    doc.on('redline_table_entry_modified', logit);
-    doc.on('comment', logit);
+    // doc.on('redline_table_size_changed', logit);
+    // doc.on('redline_table_entry_modified', logit);
+    // doc.on('comment', logit);
   }
 
   focus() {

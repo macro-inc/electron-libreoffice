@@ -28,7 +28,7 @@
 // #define TILEBUFFER_DEBUG_PAINT
 
 namespace electron::office {
-TileBuffer::TileBuffer() : valid_tile_(0) {
+TileBuffer::TileBuffer() : valid_tile_(0), active_context_hash_(0) {
   pool_buffer_ =
       std::shared_ptr<uint8_t[]>(static_cast<uint8_t*>(base::AlignedAlloc(
                                      kPoolAllocatedSize, kPoolAligned)),
@@ -75,23 +75,38 @@ void TileBuffer::Resize(long width_twips, long height_twips) {
     Resize(width_twips, height_twips, scale_);
 }
 
-void TileBuffer::ResetScale(float scale) {
-  if (std::abs(scale - scale_) > 0.001)
-    Resize(doc_width_twips_, doc_height_twips_, scale);
+void TileBuffer::SetActiveContext(std::size_t active_context_hash) {
+  active_context_hash_ = active_context_hash;
 }
 
-void TileBuffer::PaintTile(CancelFlagPtr cancel_flag,
+void TileBuffer::ResetScale(float scale) {
+  if (std::abs(scale - scale_) > 0.001) {
+    Resize(doc_width_twips_, doc_height_twips_, scale);
+    SetActiveContext(0);
+  }
+}
+
+bool TileBuffer::PaintTile(CancelFlagPtr cancel_flag,
                            lok::Document* document,
-                           unsigned int tile_index) {
+                           unsigned int tile_index,
+                           std::size_t context_hash) {
   static const SkImageInfo image_info_ = SkImageInfo::Make(
       kTileSizePx, kTileSizePx, kBGRA_8888_SkColorType, kPremul_SkAlphaType);
   size_t pool_index;
   const unsigned int max = columns_ * rows_ - 1;
+  if (const std::size_t ah = active_context_hash_; ah != context_hash) {
+    valid_tile_.Clear();
+    return false;
+  }
+
   if (tile_index > max) {
     // TODO: proper fix, this probably occurs after a zoom
     LOG(ERROR) << "invalid tile index: " << tile_index << ", exceeds max "
-               << max;
-    return;
+               << max << " ach: " << std::hex << active_context_hash_
+               << " ch: " << context_hash;
+    LOG(ERROR) << "BAD CONTEXT CLEAR != " << std::hex << context_hash;
+    valid_tile_.Clear();
+    return false;
   }
 
   if (!TileToPoolIndex(tile_index, &pool_index)) {
@@ -112,6 +127,11 @@ void TileBuffer::PaintTile(CancelFlagPtr cancel_flag,
                         lok_callback::PixelToTwip(kTileSizePx * row, scale_),
                         lok_callback::PixelToTwip(kTileSizePx, scale_),
                         lok_callback::PixelToTwip(kTileSizePx, scale_));
+
+    if (const std::size_t ah = active_context_hash_; ah != context_hash) {
+      valid_tile_.Clear();
+      return false;
+    }
     sk_sp<SkImage> image = SkImage::MakeRasterData(
         image_info_,
         SkData::MakeWithCopy(GetPoolBuffer(pool_index), kBufferStride),
@@ -121,8 +141,18 @@ void TileBuffer::PaintTile(CancelFlagPtr cancel_flag,
             .set_id(cc::PaintImage::GetNextId())
             .set_image(image, cc::PaintImage::GetNextContentId())
             .TakePaintImage();
+
+    // because valid_tile is critical to render, check after rasterization
+    if (const std::size_t ah = active_context_hash_; ah != context_hash) {
+      valid_tile_.Clear();
+      return false;
+    }
+
     valid_tile_.Set(tile_index);
+    return true;
   }
+
+  return tile_index < valid_tile_.Size() && valid_tile_[tile_index];
 }
 
 void TileBuffer::InvalidateTile(unsigned int column, unsigned int row) {
@@ -145,7 +175,8 @@ gfx::Rect TileRect(const gfx::RectF& target,
 }
 }  // namespace
 
-TileRange TileBuffer::InvalidateTilesInRect(const gfx::RectF& rect, bool dry_run) {
+TileRange TileBuffer::InvalidateTilesInRect(const gfx::RectF& rect,
+                                            bool dry_run) {
   auto tile_rect =
       TileRect(rect, doc_width_scaled_px_, doc_height_scaled_px_, kTileSizePx);
   DCHECK(tile_rect.x() >= 0);
@@ -159,7 +190,8 @@ TileRange TileBuffer::InvalidateTilesInRect(const gfx::RectF& rect, bool dry_run
   unsigned int index_end =
       CoordToIndex(std::min((unsigned int)tile_rect.right(), columns_ - 1),
                    std::min((unsigned int)tile_rect.bottom(), rows_ - 1));
-  if (!dry_run) valid_tile_.ResetRange(index_start, index_end);
+  if (!dry_run)
+    valid_tile_.ResetRange(index_start, index_end);
   return {index_start, index_end};
 }
 
@@ -253,6 +285,7 @@ TileRange TileBuffer::InvalidateTilesInTwipRect(const gfx::Rect& rect_twips) {
 }
 
 void TileBuffer::InvalidateAllTiles() {
+  SetActiveContext(0);
   valid_tile_.Clear();
 }
 
@@ -304,8 +337,10 @@ std::vector<TileRange> TileBuffer::PaintToCanvas(CancelFlagPtr cancel_flag,
         } else {
           missing_ranges.back().index_end = tile_index;
         }
-        // tracking the last good row prevents rendering a partial row which can appear glitchy while scrolling
-        if (last_good_row == -1) last_good_row = std::max((int)row, (int)row_start);
+        // tracking the last good row prevents rendering a partial row which can
+        // appear glitchy while scrolling
+        if (last_good_row == -1)
+          last_good_row = std::max((int)row, (int)row_start);
         continue;
       }
 
@@ -358,29 +393,29 @@ std::vector<TileRange> TileBuffer::PaintToCanvas(CancelFlagPtr cancel_flag,
                           kTileSizePx * row,
                           SkSamplingOptions(SkFilterMode::kLinear), &flags);
 #ifdef TILEBUFFER_DEBUG_PAINT
-      cc::PaintFlags debugPaint;
-      debugPaint.setColor(SK_ColorBLUE);
-      debugPaint.setStrokeWidth(1);
-      SkRect debugRect{(float)kTileSizePx * column, (float)kTileSizePx * row,
-                       (float)kTileSizePx * (column + 1),
-                       (float)kTileSizePx * (row + 1)};
+        cc::PaintFlags debugPaint;
+        debugPaint.setColor(SK_ColorBLUE);
+        debugPaint.setStrokeWidth(1);
+        SkRect debugRect{(float)kTileSizePx * column, (float)kTileSizePx * row,
+                         (float)kTileSizePx * (column + 1),
+                         (float)kTileSizePx * (row + 1)};
 
-      SkFont font;
-      font.setScaleX(0.5);
-      font.setSize(12 * scale_);
-      canvas->drawTextBlob(
-          SkTextBlob::MakeFromString(std::to_string(tile_index).c_str(), font),
-          debugRect.left(), debugRect.bottom(), debugPaint);
+        SkFont font;
+        font.setScaleX(0.5);
+        font.setSize(12 * scale_);
+        canvas->drawTextBlob(SkTextBlob::MakeFromString(
+                                 std::to_string(tile_index).c_str(), font),
+                             debugRect.left(), debugRect.bottom(), debugPaint);
 
-      debugPaint.setColor(SK_ColorGREEN);
-      canvas->drawLine(debugRect.left(), debugRect.top(), debugRect.right(),
-                       debugRect.top(), debugPaint);
-      canvas->drawLine(debugRect.right(), debugRect.top(), debugRect.right(),
-                       debugRect.bottom(), debugPaint);
-      canvas->drawLine(debugRect.right(), debugRect.bottom(), debugRect.left(),
-                       debugRect.bottom(), debugPaint);
-      canvas->drawLine(debugRect.left(), debugRect.top(), debugRect.left(),
-                       debugRect.bottom(), debugPaint);
+        debugPaint.setColor(SK_ColorGREEN);
+        canvas->drawLine(debugRect.left(), debugRect.top(), debugRect.right(),
+                         debugRect.top(), debugPaint);
+        canvas->drawLine(debugRect.right(), debugRect.top(), debugRect.right(),
+                         debugRect.bottom(), debugPaint);
+        canvas->drawLine(debugRect.right(), debugRect.bottom(),
+                         debugRect.left(), debugRect.bottom(), debugPaint);
+        canvas->drawLine(debugRect.left(), debugRect.top(), debugRect.left(),
+                         debugRect.bottom(), debugPaint);
 #endif
       }
     }
@@ -401,9 +436,9 @@ std::vector<TileRange> TileBuffer::PaintToCanvas(CancelFlagPtr cancel_flag,
   for (unsigned int row = snapshot.row_start; row < snapshot.row_end; ++row) {
     for (unsigned int column = snapshot.column_start;
          column < snapshot.column_end; ++column) {
-        if (CancelFlag::IsCancelled(cancel_flag)) {
-          return missing_ranges;
-        }
+      if (CancelFlag::IsCancelled(cancel_flag)) {
+        return missing_ranges;
+      }
       canvas->drawImage(*it++, kTileSizePx * column, kTileSizePx * row,
                         SkSamplingOptions(SkFilterMode::kLinear), &flags);
 #ifdef TILEBUFFER_DEBUG_PAINT

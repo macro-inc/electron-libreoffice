@@ -12,6 +12,9 @@
 #include "office/cancellation_flag.h"
 #include "office/lok_tilebuffer.h"
 
+// Uncomment to log paint manager events
+// #define DEBUG_PAINT_MANAGER
+
 namespace electron::office {
 
 PaintManager::Task::Task(lok::Document* document,
@@ -30,6 +33,10 @@ PaintManager::Task::Task(lok::Document* document,
       skip_invalidation_flag_(CancelFlag::Create()) {}
 
 PaintManager::Task::~Task() = default;
+
+std::size_t PaintManager::Task::ContextHash() const noexcept {
+  return std::hash<void*>{}(document_) ^ (std::hash<float>{}(scale_) << 1);
+}
 
 PaintManager::PaintManager(Client* client)
     : task_runner_(base::ThreadPool::CreateTaskRunner(
@@ -76,7 +83,7 @@ void PaintManager::SchedulePaint(lok::Document* document,
 bool PaintManager::Task::CanMergeWith(Task& other) {
   // clang-format off
   return document_ == other.document_ && // same document
-  std::abs(other.scale_ - scale_) > 0.001 && // same scale
+  std::abs(other.scale_ - scale_) < 0.001 && // same scale
   (other.y_pos_ >= y_pos_ && other.y_pos_ < y_pos_ + view_height_) && // overlapping
   (y_pos_ >= other.y_pos_ && y_pos_ < other.y_pos_ + other.view_height_); // overlapping
   // clang-format on
@@ -171,6 +178,18 @@ void PaintManager::ScheduleNextPaint(std::vector<TileRange> tile_ranges_) {
 }
 
 void PaintManager::PostCurrentTask() {
+  if (skip_render_) return;
+
+  std::size_t hash = 0;
+  if (auto* tile_buffer = client_->GetTileBuffer()) {
+    hash = current_task_->ContextHash();
+
+#ifdef DEBUG_PAINT_MANAGER
+    LOG(ERROR) << "PCT " << current_task_->scale_ << " @ " << std::hex << hash;
+#endif
+
+    tile_buffer->SetActiveContext(hash);
+  }
   auto simplified_ranges = SimplifyRanges(current_task_->tile_ranges_);
   auto tile_count = TileCount(simplified_ranges);
   base::RepeatingClosure completed = base::BarrierClosure(
@@ -183,7 +202,7 @@ void PaintManager::PostCurrentTask() {
         FROM_HERE,
         base::BindOnce(&PaintManager::PaintTileRange, client_->GetTileBuffer(),
                        current_task_->skip_paint_flag_,
-                       current_task_->document_, it, completed));
+                       current_task_->document_, it, hash, completed));
   }
 }
 
@@ -200,20 +219,31 @@ void PaintManager::PaintTileRange(TileBuffer* tile_buffer,
                                   CancelFlagPtr cancel_flag,
                                   lok::Document* document,
                                   TileRange it,
+                                  std::size_t context_hash,
                                   base::RepeatingClosure completed) {
+#ifdef DEBUG_PAINT_MANAGER
+  LOG(ERROR) << "PTR " << it.index_start << " - " << it.index_end
+             << " CH: " << std::hex << context_hash;
+#endif
+
   for (unsigned int tile_index = it.index_start; tile_index <= it.index_end;
        ++tile_index) {
-    PaintTile(tile_buffer, cancel_flag, document, tile_index, completed);
+    if (!PaintTile(tile_buffer, cancel_flag, document, tile_index, context_hash,
+                   completed)) 
+      break;
   }
 }
 
-void PaintManager::PaintTile(TileBuffer* tile_buffer,
+bool PaintManager::PaintTile(TileBuffer* tile_buffer,
                              CancelFlagPtr cancel_flag,
                              lok::Document* document,
                              unsigned int tile_index,
+                             std::size_t context_hash,
                              base::RepeatingClosure completed) {
-  tile_buffer->PaintTile(cancel_flag, document, tile_index);
+  bool res =
+      tile_buffer->PaintTile(cancel_flag, document, tile_index, context_hash);
   completed.Run();
+  return res;
 }
 
 void PaintManager::ClearTasks() {
@@ -227,6 +257,20 @@ void PaintManager::ClearTasks() {
     CancelFlag::Set(next_task_->skip_invalidation_flag_);
   }
   next_task_.reset();
+}
+
+void PaintManager::PausePaint() {
+  skip_render_ = true;
+}
+
+void PaintManager::ResumePaint() {
+  skip_render_ = false;
+  if (current_task_) {
+    PostCurrentTask();
+  } else if (next_task_) {
+    current_task_.swap(next_task_);
+    PostCurrentTask();
+  }
 }
 
 }  // namespace electron::office
