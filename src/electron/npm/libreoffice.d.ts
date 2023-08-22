@@ -31,6 +31,11 @@ interface HTMLLibreOfficeEmbed<Client = LibreOffice.DocumentClient>
    * @returns the current zoom
    **/
   getZoom(): number;
+
+  /** Debounces updates that cause paints at a provided interval
+   * @param interval in ms to debounce
+   **/
+  debounceUpdates(interval: number): void;
 }
 
 declare namespace LibreOffice {

@@ -17,6 +17,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "cc/paint/paint_image.h"
 #include "cc/paint/paint_image_builder.h"
 #include "gin/handle.h"
@@ -212,6 +213,9 @@ class OfficeWebPlugin : public blink::WebPlugin,
   // prepares the embed as the document client's mounted viewer
   bool RenderDocument(v8::Isolate* isolate,
                       gin::Handle<office::DocumentClient> client);
+  // debounces the renders at the specified interval
+  void DebounceUpdates(int interval);
+
   // }
 
   // LOK event handlers {
@@ -219,6 +223,9 @@ class OfficeWebPlugin : public blink::WebPlugin,
   void HandleDocumentSizeChanged(std::string payload);
   void HandleCursorInvalidated(std::string payload);
   // }
+
+  void DebouncedResumePaint();
+  void TryResumePaint();
 
   // owns this class
   blink::WebPluginContainer* container_;
@@ -291,7 +298,9 @@ class OfficeWebPlugin : public blink::WebPlugin,
 
   v8::Persistent<v8::Object> rendered_client_;
 
-  // invalidates when destroy() is called
+  std::unique_ptr<base::DelayTimer> update_debounce_timer_;
+
+  // invalidates when destroy() is called, must be last
   base::WeakPtrFactory<OfficeWebPlugin> weak_factory_{this};
 };
 

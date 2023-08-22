@@ -93,9 +93,10 @@ class TileBuffer {
                                        bool scale_pending,
                                        bool scrolling);
   const Snapshot MakeSnapshot(CancelFlagPtr cancel_flag, const gfx::Rect& rect);
-  void PaintTile(CancelFlagPtr cancel_flag,
+  bool PaintTile(CancelFlagPtr cancel_flag,
                  lok::Document* document,
-                 unsigned int tile_index);
+                 unsigned int tile_index,
+                 std::size_t context_hash);
   void SetYPosition(float y);
   void Resize(long width_twips, long heigh_twips);
   void Resize(long width_twips, long heigh_twips, float scale);
@@ -105,6 +106,8 @@ class TileBuffer {
       std::vector<TileRange> tile_ranges);
   std::vector<TileRange> ClipRanges(std::vector<TileRange> ranges,
                                     TileRange range_limit);
+
+  void SetActiveContext(std::size_t active_context_hash);
 
  private:
   unsigned int CoordToIndex(unsigned int x, unsigned int y) {
@@ -167,6 +170,8 @@ class TileBuffer {
   float doc_height_scaled_px_;
 
   AtomicBitset valid_tile_;
+
+  std::atomic<std::size_t> active_context_hash_;
 
   // ring pool (in order to prevent OOM crash on invididual tile allocations)
 

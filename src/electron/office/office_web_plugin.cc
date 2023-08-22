@@ -19,6 +19,8 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_image.h"
@@ -129,6 +131,9 @@ v8::Local<v8::Object> OfficeWebPlugin::V8ScriptableObject(
             .SetMethod("twipToPx",
                        base::BindRepeating(&OfficeWebPlugin::TwipToCSSPx,
                                            base::Unretained(this)))
+            .SetMethod("debounceUpdates",
+                       base::BindRepeating(&OfficeWebPlugin::DebounceUpdates,
+                                           base::Unretained(this)))
             .SetProperty(
                 "documentSize",
                 base::BindRepeating(&OfficeWebPlugin::GetDocumentCSSPixelSize,
@@ -159,10 +164,6 @@ bool OfficeWebPlugin::SupportsKeyboardFocus() const {
 void OfficeWebPlugin::UpdateAllLifecyclePhases(
     blink::DocumentUpdateReason reason) {}
 
-// TODO: rework snapshots so that it stores the snapshot as the original tiles,
-// the bounds of the tiles, and the scale of the snapshot this way there is no
-// additional render work as the tiles are already stored and the context is
-// likely already cached as a GPU texture
 void OfficeWebPlugin::UpdateSnapshot(const office::Snapshot snapshot) {
   if (snapshot.tiles.empty())
     return;
@@ -201,6 +202,7 @@ void OfficeWebPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
     UpdateSnapshot(tile_buffer_->MakeSnapshot(paint_cancel_flag_, size));
     take_snapshot_ = false;
   }
+  if (update_debounce_timer_) paint_manager_->PausePaint();
 
   // the temporary scale is painted, now
   if (scale_pending_) {
@@ -628,6 +630,11 @@ void OfficeWebPlugin::HandleInvalidateTiles(std::string payload) {
     base::TimeTicks now = base::TimeTicks::Now();
     if (last_full_invalidation_time_.is_null() ||
         (now - last_full_invalidation_time_) > base::Milliseconds(10)) {
+
+      task_runner_->PostTask(
+          FROM_HERE, base::BindOnce(&OfficeWebPlugin::TryResumePaint,
+                                    GetWeakPtr()));
+
       ScheduleAvailableAreaPaint();
       last_full_invalidation_time_ = now;
     }
@@ -656,6 +663,11 @@ void OfficeWebPlugin::HandleInvalidateTiles(std::string payload) {
     range.index_start = std::max(range.index_start, limit.index_start);
     range.index_end = std::min(range.index_end, limit.index_end);
 
+    task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&OfficeWebPlugin::TryResumePaint,
+                                  GetWeakPtr()));
+
+    take_snapshot_ = true;
     paint_manager_->SchedulePaint(document_, scroll_y_position_, view_height,
                                   TotalScale(), false, {range});
   }
@@ -694,6 +706,7 @@ void OfficeWebPlugin::SetZoom(float zoom) {
 
   // immediately flush the container to scale without invalidating tiles
   if (!in_paint_) {
+    tile_buffer_->SetActiveContext(0);
     InvalidatePluginContainer();
   }
 }
@@ -785,6 +798,9 @@ bool OfficeWebPlugin::RenderDocument(
   }
 
   document_ = client->GetDocument();
+  if (!document_)
+    return false;
+
   if (needs_reset) {
     tile_buffer_->InvalidateAllTiles();
   }
@@ -878,6 +894,28 @@ base::WeakPtr<office::PaintManager::Client> OfficeWebPlugin::GetWeakClient() {
 
 base::WeakPtr<OfficeWebPlugin> OfficeWebPlugin::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
+}
+
+void OfficeWebPlugin::DebounceUpdates(int interval) {
+  if (interval <= 0 && update_debounce_timer_) {
+    update_debounce_timer_.reset();
+  } else {
+    update_debounce_timer_ = std::make_unique<base::DelayTimer>(
+        FROM_HERE, base::Milliseconds(interval), this,
+        &OfficeWebPlugin::DebouncedResumePaint);
+    update_debounce_timer_->Reset();
+    paint_manager_->PausePaint();
+  }
+}
+
+void OfficeWebPlugin::TryResumePaint() {
+  if (update_debounce_timer_) update_debounce_timer_->Reset();
+}
+
+void OfficeWebPlugin::DebouncedResumePaint() {
+  if (!paint_manager_) return;
+
+  paint_manager_->ResumePaint();
 }
 
 // } blink::WebPlugin

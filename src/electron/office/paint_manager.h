@@ -45,6 +45,9 @@ class PaintManager {
   // should be used to prevent lingering tasks during zooms
   void ClearTasks();
 
+  void PausePaint();
+  void ResumePaint();
+
  private:
   PaintManager();
 
@@ -62,6 +65,8 @@ class PaintManager {
     // disable copy
     Task(const Task& other) = delete;
     Task& operator=(const Task& other) = delete;
+
+    std::size_t ContextHash() const noexcept;
 
     lok::Document* document_;
     const int y_pos_;
@@ -84,22 +89,25 @@ class PaintManager {
 
   void PostCurrentTask();
   void CurrentTaskComplete(Client* client,
-                                  CancelFlagPtr cancel_flag,
-                                  bool full_paint,
-                                  float scale);
-  static void PaintTile(TileBuffer* tile_buffer,
+                           CancelFlagPtr cancel_flag,
+                           bool full_paint,
+                           float scale);
+  static bool PaintTile(TileBuffer* tile_buffer,
                         CancelFlagPtr cancel_flag,
                         lok::Document* document,
                         unsigned int tile_index,
+                        std::size_t context_hash,
                         base::RepeatingClosure completed);
   static void PaintTileRange(TileBuffer* tile_buffer,
                              CancelFlagPtr cancel_flag,
                              lok::Document* document,
                              TileRange range,
+                             std::size_t context_hash,
                              base::RepeatingClosure completed);
 
   const scoped_refptr<base::TaskRunner> task_runner_;
   Client* client_;
+  bool skip_render_ = false;
 
   std::unique_ptr<Task> current_task_ = nullptr;
   std::unique_ptr<Task> next_task_ = nullptr;
