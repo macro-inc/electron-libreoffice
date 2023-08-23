@@ -263,8 +263,10 @@ void PaintManager::PausePaint() {
   skip_render_ = true;
 }
 
-void PaintManager::ResumePaint() {
+void PaintManager::ResumePaint(bool paint_next) {
   skip_render_ = false;
+  if (!paint_next) return;
+
   if (current_task_) {
     PostCurrentTask();
   } else if (next_task_) {

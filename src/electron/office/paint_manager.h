@@ -46,7 +46,7 @@ class PaintManager {
   void ClearTasks();
 
   void PausePaint();
-  void ResumePaint();
+  void ResumePaint(bool paint_next = true);
 
  private:
   PaintManager();
