@@ -202,7 +202,7 @@ void OfficeWebPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
     UpdateSnapshot(tile_buffer_->MakeSnapshot(paint_cancel_flag_, size));
     take_snapshot_ = false;
   }
-  if (update_debounce_timer_) paint_manager_->PausePaint();
+  if (update_debounce_timer_ && !scrolling_) paint_manager_->PausePaint();
 
   // the temporary scale is painted, now
   if (scale_pending_) {
@@ -764,6 +764,7 @@ void OfficeWebPlugin::UpdateScroll(int y_position) {
   office::TileRange range =
       tile_buffer_->NextScrollTileRange(scroll_y_position_, view_height);
   tile_buffer_->SetYPosition(scaled_y);
+  paint_manager_->ResumePaint(false);
   // TODO: schedule paint _ahead_ / _prior_ to scroll position
   paint_manager_->SchedulePaint(document_, scroll_y_position_,
                                 view_height * device_scale_, TotalScale(),
