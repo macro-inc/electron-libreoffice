@@ -59,7 +59,7 @@
     "pre-flight": "^1.1.0",
     "remark-cli": "^10.0.0",
     "remark-preset-lint-markdown-style-guide": "^4.0.0",
-    "semver": "^5.6.0",
+    "semver": "^5.7.2",
     "shx": "^0.3.2",
     "standard-markdown": "^6.0.0",
     "stream-json": "^1.7.1",
