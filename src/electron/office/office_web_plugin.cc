@@ -50,6 +50,7 @@
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
+#include "third_party/blink/public/common/input/web_mouse_wheel_event.h"
 #include "third_party/blink/public/common/input/web_pointer_properties.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
@@ -99,9 +100,9 @@ OfficeWebPlugin::OfficeWebPlugin(blink::WebPluginParams params,
 // blink::WebPlugin {
 bool OfficeWebPlugin::Initialize(blink::WebPluginContainer* container) {
   container_ = container;
-  // This prevents the wheel event hit test data from causing a crash, wheel
-  // events are handled by the scroll container anyway
-  container->SetWantsWheelEvents(false);
+
+  // This enables our HandleInputEvent to get MouseWheel events as well
+  container->SetWantsWheelEvents(true);
 
   // TODO: figure out what false means?
   return true;
@@ -292,6 +293,40 @@ blink::WebInputEventResult OfficeWebPlugin::HandleInputEvent(
 
   const blink::WebInputEvent& event_to_handle =
       transformed_event ? *transformed_event : event.Event();
+
+  #if BUILDFLAG(IS_MAC)
+    office::Modifiers base_modifier = office::Modifiers::kMetaKey;
+  #else
+    office::Modifiers base_modifier = office::Modifiers::kControlKey;
+  #endif
+
+  // The event_type will be mouse wheel for pinching on track pad and scrolling
+  if(event_type == blink::WebInputEvent::Type::kMouseWheel) {
+    blink::WebMouseWheelEvent mouse_event =
+      static_cast<const blink::WebMouseWheelEvent&>(event_to_handle);
+
+    int modifiers = mouse_event.GetModifiers();
+
+    // For track pad pinching the delta_y will always have decimal values whereas mouse scroll is a whole number
+    if (std::fmod(mouse_event.delta_y, 1.0f) == 0.0f) {
+        // The event is from a mouse scroll so you need to be holding down the modifier key to zoom
+        if(!(modifiers & base_modifier)){
+          return blink::WebInputEventResult::kNotHandled;
+        }
+    }
+
+    // Scrolling away from screen = zoom out
+    if(mouse_event.delta_y < 0) {
+      SetZoom(zoom_ - 0.1f);
+    }
+
+    // Scrolling toward screen = zoom out
+    if(mouse_event.delta_y > 0) {
+      SetZoom(zoom_ + 0.1f);
+    }
+
+    return blink::WebInputEventResult::kHandledApplication;
+  }
 
   switch (event_type) {
     case blink::WebInputEvent::Type::kMouseDown:
