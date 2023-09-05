@@ -325,7 +325,17 @@ blink::WebInputEventResult OfficeWebPlugin::HandleInputEvent(
       SetZoom(zoom_ + 0.1f);
     }
 
-    return blink::WebInputEventResult::kHandledApplication;
+    // We want to emit the `document_size_changed` event
+    if(document_client_ != nullptr)
+    {
+      base::WeakPtr<office::EventBus> event_bus(document_client_->GetEventBus());
+      if(event_bus != nullptr)
+      {
+        // If you do a event_bus->Emit the fn->Call will crash electron-libreoffice. This works though
+        event_bus->EmitLibreOfficeEvent(LOK_CALLBACK_DOCUMENT_SIZE_CHANGED, "");
+        return blink::WebInputEventResult::kHandledApplication;
+      }
+    }
   }
 
   switch (event_type) {
