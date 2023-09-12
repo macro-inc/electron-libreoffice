@@ -155,6 +155,10 @@ function rejectTrackChange() {
   globalDoc.postUnoCommand('.uno:RejectTrackedChange');
 }
 
+function invalidateAllTiles() {
+  embed.invalidateAllTiles();
+}
+
 function gotoOutline() {
   const outline = doc.getCommandValues('.uno:GetOutline');
 
@@ -274,6 +278,9 @@ async function applyDefinitions() {
   );
   xTxtDoc.finishBatchUpdate();
   console.log(`Created overlay links in ${performance.now() - start}ms`);
+  // invalidates all tiles to force update un-rendered pages
+  invalidateAllTiles();
+  embed.focus();
 }
 
 function gotoOverlay() {
