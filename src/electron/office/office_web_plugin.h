@@ -204,6 +204,7 @@ class OfficeWebPlugin : public blink::WebPlugin,
   gfx::Size GetDocumentCSSPixelSize();
   std::vector<gfx::Rect> PageRects();
   void SetZoom(float zoom);
+  void InvalidateAllTiles();
   float GetZoom();
   float TwipToCSSPx(float in);
 

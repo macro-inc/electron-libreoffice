@@ -128,6 +128,8 @@ v8::Local<v8::Object> OfficeWebPlugin::V8ScriptableObject(
                                                       base::Unretained(this)))
             .SetMethod("setZoom", base::BindRepeating(&OfficeWebPlugin::SetZoom,
                                                       base::Unretained(this)))
+            .SetMethod("invalidateAllTiles", base::BindRepeating(&OfficeWebPlugin::InvalidateAllTiles,
+                                                      base::Unretained(this)))
             .SetMethod("twipToPx",
                        base::BindRepeating(&OfficeWebPlugin::TwipToCSSPx,
                                            base::Unretained(this)))
@@ -562,6 +564,17 @@ std::vector<gfx::Rect> OfficeWebPlugin::PageRects() {
   page_rects_cached_.assign(result.begin(), result.end());
   UpdateIntersectingPages();
   return result;
+}
+
+void OfficeWebPlugin::InvalidateAllTiles() {
+  // not mounted
+  if (view_id_ == -1)
+    return;
+
+  if(!tile_buffer_)
+    return;
+
+  tile_buffer_->InvalidateAllTiles();
 }
 
 gfx::Size OfficeWebPlugin::GetDocumentPixelSize() {

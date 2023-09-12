@@ -142,6 +142,10 @@ class OfficeDoc extends HTMLElement {
     if (this._cursor_payload) this._setCursor(this._cursor_payload);
   }
 
+  invalidateAllTiles() {
+    this.embed.invalidateAllTiles();
+  }
+
   debounceUpdates(interval) {
     this.embed.debounceUpdates(interval);
   }

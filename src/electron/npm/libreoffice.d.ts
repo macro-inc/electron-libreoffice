@@ -19,6 +19,7 @@ interface HTMLLibreOfficeEmbed<Client = LibreOffice.DocumentClient>
    * @returns css px
    */
   twipToPx(input: number): number;
+  invalidateAllTiles(): void;
   /** The rectangles for the bounds of each page in the document, units are CSS pixels */
   get pageRects(): LibreOffice.PageRect[];
   /** The rectangles for the bounds of each page in the document, units are CSS pixels */
