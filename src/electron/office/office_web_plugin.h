@@ -180,6 +180,7 @@ class OfficeWebPlugin : public blink::WebPlugin,
                                             ui::Cursor* cursor);
   blink::WebInputEventResult HandleCutCopyEvent(std::string event);
   blink::WebInputEventResult HandlePasteEvent();
+  blink::WebInputEventResult HandleUndoRedoEvent(std::string event);
   bool HandleMouseEvent(blink::WebInputEvent::Type type,
                         gfx::PointF position,
                         int modifiers,

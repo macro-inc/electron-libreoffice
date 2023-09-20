@@ -361,6 +361,10 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
         return type == blink::WebInputEvent::Type::kKeyUp
                    ? blink::WebInputEventResult::kHandledApplication
                    : HandleCutCopyEvent(".uno:Cut");
+      case office::DomCode::US_Z:
+        return type == blink::WebInputEvent::Type::kKeyUp
+                   ? blink::WebInputEventResult::kHandledApplication
+                   : event.GetModifiers() & office::Modifiers::kShiftKey ? HandleUndoRedoEvent(".uno:Redo") : HandleUndoRedoEvent(".uno:Undo");
     }
   }
 
@@ -387,6 +391,11 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
                          : LOK_KEYEVENT_KEYINPUT,
                      event.text[0], lok_key_code));
 
+  return blink::WebInputEventResult::kHandledApplication;
+}
+blink::WebInputEventResult OfficeWebPlugin::HandleUndoRedoEvent(std::string event) {
+  document_client_->PostUnoCommandInternal(event, nullptr, true);
+  InvalidateAllTiles();
   return blink::WebInputEventResult::kHandledApplication;
 }
 
