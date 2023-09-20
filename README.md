@@ -97,3 +97,7 @@ rm -rf src/out/Default/libreofficekit
 ```
 
 Then make a new build as stated in [How do I build it?](#how-do-i-build-it)
+
+# Fixing CI Failing
+
+- In the event the mac CI fails you will need to manually run "Clean Mac Runner" job available in the actions tab of this github repo

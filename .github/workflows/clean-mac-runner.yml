@@ -1,0 +1,14 @@
+name: Clean Mac Runner
+on:
+  workflow_dispatch:
+
+jobs:
+  clean:
+    runs-on:
+      group: lo-runners
+      labels: macro-arm1
+    steps:
+      - name: Clean
+        run: |
+          cd ..
+          rm -rf electron-libreoffice
