@@ -350,7 +350,7 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
       case office::DomCode::US_W:
         return blink::WebInputEventResult::kNotHandled;
       case office::DomCode::US_C:
-        return type == blink::WebInputEvent::Type::kRawKeyDown
+        return type == blink::WebInputEvent::Type::kKeyUp
                    ? blink::WebInputEventResult::kHandledApplication
                    : HandleCutCopyEvent(".uno:Copy");
       case office::DomCode::US_V:
