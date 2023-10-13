@@ -713,7 +713,23 @@ float OfficeWebPlugin::TotalScale() {
   return zoom_ * device_scale_ * viewport_zoom_;
 }
 
+namespace {
+// clip to nearest 8px (Alex discovered this was the crispest render)
+float clipToNearest8PxZoom(int w, float s) {
+    float scaled_width = static_cast<float>(w) * s;
+    int mod = static_cast<int>(std::ceil(scaled_width)) % 8;
+    if (mod == 0) return s;
+
+    float low_scale = (std::ceil(scaled_width) - mod) / w;
+    float high_scale = (std::ceil(scaled_width) + 8 - mod) / w;
+
+    return std::abs(low_scale - s) < std::abs(high_scale - s) ? low_scale : high_scale;
+}
+}
+
 void OfficeWebPlugin::SetZoom(float zoom) {
+	zoom = clipToNearest8PxZoom(256, zoom);
+
   if (abs(zoom_ - zoom) < 0.0001f) {
     return;
   }
