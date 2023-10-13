@@ -19,6 +19,7 @@ interface HTMLLibreOfficeEmbed<Client = LibreOffice.DocumentClient>
    * @returns css px
    */
   twipToPx(input: number): number;
+  invalidateAllTiles(): void;
   /** The rectangles for the bounds of each page in the document, units are CSS pixels */
   get pageRects(): LibreOffice.PageRect[];
   /** The rectangles for the bounds of each page in the document, units are CSS pixels */
@@ -79,13 +80,18 @@ declare namespace LibreOffice {
     | string
     | { commandId: string; value: any; viewId?: number };
 
-  interface DocumentEvents {
+  type ContextMenuSeperator = { type: 'separator' };
+  type ContextMenuCommand<Commands> = { type: 'command'; text: string; enabled: 'false' | 'true'; command: Commands };
+  type ContextMenu<Commands> = { type: 'menu', menu: Array<ContextMenuCommand<Commands> | ContextMenuSeperator | ContextMenu<Commands>> };
+
+  interface DocumentEvents<Commands extends string | number = keyof UnoCommands> {
     document_size_changed: EventPayload<TwipsRect>;
     invalidate_visible_cursor: EventPayload<TwipsRect>;
     cursor_visible: EventPayload<boolean>;
     set_part: EventPayload<number>;
     ready: StateChangedValue[];
     state_changed: EventPayload<StateChangedValue>;
+    context_menu: EventPayload<ContextMenu<Commands>>;
 
     // TODO: document these types
     hyperlink_clicked: any;

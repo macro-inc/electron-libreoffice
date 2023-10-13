@@ -142,6 +142,10 @@ class OfficeDoc extends HTMLElement {
     if (this._cursor_payload) this._setCursor(this._cursor_payload);
   }
 
+  invalidateAllTiles() {
+    this.embed.invalidateAllTiles();
+  }
+
   debounceUpdates(interval) {
     this.embed.debounceUpdates(interval);
   }
@@ -172,6 +176,7 @@ class OfficeDoc extends HTMLElement {
     doc.on('hyperlink_clicked', logit);
     doc.on('cursor_visible', logit);
     doc.on('set_part', logit);
+    doc.on('context_menu', logit);
     // doc.on('state_changed', logit);
     doc.on('window', logit);
     doc.on('jsdialog', logit);

@@ -129,6 +129,8 @@ v8::Local<v8::Object> OfficeWebPlugin::V8ScriptableObject(
                                                       base::Unretained(this)))
             .SetMethod("setZoom", base::BindRepeating(&OfficeWebPlugin::SetZoom,
                                                       base::Unretained(this)))
+            .SetMethod("invalidateAllTiles", base::BindRepeating(&OfficeWebPlugin::InvalidateAllTiles,
+                                                      base::Unretained(this)))
             .SetMethod("twipToPx",
                        base::BindRepeating(&OfficeWebPlugin::TwipToCSSPx,
                                            base::Unretained(this)))
@@ -393,7 +395,7 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
       case office::DomCode::US_W:
         return blink::WebInputEventResult::kNotHandled;
       case office::DomCode::US_C:
-        return type == blink::WebInputEvent::Type::kRawKeyDown
+        return type == blink::WebInputEvent::Type::kKeyUp
                    ? blink::WebInputEventResult::kHandledApplication
                    : HandleCutCopyEvent(".uno:Copy");
       case office::DomCode::US_V:
@@ -404,6 +406,10 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
         return type == blink::WebInputEvent::Type::kKeyUp
                    ? blink::WebInputEventResult::kHandledApplication
                    : HandleCutCopyEvent(".uno:Cut");
+      case office::DomCode::US_Z:
+        return type == blink::WebInputEvent::Type::kKeyUp
+                   ? blink::WebInputEventResult::kHandledApplication
+                   : event.GetModifiers() & office::Modifiers::kShiftKey ? HandleUndoRedoEvent(".uno:Redo") : HandleUndoRedoEvent(".uno:Undo");
     }
   }
 
@@ -430,6 +436,11 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
                          : LOK_KEYEVENT_KEYINPUT,
                      event.text[0], lok_key_code));
 
+  return blink::WebInputEventResult::kHandledApplication;
+}
+blink::WebInputEventResult OfficeWebPlugin::HandleUndoRedoEvent(std::string event) {
+  document_client_->PostUnoCommandInternal(event, nullptr, true);
+  InvalidateAllTiles();
   return blink::WebInputEventResult::kHandledApplication;
 }
 
@@ -607,6 +618,17 @@ std::vector<gfx::Rect> OfficeWebPlugin::PageRects() {
   page_rects_cached_.assign(result.begin(), result.end());
   UpdateIntersectingPages();
   return result;
+}
+
+void OfficeWebPlugin::InvalidateAllTiles() {
+  // not mounted
+  if (view_id_ == -1)
+    return;
+
+  if(!tile_buffer_)
+    return;
+
+  tile_buffer_->InvalidateAllTiles();
 }
 
 gfx::Size OfficeWebPlugin::GetDocumentPixelSize() {
