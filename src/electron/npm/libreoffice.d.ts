@@ -224,6 +224,11 @@ declare namespace LibreOffice {
     getTextSelection(mimeType: string): string[];
 
     /**
+     * alias of save as from current doc to original path
+     */
+    saveFromCopy<C = Document>(path: string): Promise<C | undefined>; 
+
+    /**
      * gets the type of the selected content and possibly its text
      * @param mimeType - the mime type of the selection
      * @returns the selection type, the text of the selection and the used mime type
@@ -420,7 +425,6 @@ declare namespace LibreOffice {
     loadDocument<C = DocumentClient>(path: string): Promise<C | undefined>;
 
     loadDocumentFromCopy<C = DocumentClient>(path: string, file_name: string, copy_dir: string): Promise<C | undefined>;
-    saveToCopy<C = Document>(path: string): Promise<C | undefined>; 
 
     /**
      * loads a given document from an ArrayBuffer
