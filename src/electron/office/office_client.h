@@ -93,10 +93,28 @@ class OfficeClient : public gin::Wrappable<OfficeClient> {
   LOKDocWithViewId LoadDocument(const std::string& path);
   v8::Local<v8::Promise> LoadDocumentAsync(v8::Isolate* isolate,
                                            const std::string& path);
+  v8::Local<v8::Promise> SaveAsPDFAsync(v8::Isolate* isolate,
+                                           std::pair<lok::Document*, int> doc,
+                                           const std::string& path
+                                           );
+  v8::Local<v8::Promise> LoadDocumentAsyncFromCopy(
+      v8::Isolate* isolate,
+      const std::string& path,
+      const std::string& file_name,
+      const std::string& copy_dir
+  );
+
   void LoadDocumentComplete(v8::Isolate* isolate,
                             ThreadedPromiseResolver* resolver,
                             const std::string& path,
                             LOKDocWithViewId client);
+  void LoadDocumentFromCopyComplete(v8::Isolate* isolate,
+                            ThreadedPromiseResolver* resolver,
+                            const std::string& path,
+                            const std::string& file_name,
+                            const std::string& copy_dir,
+                            LOKDocWithViewId client);
+
   v8::Local<v8::Value> LoadDocumentFromArrayBuffer(v8::Isolate* isolate, v8::Local<v8::ArrayBuffer> array_buffer);
 
  private:

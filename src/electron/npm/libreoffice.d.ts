@@ -419,6 +419,9 @@ declare namespace LibreOffice {
      */
     loadDocument<C = DocumentClient>(path: string): Promise<C | undefined>;
 
+    loadDocumentFromCopy<C = DocumentClient>(path: string, file_name: string, copy_dir: string): Promise<C | undefined>;
+    saveToCopy<C = Document>(path: string): Promise<C | undefined>; 
+
     /**
      * loads a given document from an ArrayBuffer
      * @param buffer - the array buffer of the documents contents

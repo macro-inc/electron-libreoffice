@@ -127,6 +127,7 @@ gin::ObjectTemplateBuilder DocumentClient::GetObjectTemplateBuilder(
       .SetMethod("setAuthor", &DocumentClient::SetAuthor)
       .SetMethod("gotoOutline", &DocumentClient::GotoOutline)
       .SetMethod("saveToMemory", &DocumentClient::SaveToMemoryAsync)
+      .SetMethod("saveToCopyAsync", &DocumentClient::SaveToCopyAsync)
       .SetMethod("getTextSelection", &DocumentClient::GetTextSelection)
       .SetMethod("setTextSelection", &DocumentClient::SetTextSelection)
       .SetMethod("sendDialogEvent", &DocumentClient::SendDialogEvent)
@@ -394,6 +395,10 @@ v8::Local<v8::Value> DocumentClient::GotoOutline(int idx,
       .FromMaybe(v8::Local<v8::Value>());
 }
 
+void DocumentClient::SaveToCopy(v8::Isolate *isolate, const std::string& path) {
+  document_->saveAs(path.c_str());
+}
+
 base::span<char> DocumentClient::SaveToMemory(v8::Isolate* isolate) {
   char* pOutput = nullptr;
   size_t size = document_->saveToMemory(&pOutput, malloc);
@@ -415,6 +420,22 @@ v8::Local<v8::Promise> DocumentClient::SaveToMemoryAsync(v8::Isolate* isolate) {
       base::BindOnce(&DocumentClient::SaveToMemoryComplete,
                      weak_factory_.GetWeakPtr(), isolate,
                      new ThreadedPromiseResolver(isolate, promise)));
+  return handle_scope.Escape(promise->GetPromise());
+}
+
+v8::Local<v8::Promise> DocumentClient::SaveToCopyAsync(v8::Isolate* isolate, const std::string& path) {
+  v8::EscapableHandleScope handle_scope(isolate);
+  v8::Local<v8::Promise::Resolver> promise =
+      v8::Promise::Resolver::New(isolate->GetCurrentContext()).ToLocalChecked();
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
+      base::BindOnce(
+        &DocumentClient::SaveToCopy,
+        base::Unretained(this),
+        isolate,
+        path
+      )
+  );
   return handle_scope.Escape(promise->GetPromise());
 }
 
@@ -476,6 +497,10 @@ std::unique_ptr<char[]> jsonStringify(const v8::Local<v8::Context>& context,
 void DocumentClient::SetAuthor(const std::string& author,
                                     gin::Arguments* args) {
   document_->setAuthor(author.c_str());
+}
+
+void DocumentClient::SaveAsPDF(const std::string& path){
+  document_->saveAs(path.c_str(), "pdf");
 }
 
 void DocumentClient::PostUnoCommand(const std::string& command,

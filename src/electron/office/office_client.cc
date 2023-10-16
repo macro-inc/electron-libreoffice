@@ -188,6 +188,7 @@ gin::ObjectTemplateBuilder OfficeClient::GetObjectTemplateBuilder(
       .SetMethod("runMacro", &OfficeClient::RunMacro)
       .SetMethod("sendDialogEvent", &OfficeClient::SendDialogEvent)
       .SetMethod("loadDocument", &OfficeClient::LoadDocumentAsync)
+      .SetMethod("loadDocumentFromCopy", &OfficeClient::LoadDocumentAsyncFromCopy)
       .SetMethod("loadDocumentFromArrayBuffer",
                  &OfficeClient::LoadDocumentFromArrayBuffer)
       .SetMethod("_beforeunload", &OfficeClient::Destroy);
@@ -366,6 +367,130 @@ void OfficeClient::LoadDocumentComplete(v8::Isolate* isolate,
         "value": "Macro User"
       }
     })"));
+}
+
+v8::Local<v8::Promise> OfficeClient::LoadDocumentAsyncFromCopy(
+    v8::Isolate* isolate,
+    const std::string& path,
+    const std::string& file_name,
+    const std::string& copy_dir 
+) {
+
+  v8::EscapableHandleScope handle_scope(isolate);
+  v8::Local<v8::Promise::Resolver> promise =
+      v8::Promise::Resolver::New(isolate->GetCurrentContext()).ToLocalChecked();
+
+  lok::Document* doc = GetDocument(path);
+
+  if (doc) {
+    // If document is already open no need to load it again
+    DocumentClient* doc_client =
+        PrepareDocumentClient(std::make_pair(doc, doc->getView()), path);
+    doc_client->GetEventBus()->SetContext(isolate,
+                                          isolate->GetCurrentContext());
+    v8::Local<v8::Object> v8_doc_client;
+    if (!doc_client->GetWrapper(isolate).ToLocal(&v8_doc_client)) {
+      promise->Resolve(isolate->GetCurrentContext(), v8::Undefined(isolate))
+          .Check();
+    }
+
+    promise->Resolve(isolate->GetCurrentContext(), v8_doc_client).Check();
+  } else {
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
+        base::BindOnce(&OfficeClient::LoadDocument, base::Unretained(this),
+                       path),
+        base::BindOnce(&OfficeClient::LoadDocumentFromCopyComplete,
+                       weak_factory_.GetWeakPtr(), isolate,
+                       new ThreadedPromiseResolver(isolate, promise), path, file_name, copy_dir));
+  }
+
+  return handle_scope.Escape(promise->GetPromise());
+}
+
+void OfficeClient::LoadDocumentFromCopyComplete(v8::Isolate* isolate,
+    ThreadedPromiseResolver* resolver,
+    const std::string& path,
+    const std::string& file_name,
+    const std::string& copy_dir,
+    std::pair<lok::Document*, int> doc
+) {
+
+  if (!OfficeClient::IsValid()) {
+    return;
+  }
+
+  AsyncScope async(isolate);
+  v8::Local<v8::Context> context = resolver->GetCreationContext(isolate);
+  v8::Context::Scope context_scope(context);
+
+  if (!doc.first) {
+    resolver->Resolve(isolate, v8::Undefined(isolate)).Check();
+    return;
+  }
+
+  if (!document_map_.emplace(path.c_str(), doc.first).second) {
+    LOG(ERROR) << "Unable to add LOK document to office client, out of memory?";
+    resolver->Resolve(isolate, v8::Undefined(isolate)).Check();
+    return;
+  }
+  DocumentClient* doc_client = PrepareDocumentClient(doc, path);
+  if (!doc_client) {
+    resolver->Resolve(isolate, v8::Undefined(isolate)).Check();
+    return;
+  }
+
+  doc_client->GetEventBus()->SetContext(isolate, context);
+  v8::Local<v8::Object> v8_doc_client;
+  if (!doc_client->GetWrapper(isolate).ToLocal(&v8_doc_client)) {
+    resolver->Resolve(isolate, v8::Undefined(isolate)).Check();
+  }
+
+  resolver->Resolve(isolate, v8_doc_client).Check();
+
+  const std::string docx_copy_url = "file://" + copy_dir + "/" + file_name + ".docx";
+  const std::string pdf_copy_url = "file://" + copy_dir + "/" + file_name + ".pdf";
+
+  auto saveSuccess = doc.first->saveAs(docx_copy_url.c_str(), "DOCX", nullptr);
+
+  if (!saveSuccess) {
+    LOG(ERROR) << "Unable to save document to " << docx_copy_url;
+    return;
+  }
+
+  OfficeClient::LoadDocumentAsync(
+    isolate,
+    docx_copy_url
+  );
+
+  OfficeClient::SaveAsPDFAsync(
+    isolate,
+    doc,
+    pdf_copy_url
+  );
+}
+
+v8::Local<v8::Promise> OfficeClient::SaveAsPDFAsync(
+    v8::Isolate* isolate,
+    std::pair<lok::Document*, int> doc,
+    const std::string& path
+) {
+  v8::EscapableHandleScope handle_scope(isolate);
+  v8::Local<v8::Promise::Resolver> promise =
+      v8::Promise::Resolver::New(isolate->GetCurrentContext()).ToLocalChecked();
+
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
+      base::BindOnce(
+        [](lok::Document* doc, const std::string& path) {
+          doc->saveAs(path.c_str(), "PDF", nullptr);
+        },
+        base::Unretained(doc.first),
+        path
+      )
+  );
+
+  return handle_scope.Escape(promise->GetPromise());
 }
 
 v8::Local<v8::Value> OfficeClient::LoadDocumentFromArrayBuffer(
