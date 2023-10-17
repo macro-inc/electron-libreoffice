@@ -80,7 +80,6 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
                               bool notifyWhenFinished);
   v8::Local<v8::Value> GotoOutline(int idx, gin::Arguments* args);
   v8::Local<v8::Promise> SaveToMemoryAsync(v8::Isolate* isolate);
-  v8::Local<v8::Promise> SaveFromCopyAsync(v8::Isolate* isolate, const std::string& path);
   std::vector<std::string> GetTextSelection(const std::string& mime_type,
                                             gin::Arguments* args);
   void SetTextSelection(int n_type, int n_x, int n_y);
@@ -161,7 +160,6 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
 
   void EmitReady(v8::Isolate* isolate, v8::Global<v8::Context> context);
   base::span<char> SaveToMemory(v8::Isolate* isolate);
-  void SaveFromCopy(v8::Isolate* isolate, const std::string& path);
   void SaveToMemoryComplete(v8::Isolate* isolate,
                             ThreadedPromiseResolver* resolver,
                             base::span<char> buffer);

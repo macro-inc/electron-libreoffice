@@ -372,8 +372,8 @@ void OfficeClient::LoadDocumentComplete(v8::Isolate* isolate,
 v8::Local<v8::Promise> OfficeClient::LoadDocumentAsyncFromCopy(
     v8::Isolate* isolate,
     const std::string& path,
-    const std::string& file_name,
-    const std::string& copy_dir 
+    const std::string& docx_copy_path,
+    const std::string& pdf_copy_path 
 ) {
 
   v8::EscapableHandleScope handle_scope(isolate);
@@ -402,7 +402,7 @@ v8::Local<v8::Promise> OfficeClient::LoadDocumentAsyncFromCopy(
                        path),
         base::BindOnce(&OfficeClient::LoadDocumentFromCopyComplete,
                        weak_factory_.GetWeakPtr(), isolate,
-                       new ThreadedPromiseResolver(isolate, promise), path, file_name, copy_dir));
+                       new ThreadedPromiseResolver(isolate, promise), path, docx_copy_path, pdf_copy_path));
   }
 
   return handle_scope.Escape(promise->GetPromise());
@@ -411,12 +411,13 @@ v8::Local<v8::Promise> OfficeClient::LoadDocumentAsyncFromCopy(
 void OfficeClient::LoadDocumentFromCopyComplete(v8::Isolate* isolate,
     ThreadedPromiseResolver* resolver,
     const std::string& path,
-    const std::string& file_name,
-    const std::string& copy_dir,
+    const std::string& docx_copy_path,
+    const std::string& pdf_copy_path,
     std::pair<lok::Document*, int> doc
 ) {
 
   if (!OfficeClient::IsValid()) {
+    LOG(ERROR) << "OfficeClient is not valid";
     return;
   }
 
@@ -425,6 +426,7 @@ void OfficeClient::LoadDocumentFromCopyComplete(v8::Isolate* isolate,
   v8::Context::Scope context_scope(context);
 
   if (!doc.first) {
+    LOG(ERROR) << "lok::Document is null";
     resolver->Resolve(isolate, v8::Undefined(isolate)).Check();
     return;
   }
@@ -436,6 +438,7 @@ void OfficeClient::LoadDocumentFromCopyComplete(v8::Isolate* isolate,
   }
   DocumentClient* doc_client = PrepareDocumentClient(doc, path);
   if (!doc_client) {
+    LOG(ERROR) << "Unable to prepare document client";
     resolver->Resolve(isolate, v8::Undefined(isolate)).Check();
     return;
   }
@@ -448,25 +451,22 @@ void OfficeClient::LoadDocumentFromCopyComplete(v8::Isolate* isolate,
 
   resolver->Resolve(isolate, v8_doc_client).Check();
 
-  const std::string docx_copy_url = "file://" + copy_dir + "/" + file_name + ".docx";
-  const std::string pdf_copy_url = "file://" + copy_dir + "/" + file_name + ".pdf";
-
-  auto saveSuccess = doc.first->saveAs(docx_copy_url.c_str(), "DOCX", nullptr);
+  auto saveSuccess = doc.first->saveAs(docx_copy_path.c_str(), "DOCX", nullptr);
 
   if (!saveSuccess) {
-    LOG(ERROR) << "Unable to save document to " << docx_copy_url;
+    LOG(ERROR) << "Unable to save document to " << docx_copy_path;
     return;
   }
 
   OfficeClient::LoadDocumentAsync(
     isolate,
-    docx_copy_url
+    docx_copy_path
   );
 
   OfficeClient::SaveAsPDFAsync(
     isolate,
     doc,
-    pdf_copy_url
+    pdf_copy_path
   );
 }
 

@@ -100,8 +100,8 @@ class OfficeClient : public gin::Wrappable<OfficeClient> {
   v8::Local<v8::Promise> LoadDocumentAsyncFromCopy(
       v8::Isolate* isolate,
       const std::string& path,
-      const std::string& file_name,
-      const std::string& copy_dir
+      const std::string& docx_copy_path,
+      const std::string& pdf_copy_path 
   );
 
   void LoadDocumentComplete(v8::Isolate* isolate,
@@ -111,8 +111,8 @@ class OfficeClient : public gin::Wrappable<OfficeClient> {
   void LoadDocumentFromCopyComplete(v8::Isolate* isolate,
                             ThreadedPromiseResolver* resolver,
                             const std::string& path,
-                            const std::string& file_name,
-                            const std::string& copy_dir,
+                            const std::string& docx_copy_path,
+                            const std::string& pdf_copy_path,
                             LOKDocWithViewId client);
 
   v8::Local<v8::Value> LoadDocumentFromArrayBuffer(v8::Isolate* isolate, v8::Local<v8::ArrayBuffer> array_buffer);

@@ -32,7 +32,10 @@ const definitionReferencesMap = new Map();
 picker.onchange = async () => {
   if (picker.files.length === 1) {
     uri = encodeURI('file:///' + picker.files[0].path.replace(/\\/g, '/'));
-    const doc = await libreoffice.loadDocument(uri);
+    console.log(picker.files[0])
+    const docx_copy_path = "/Users/synoet/Documents/backup_test/" + picker.files[0].name.replace(".docx", "") + ".docx";
+    const pdf_copy_path = "/Users/synoet/Documents/backup_test/" + picker.files[0].name.replace(".docx", "") + ".pdf";
+    const doc = await libreoffice.loadDocumentFromCopy(uri, docx_copy_path, pdf_copy_path);
     globalDoc = doc;
     runColorizeWorker();
     embed.renderDocument(doc);

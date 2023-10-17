@@ -127,7 +127,6 @@ gin::ObjectTemplateBuilder DocumentClient::GetObjectTemplateBuilder(
       .SetMethod("setAuthor", &DocumentClient::SetAuthor)
       .SetMethod("gotoOutline", &DocumentClient::GotoOutline)
       .SetMethod("saveToMemory", &DocumentClient::SaveToMemoryAsync)
-      .SetMethod("saveToCopyAsync", &DocumentClient::SaveFromCopyAsync)
       .SetMethod("getTextSelection", &DocumentClient::GetTextSelection)
       .SetMethod("setTextSelection", &DocumentClient::SetTextSelection)
       .SetMethod("sendDialogEvent", &DocumentClient::SendDialogEvent)
@@ -395,9 +394,6 @@ v8::Local<v8::Value> DocumentClient::GotoOutline(int idx,
       .FromMaybe(v8::Local<v8::Value>());
 }
 
-void DocumentClient::SaveFromCopy(v8::Isolate *isolate, const std::string& path) {
-  document_->saveAs(path.c_str());
-}
 
 base::span<char> DocumentClient::SaveToMemory(v8::Isolate* isolate) {
   char* pOutput = nullptr;
@@ -423,21 +419,6 @@ v8::Local<v8::Promise> DocumentClient::SaveToMemoryAsync(v8::Isolate* isolate) {
   return handle_scope.Escape(promise->GetPromise());
 }
 
-v8::Local<v8::Promise> DocumentClient::SaveFromCopyAsync(v8::Isolate* isolate, const std::string& path) {
-  v8::EscapableHandleScope handle_scope(isolate);
-  v8::Local<v8::Promise::Resolver> promise =
-      v8::Promise::Resolver::New(isolate->GetCurrentContext()).ToLocalChecked();
-  base::ThreadPool::PostTask(
-      FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
-      base::BindOnce(
-        &DocumentClient::SaveFromCopy,
-        base::Unretained(this),
-        isolate,
-        path
-      )
-  );
-  return handle_scope.Escape(promise->GetPromise());
-}
 
 void DocumentClient::SaveToMemoryComplete(v8::Isolate* isolate,
                                           ThreadedPromiseResolver* resolver,
