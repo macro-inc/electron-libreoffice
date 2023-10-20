@@ -83,6 +83,7 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
                                             gin::Arguments* args);
   void SetTextSelection(int n_type, int n_x, int n_y);
   v8::Local<v8::Value> GetPartName(int n_part, gin::Arguments* args);
+  void SetBackupPath(const std::string& backup_path);
   v8::Local<v8::Value> GetPartHash(int n_part, gin::Arguments* args);
   void SendDialogEvent(uint64_t n_window_id, gin::Arguments* args);
   v8::Local<v8::Value> GetSelectionTypeAndText(const std::string& mime_type,

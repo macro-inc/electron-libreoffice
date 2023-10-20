@@ -128,6 +128,7 @@ gin::ObjectTemplateBuilder DocumentClient::GetObjectTemplateBuilder(
       .SetMethod("gotoOutline", &DocumentClient::GotoOutline)
       .SetMethod("saveToMemory", &DocumentClient::SaveToMemoryAsync)
       .SetMethod("getTextSelection", &DocumentClient::GetTextSelection)
+      .SetMethod("setBackupPath", &DocumentClient::SetBackupPath)
       .SetMethod("setTextSelection", &DocumentClient::SetTextSelection)
       .SetMethod("sendDialogEvent", &DocumentClient::SendDialogEvent)
       .SetMethod("getPartName", &DocumentClient::GetPartName)
@@ -518,6 +519,10 @@ std::vector<std::string> DocumentClient::GetTextSelection(
 
 void DocumentClient::SetTextSelection(int n_type, int n_x, int n_y) {
   document_->setTextSelection(n_type, n_x, n_y);
+}
+
+void DocumentClient::SetBackupPath(const std::string& backup_path) {
+  document_->setBackupPath(backup_path.c_str());
 }
 
 v8::Local<v8::Value> DocumentClient::GetPartName(int n_part,
