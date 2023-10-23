@@ -129,9 +129,13 @@ class OfficeDoc extends HTMLElement {
     this.cursor.classList.add('blink');
   }
 
-   twipToPx(in_) {
-     return this.embed.twipToPx(in_);
-   }
+  twipToPx(in_) {
+    return this.embed.twipToPx(in_);
+  }
+
+  silenceLogIt() {
+    this.log = false;
+  }
 
   setZoom(zoom) {
     const old_zoom = this.embed.getZoom ? this.embed.getZoom() : 1.0;
@@ -162,6 +166,7 @@ class OfficeDoc extends HTMLElement {
     doc.on('document_size_changed', this._refreshSize);
     let lastTime = Date.now();
     const logit = (x) => {
+      if (!this.log) return;
       const now = Date.now();
       console.log(lastTime - now, x);
       lastTime = now;
@@ -170,9 +175,9 @@ class OfficeDoc extends HTMLElement {
       this._cursor_payload = payload;
       this._setCursor(payload);
     });
-    doc.on('text_selection_start', logit);
-    doc.on('text_selection_end', logit);
-    doc.on('text_selection', logit);
+    // doc.on('text_selection_start', logit);
+    // doc.on('text_selection_end', logit);
+    // doc.on('text_selection', logit);
     doc.on('hyperlink_clicked', logit);
     doc.on('cursor_visible', logit);
     doc.on('set_part', logit);
@@ -192,6 +197,8 @@ class OfficeDoc extends HTMLElement {
     doc.on('mode_changed', logit);
     // doc.on('redline_table_size_changed', logit);
     // doc.on('redline_table_entry_modified', logit);
+    doc.on('macro_overlay', logit);
+    doc.on('macro_colorizer', logit);
     // doc.on('comment', logit);
   }
 

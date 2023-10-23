@@ -34,8 +34,8 @@ picker.onchange = async () => {
     uri = encodeURI('file:///' + picker.files[0].path.replace(/\\/g, '/'));
     const doc = await libreoffice.loadDocument(uri);
     globalDoc = doc;
-    runColorizeWorker();
     embed.renderDocument(doc);
+    thumb.silenceLogIt();
     thumb.renderDocument(doc);
     thumb.setZoom(0.2);
     thumb.debounceUpdates(300);

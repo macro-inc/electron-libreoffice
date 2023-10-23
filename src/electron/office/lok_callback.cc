@@ -261,6 +261,10 @@ std::string TypeToEventString(int type) {
       return "title_changed";
     case LOK_DOC_CALLBACK_ON_MODE_CHANGED:
       return "mode_changed";
+    case LOK_CALLBACK_MACRO_COLORIZER:
+      return "macro_colorizer";
+    case LOK_CALLBACK_MACRO_OVERLAY:
+      return "macro_overlay";
 
     default:
       return "unknown_event";
@@ -293,6 +297,8 @@ bool IsTypeJSON(int type) {
     case LOK_CALLBACK_CLIPBOARD_CHANGED:
     case LOK_CALLBACK_REFERENCE_MARKS:
     case LOK_CALLBACK_JSDIALOG:
+    case LOK_CALLBACK_MACRO_OVERLAY:
+    case LOK_CALLBACK_MACRO_COLORIZER:
       // TODO: Not Certain, limited documentation {
     case LOK_CALLBACK_CALC_FUNCTION_LIST:
     case LOK_CALLBACK_TAB_STOP_LIST:
