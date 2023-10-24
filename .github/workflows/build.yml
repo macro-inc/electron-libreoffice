@@ -53,6 +53,12 @@ jobs:
       GOMA_START_COMPILER_PROXY: true
       GOMA_FALLBACK_ON_AUTH_FAILURE: true
     steps:
+      - name: Remove Strawberry Perl from PATH (https://github.com/actions/runner-images/issues/8598 8622)
+        if: ${{ runner.os == 'Windows' }}
+        run: |
+          $env:PATH = $env:PATH -replace "C:\\Strawberry\\c\\bin;", "" 
+          "PATH=$env:PATH" | Out-File -FilePath $env:GITHUB_ENV -Append
+        shell: powershell
       - name: Windows - Speed up cache
         if: ${{ runner.os == 'Windows' }}
         shell: cmd
