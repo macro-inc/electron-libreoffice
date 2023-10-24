@@ -422,11 +422,11 @@ declare namespace LibreOffice {
     /**
      * loads a given document from an ArrayBuffer
      * @param buffer - the array buffer of the documents contents
-     * @returns a XTextDocument created from the ArrayBuffer
+     * @returns a DocumentClient created from the ArrayBuffer
      */
-    loadDocumentFromArrayBuffer(
+    loadDocumentFromArrayBuffer<C = DocumentClient>(
       buffer: ArrayBuffer
-    ): import('./lok_api').text.XTextDocument | undefined;
+    ): C | undefined;
 
     /**
      * run a macro

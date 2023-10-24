@@ -386,8 +386,19 @@ v8::Local<v8::Value> OfficeClient::LoadDocumentFromArrayBuffer(
     return {};
   }
 
-  void* doc = office_->loadFromMemory(data, size);
-  return convert::As(isolate, doc, "text.XTextDocument");
+  lok::Document* doc = office_->loadFromMemory(data, size);
+  if (!doc) {
+    LOG(ERROR) << "Unable to load document from memory: "
+               << GetOffice()->getError();
+    return {};
+  }
+  DocumentClient* doc_client = PrepareDocumentClient({doc, doc->createView()}, "memory://");
+  doc_client->GetEventBus()->SetContext(isolate, isolate->GetCurrentContext());
+  v8::Local<v8::Object> v8_doc_client;
+  if (!doc_client->GetWrapper(isolate).ToLocal(&v8_doc_client)) {
+    return {};
+  }
+  return v8_doc_client;
 }
 
 bool OfficeClient::CloseDocument(const std::string& path) {
