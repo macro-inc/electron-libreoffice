@@ -290,7 +290,24 @@ declare namespace LibreOffice {
       destRect: string;
     };
 
-    saveToMemory(): Promise<ArrayBuffer | undefined>;
+    /**
+     * saves the document to memory
+     * @param [format] - the optional format the document saves to, when omitted docx is used
+     * @returns an array buffer with the bytes of the document or undefiend if saving failed
+     */
+    saveToMemory(format?: string): Promise<ArrayBuffer | undefined>;
+
+    /**
+     * saves the document to memory
+     * Stores the document's persistent data to a URL and
+     * continues to be a representation of the old URL.
+     *
+     * @param url the location where to store the document
+     * @param [format] the format to use while exporting, when omitted, then deducted from the URL's file extension
+     * @param [filter] options for the export filter
+     * @returns true if the save succeeded, false otherwise
+     */
+    saveAs(url: string, format?: string, filter?: string): boolean;
 
     /**
      * show/hide a single row/column header outline for Calc documents

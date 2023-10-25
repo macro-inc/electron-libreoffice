@@ -78,7 +78,10 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
                               std::unique_ptr<char[]> json_buffer,
                               bool notifyWhenFinished);
   v8::Local<v8::Value> GotoOutline(int idx, gin::Arguments* args);
-  v8::Local<v8::Promise> SaveToMemoryAsync(v8::Isolate* isolate);
+  v8::Local<v8::Promise> SaveToMemoryAsync(v8::Isolate* isolate,
+                                           gin::Arguments* args);
+  v8::Local<v8::Promise> SaveAsAsync(v8::Isolate* isolate,
+                                     gin::Arguments* args);
   std::vector<std::string> GetTextSelection(const std::string& mime_type,
                                             gin::Arguments* args);
   void SetTextSelection(int n_type, int n_x, int n_y);
@@ -158,10 +161,16 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   bool IsMounted();
 
   void EmitReady(v8::Isolate* isolate, v8::Global<v8::Context> context);
-  base::span<char> SaveToMemory(v8::Isolate* isolate);
+  base::span<char> SaveToMemory(v8::Isolate* isolate,
+                                std::unique_ptr<char[]> format);
   void SaveToMemoryComplete(v8::Isolate* isolate,
                             ThreadedPromiseResolver* resolver,
                             base::span<char> buffer);
+  bool SaveAs(v8::Isolate* isolate,
+              std::unique_ptr<char[]> path,
+              std::unique_ptr<char[]> format,
+              std::unique_ptr<char[]> options);
+  void SaveAsComplete(v8::Isolate* isolate, ThreadedPromiseResolver* resolver, bool success);
 
   // has a
   lok::Document* document_ = nullptr;

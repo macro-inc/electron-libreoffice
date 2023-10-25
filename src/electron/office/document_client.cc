@@ -73,6 +73,36 @@ struct LokFree {
 
 typedef std::unique_ptr<char[], LokFree> LokStrPtr;
 
+std::unique_ptr<char[]> stringify(const v8::Local<v8::Context>& context,
+                                  const v8::Local<v8::Value>& val) {
+  v8::Isolate* isolate = context->GetIsolate();
+  v8::Context::Scope context_scope(context);
+  v8::HandleScope scope(isolate);
+  v8::TryCatch try_catch(isolate);
+
+  v8::Local<v8::String> str;
+  if (!val->ToString(context).ToLocal(&str))
+    return {};
+
+  uint32_t len = str->Utf8Length(isolate);
+  char* buf = new (std::nothrow) char[len + 1];
+  if (!buf)
+    return {};
+  std::unique_ptr<char[]> ptr(buf);
+  str->WriteUtf8(isolate, buf);
+  buf[len] = '\0';
+
+  return ptr;
+}
+
+std::unique_ptr<char[]> jsonStringify(const v8::Local<v8::Context>& context,
+                                      const v8::Local<v8::Value>& val) {
+  v8::Local<v8::String> str_object;
+  if (!v8::JSON::Stringify(context, val).ToLocal(&str_object))
+    return {};
+  return stringify(context, str_object);
+}
+
 }  // namespace
 
 DocumentClient::DocumentClient(base::WeakPtr<OfficeClient> office_client,
@@ -127,6 +157,7 @@ gin::ObjectTemplateBuilder DocumentClient::GetObjectTemplateBuilder(
       .SetMethod("setAuthor", &DocumentClient::SetAuthor)
       .SetMethod("gotoOutline", &DocumentClient::GotoOutline)
       .SetMethod("saveToMemory", &DocumentClient::SaveToMemoryAsync)
+      .SetMethod("saveAs", &DocumentClient::SaveAsAsync)
       .SetMethod("getTextSelection", &DocumentClient::GetTextSelection)
       .SetMethod("setTextSelection", &DocumentClient::SetTextSelection)
       .SetMethod("sendDialogEvent", &DocumentClient::SendDialogEvent)
@@ -394,9 +425,11 @@ v8::Local<v8::Value> DocumentClient::GotoOutline(int idx,
       .FromMaybe(v8::Local<v8::Value>());
 }
 
-base::span<char> DocumentClient::SaveToMemory(v8::Isolate* isolate) {
+base::span<char> DocumentClient::SaveToMemory(v8::Isolate* isolate,
+                                              std::unique_ptr<char[]> format) {
   char* pOutput = nullptr;
-  size_t size = document_->saveToMemory(&pOutput, malloc);
+  size_t size = document_->saveToMemory(&pOutput, malloc,
+                                        format ? format.get() : nullptr);
   SetView();
   if (size < 0) {
     return {};
@@ -404,14 +437,21 @@ base::span<char> DocumentClient::SaveToMemory(v8::Isolate* isolate) {
   return base::span<char>(pOutput, size);
 }
 
-v8::Local<v8::Promise> DocumentClient::SaveToMemoryAsync(v8::Isolate* isolate) {
+v8::Local<v8::Promise> DocumentClient::SaveToMemoryAsync(v8::Isolate* isolate,
+                                                         gin::Arguments* args) {
   v8::EscapableHandleScope handle_scope(isolate);
   v8::Local<v8::Promise::Resolver> promise =
       v8::Promise::Resolver::New(isolate->GetCurrentContext()).ToLocalChecked();
+  v8::Local<v8::Value> arguments;
+  std::unique_ptr<char[]> format;
+  if (args->GetNext(&arguments)) {
+    format = stringify(isolate->GetCurrentContext(), arguments);
+  }
+
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
       base::BindOnce(&DocumentClient::SaveToMemory, base::Unretained(this),
-                     isolate),
+                     isolate, std::move(format)),
       base::BindOnce(&DocumentClient::SaveToMemoryComplete,
                      weak_factory_.GetWeakPtr(), isolate,
                      new ThreadedPromiseResolver(isolate, promise)));
@@ -439,42 +479,8 @@ void DocumentClient::SaveToMemoryComplete(v8::Isolate* isolate,
   resolver->Resolve(isolate, array_buffer);
 }
 
-namespace {
-
-std::unique_ptr<char[]> stringify(const v8::Local<v8::Context>& context,
-                                  const v8::Local<v8::Value>& val) {
-  v8::Isolate* isolate = context->GetIsolate();
-  v8::Context::Scope context_scope(context);
-  v8::HandleScope scope(isolate);
-  v8::TryCatch try_catch(isolate);
-
-  v8::Local<v8::String> str;
-  if (!val->ToString(context).ToLocal(&str))
-    return {};
-
-  uint32_t len = str->Utf8Length(isolate);
-  char* buf = new (std::nothrow) char[len + 1];
-  if (!buf)
-    return {};
-  std::unique_ptr<char[]> ptr(buf);
-  str->WriteUtf8(isolate, buf);
-  buf[len] = '\0';
-
-  return ptr;
-}
-
-std::unique_ptr<char[]> jsonStringify(const v8::Local<v8::Context>& context,
-                                      const v8::Local<v8::Value>& val) {
-  v8::Local<v8::String> str_object;
-  if (!v8::JSON::Stringify(context, val).ToLocal(&str_object))
-    return {};
-  return stringify(context, str_object);
-}
-
-}  // namespace
-
 void DocumentClient::SetAuthor(const std::string& author,
-                                    gin::Arguments* args) {
+                               gin::Arguments* args) {
   document_->setAuthor(author.c_str());
 }
 
@@ -483,16 +489,29 @@ void DocumentClient::PostUnoCommand(const std::string& command,
   v8::Local<v8::Value> arguments;
   std::unique_ptr<char[]> json_buffer;
 
-  bool notifyWhenFinished;
+  bool notifyWhenFinished = false;
+  bool nonblocking = false;
   if (args->GetNext(&arguments)) {
     json_buffer = jsonStringify(args->GetHolderCreationContext(), arguments);
     if (!json_buffer)
       return;
+    if (arguments->IsObject()) {
+      gin::Dictionary options(args->isolate(), arguments.As<v8::Object>());
+      options.Get("nonblocking", &nonblocking);
+    }
   }
 
   args->GetNext(&notifyWhenFinished);
 
-  PostUnoCommandInternal(command, std::move(json_buffer), notifyWhenFinished);
+  if (nonblocking) {
+    base::ThreadPool::PostTask(
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
+        base::BindOnce(&DocumentClient::PostUnoCommandInternal,
+                       base::Unretained(this), command, std::move(json_buffer),
+                       true));
+  } else {
+    PostUnoCommandInternal(command, std::move(json_buffer), notifyWhenFinished);
+  }
 }
 
 void DocumentClient::PostUnoCommandInternal(const std::string& command,
@@ -617,7 +636,8 @@ v8::Local<v8::Value> DocumentClient::GetClipboard(gin::Arguments* args) {
 
   for (size_t i = 0; i < out_count; ++i) {
     size_t buffer_size = out_sizes[i];
-    if (buffer_size <= 0) continue;
+    if (buffer_size <= 0)
+      continue;
 
     // allocate a new ArrayBuffer and copy the stream to the backing store
     v8::Local<v8::ArrayBuffer> buffer =
@@ -869,5 +889,57 @@ void DocumentClient::EmitReady(v8::Isolate* isolate,
 
   event_bus_.Emit("ready", ready_value);
 }
+
+bool DocumentClient::SaveAs(v8::Isolate* isolate,
+                            std::unique_ptr<char[]> path,
+                            std::unique_ptr<char[]> format,
+                            std::unique_ptr<char[]> options) {
+  bool success = document_->saveAs(path.get(), format ? format.get() : nullptr,
+                                   options ? options.get() : nullptr);
+  SetView();
+  return success;
+}
+
+v8::Local<v8::Promise> DocumentClient::SaveAsAsync(v8::Isolate* isolate,
+                                                   gin::Arguments* args) {
+  v8::EscapableHandleScope handle_scope(isolate);
+  v8::Local<v8::Promise::Resolver> promise =
+      v8::Promise::Resolver::New(isolate->GetCurrentContext()).ToLocalChecked();
+  v8::Local<v8::Value> arguments;
+  std::unique_ptr<char[]> path;
+  std::unique_ptr<char[]> format;
+  std::unique_ptr<char[]> options;
+  if (!args->GetNext(&arguments)) {
+    args->ThrowTypeError("missing path");
+    return {};
+  }
+  path = stringify(isolate->GetCurrentContext(), arguments);
+  if (args->GetNext(&arguments)) {
+    format = stringify(isolate->GetCurrentContext(), arguments);
+  }
+  if (args->GetNext(&arguments)) {
+    options = stringify(isolate->GetCurrentContext(), arguments);
+  }
+
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
+      base::BindOnce(&DocumentClient::SaveAs, base::Unretained(this), isolate,
+                     std::move(path), std::move(format), std::move(options)),
+      base::BindOnce(&DocumentClient::SaveAsComplete,
+                     weak_factory_.GetWeakPtr(), isolate,
+                     new ThreadedPromiseResolver(isolate, promise)));
+  return handle_scope.Escape(promise->GetPromise());
+}
+
+void DocumentClient::SaveAsComplete(v8::Isolate* isolate,
+                                    ThreadedPromiseResolver* resolver,
+                                    bool success) {
+  AsyncScope async(isolate);
+  v8::Local<v8::Context> context = resolver->GetCreationContext(isolate);
+  v8::Context::Scope context_scope(context);
+
+  resolver->Resolve(isolate, v8::Boolean::New(isolate, success));
+}
+
 
 }  // namespace electron::office
