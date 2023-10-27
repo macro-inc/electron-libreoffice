@@ -97,6 +97,8 @@ std::unique_ptr<char[]> stringify(const v8::Local<v8::Context>& context,
 
 std::unique_ptr<char[]> jsonStringify(const v8::Local<v8::Context>& context,
                                       const v8::Local<v8::Value>& val) {
+  if (val->IsUndefined())
+    return {};
   v8::Local<v8::String> str_object;
   if (!v8::JSON::Stringify(context, val).ToLocal(&str_object))
     return {};
@@ -491,7 +493,7 @@ void DocumentClient::PostUnoCommand(const std::string& command,
 
   bool notifyWhenFinished = false;
   bool nonblocking = false;
-  if (args->GetNext(&arguments)) {
+  if (args->GetNext(&arguments) && !arguments->IsUndefined()) {
     json_buffer = jsonStringify(args->GetHolderCreationContext(), arguments);
     if (!json_buffer)
       return;
@@ -940,6 +942,5 @@ void DocumentClient::SaveAsComplete(v8::Isolate* isolate,
 
   resolver->Resolve(isolate, v8::Boolean::New(isolate, success));
 }
-
 
 }  // namespace electron::office

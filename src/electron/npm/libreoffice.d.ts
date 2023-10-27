@@ -307,7 +307,7 @@ declare namespace LibreOffice {
      * @param [filter] options for the export filter
      * @returns true if the save succeeded, false otherwise
      */
-    saveAs(url: string, format?: string, filter?: string): boolean;
+    saveAs(url: string, format?: string, filter?: string): Promise<boolean>;
 
     /**
      * show/hide a single row/column header outline for Calc documents
