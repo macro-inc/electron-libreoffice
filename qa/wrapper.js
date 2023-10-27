@@ -110,6 +110,7 @@ class OfficeDoc extends HTMLElement {
 
     shadow.appendChild(style);
     shadow.appendChild(container);
+    this.log = true;
   }
 
   connectedCallback() {
