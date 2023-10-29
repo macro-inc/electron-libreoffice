@@ -1,0 +1,49 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Kenneth Russell <kbr@chromium.org>
+Date: Mon, 09 Jan 2023 18:42:16 +0000
+Subject: [PATCH] Temporarily comment out incorrectly-firing DCHECKs.
+
+These are firing in developers' builds while investigating unrelated
+bugs. Comment them out and add TODOs about re-enabling them,
+referencing the associated bug.
+
+Bug: chromium:1356794
+Change-Id: I51aa803500420fc0e930bad913fb3789b3543818
+Reviewed-on: https://chromium-review.googlesource.com/c/chromium/src/+/4144309
+Reviewed-by: Jonathan Ross <jonross@chromium.org>
+Commit-Queue: Kenneth Russell <kbr@chromium.org>
+Cr-Commit-Position: refs/heads/main@{#1090420}
+---
+
+diff --git a/cc/metrics/average_lag_tracker.cc b/cc/metrics/average_lag_tracker.cc
+index a5e4968..5fe6855 100644
+--- a/cc/metrics/average_lag_tracker.cc
++++ b/cc/metrics/average_lag_tracker.cc
+@@ -165,16 +165,23 @@
+ }
+ 
+ void AverageLagTracker::CalculateAndReportAverageLagUma(bool send_anyway) {
+-  DCHECK(!frame_lag_infos_.empty());
++  // TODO(crbug.com/1356794): re-enable DCHECK and remove early-out
++  // once bugs are fixed.
++  // DCHECK(!frame_lag_infos_.empty());
++  if (frame_lag_infos_.empty()) {
++    return;
++  }
+   const LagAreaInFrame& frame_lag = frame_lag_infos_.front();
+ 
+-  DCHECK_GE(frame_lag.lag_area, 0.f);
+-  DCHECK_GE(frame_lag.lag_area_no_prediction, 0.f);
++  // TODO(crbug.com/1356794): re-enable DCHECKs once bugs are fixed.
++  // DCHECK_GE(frame_lag.lag_area, 0.f);
++  // DCHECK_GE(frame_lag.lag_area_no_prediction, 0.f);
+   accumulated_lag_ += frame_lag.lag_area;
+   accumulated_lag_no_prediction_ += frame_lag.lag_area_no_prediction;
+ 
+   if (is_begin_) {
+-    DCHECK_EQ(accumulated_lag_, accumulated_lag_no_prediction_);
++    // TODO(crbug.com/1356794): re-enable DCHECK once bugs are fixed.
++    // DCHECK_EQ(accumulated_lag_, accumulated_lag_no_prediction_);
+   }
+ 
+   // |send_anyway| is true when we are flush all remaining frames on next
