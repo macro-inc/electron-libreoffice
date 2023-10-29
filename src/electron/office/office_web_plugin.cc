@@ -128,8 +128,9 @@ v8::Local<v8::Object> OfficeWebPlugin::V8ScriptableObject(
                                                       base::Unretained(this)))
             .SetMethod("setZoom", base::BindRepeating(&OfficeWebPlugin::SetZoom,
                                                       base::Unretained(this)))
-            .SetMethod("invalidateAllTiles", base::BindRepeating(&OfficeWebPlugin::InvalidateAllTiles,
-                                                      base::Unretained(this)))
+            .SetMethod("invalidateAllTiles",
+                       base::BindRepeating(&OfficeWebPlugin::InvalidateAllTiles,
+                                           base::Unretained(this)))
             .SetMethod("twipToPx",
                        base::BindRepeating(&OfficeWebPlugin::TwipToCSSPx,
                                            base::Unretained(this)))
@@ -204,7 +205,8 @@ void OfficeWebPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
     UpdateSnapshot(tile_buffer_->MakeSnapshot(paint_cancel_flag_, size));
     take_snapshot_ = false;
   }
-  if (update_debounce_timer_ && !scrolling_) paint_manager_->PausePaint();
+  if (update_debounce_timer_ && !scrolling_)
+    paint_manager_->PausePaint();
 
   // the temporary scale is painted, now
   if (scale_pending_) {
@@ -364,7 +366,9 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
       case office::DomCode::US_Z:
         return type == blink::WebInputEvent::Type::kKeyUp
                    ? blink::WebInputEventResult::kHandledApplication
-                   : event.GetModifiers() & office::Modifiers::kShiftKey ? HandleUndoRedoEvent(".uno:Redo") : HandleUndoRedoEvent(".uno:Undo");
+               : event.GetModifiers() & office::Modifiers::kShiftKey
+                   ? HandleUndoRedoEvent(".uno:Redo")
+                   : HandleUndoRedoEvent(".uno:Undo");
     }
   }
 
@@ -393,7 +397,8 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
 
   return blink::WebInputEventResult::kHandledApplication;
 }
-blink::WebInputEventResult OfficeWebPlugin::HandleUndoRedoEvent(std::string event) {
+blink::WebInputEventResult OfficeWebPlugin::HandleUndoRedoEvent(
+    std::string event) {
   document_client_->PostUnoCommandInternal(event, nullptr, true);
   InvalidateAllTiles();
   return blink::WebInputEventResult::kHandledApplication;
@@ -580,7 +585,7 @@ void OfficeWebPlugin::InvalidateAllTiles() {
   if (view_id_ == -1)
     return;
 
-  if(!tile_buffer_)
+  if (!tile_buffer_)
     return;
 
   tile_buffer_->InvalidateAllTiles();
@@ -652,10 +657,9 @@ void OfficeWebPlugin::HandleInvalidateTiles(std::string payload) {
     base::TimeTicks now = base::TimeTicks::Now();
     if (last_full_invalidation_time_.is_null() ||
         (now - last_full_invalidation_time_) > base::Milliseconds(10)) {
-
       task_runner_->PostTask(
-          FROM_HERE, base::BindOnce(&OfficeWebPlugin::TryResumePaint,
-                                    GetWeakPtr()));
+          FROM_HERE,
+          base::BindOnce(&OfficeWebPlugin::TryResumePaint, GetWeakPtr()));
 
       ScheduleAvailableAreaPaint();
       last_full_invalidation_time_ = now;
@@ -686,8 +690,8 @@ void OfficeWebPlugin::HandleInvalidateTiles(std::string payload) {
     range.index_end = std::min(range.index_end, limit.index_end);
 
     task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&OfficeWebPlugin::TryResumePaint,
-                                  GetWeakPtr()));
+        FROM_HERE,
+        base::BindOnce(&OfficeWebPlugin::TryResumePaint, GetWeakPtr()));
 
     take_snapshot_ = true;
     paint_manager_->SchedulePaint(document_, scroll_y_position_, view_height,
@@ -716,19 +720,21 @@ float OfficeWebPlugin::TotalScale() {
 namespace {
 // clip to nearest 8px (Alex discovered this was the crispest render)
 float clipToNearest8PxZoom(int w, float s) {
-    float scaled_width = static_cast<float>(w) * s;
-    int mod = static_cast<int>(std::ceil(scaled_width)) % 8;
-    if (mod == 0) return s;
+  float scaled_width = static_cast<float>(w) * s;
+  int mod = static_cast<int>(std::ceil(scaled_width)) % 8;
+  if (mod == 0)
+    return s;
 
-    float low_scale = (std::ceil(scaled_width) - mod) / w;
-    float high_scale = (std::ceil(scaled_width) + 8 - mod) / w;
+  float low_scale = (std::ceil(scaled_width) - mod) / w;
+  float high_scale = (std::ceil(scaled_width) + 8 - mod) / w;
 
-    return std::abs(low_scale - s) < std::abs(high_scale - s) ? low_scale : high_scale;
+  return std::abs(low_scale - s) < std::abs(high_scale - s) ? low_scale
+                                                            : high_scale;
 }
-}
+}  // namespace
 
 void OfficeWebPlugin::SetZoom(float zoom) {
-	zoom = clipToNearest8PxZoom(256, zoom);
+  zoom = clipToNearest8PxZoom(256, zoom);
 
   if (abs(zoom_ - zoom) < 0.0001f) {
     return;
@@ -948,11 +954,13 @@ void OfficeWebPlugin::DebounceUpdates(int interval) {
 }
 
 void OfficeWebPlugin::TryResumePaint() {
-  if (update_debounce_timer_) update_debounce_timer_->Reset();
+  if (update_debounce_timer_)
+    update_debounce_timer_->Reset();
 }
 
 void OfficeWebPlugin::DebouncedResumePaint() {
-  if (!paint_manager_) return;
+  if (!paint_manager_)
+    return;
 
   paint_manager_->ResumePaint();
 }
