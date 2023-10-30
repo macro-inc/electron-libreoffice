@@ -315,26 +315,6 @@ case "$1" in
     # Open the generated solution
     "$DEV_ENV" "$OUT_DIR/all.sln"
     ;;
-  update_local_lok)
-    OUT_DIR="$BASE_PATH/src/out/$ELECTRON_OUT_DIR"
-
-    LOK_PATH="${LOK_PATH:-../libreofficekit}"
-    echo "LOK_PATH is set to $LOK_PATH"
-
-    echo "Removing existing libreofficekit"
-    rm -rf "$OUT_DIR/libreofficekit"
-    mkdir "$OUT_DIR/libreofficekit"
-
-    echo "Bringing over local libreofficekit"
-
-    if [ "$OS" = "mac" ] && [ "$(uname -m)" == 'arm64' ]; then
-        MAC_AARCH="aarch64/"
-    fi
-
-    cp -rf "$LOK_PATH/libreoffice-core/instdir/$MAC_AARCH"* "$OUT_DIR/libreofficekit"
-
-    echo "Complete"
-    ;;
   test)
     GDB_PREFIX=""
     OUT_DIR="out/$ELECTRON_OUT_DIR"

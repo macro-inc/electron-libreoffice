@@ -1,0 +1,23 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    // you must have the CodeLLDB extension installed for this to work!
+    {
+      "type": "lldb",
+      "request": "attach",
+      "name": "Debug (Attach)",
+      "program": "${workspaceFolder}/src/out/Default/Electron.app/Contents/Frameworks/Electron Helper (Renderer).app/Contents/MacOS/Electron Helper (Renderer)",
+      "initCommands": [
+        "settings set target.source-map ../.. ${workspaceFolder}/src",
+        "settings set target.exec-search-paths ${workspaceFolder}/src/out/Default",
+        "settings set target.env-vars CHROMIUM_LLDBINIT_SOURCED=1"
+      ],
+      "pid": "${command:pickProcess}",
+      "relativePathBase": "${workspaceFolder}/src/out/Default",
+      "breakpointMode": "file"
+    }
+  ]
+}
