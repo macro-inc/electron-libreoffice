@@ -7,6 +7,7 @@
     "rafaelmaiolla.diff",
     "joeleinbinder.mojom-language",
     "gruntfuggly.auto-snippet",
-    "amiralizadeh9480.cpp-helper"
+    "amiralizadeh9480.cpp-helper",
+    "vadimcn.vscode-lldb"
   ]
 }
