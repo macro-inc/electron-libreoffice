@@ -2,7 +2,7 @@
 
 This project embeds LibreOfficeKit into Electron as a Blink WebPlugin
 
-## How do I set this up locally?
+## Setup
 
 Setup [the prerequisites](PREREQUISITES.md)
 
@@ -20,15 +20,15 @@ cmd /c call .\depot_tools\cipd_bin_setup.bat
 cmd /c call .\depot_tools\bootstrap\win_tools.bat
 ```
 
-## How do I build it?
+## Building
 
 You must sync the code first (as stated above) and let it finish first.
 
-For local testing: `scripts/e build`
+For local debugging: `scripts/e build`
 
 For release builds: `IS_RELEASE=true scripts/e build`
 
-## How do I run this build?
+## Running
 
 ```shell
 # To build and run with the included manual QA page (qa/index.html), use:
@@ -43,12 +43,50 @@ This basically runs `src/out/Default/electron` with the `--no-sandbox` flag.
 
 `--no-sandbox` is currently required for LibreOfficeKit, but hopefully in the future this won't be necessary.
 
-## How do I debug it?
+## Using a local build of [`libreofficekit`](https://github.com/coparse-inc/libreofficekit)?
+
+This assumes you have already synced.
+
+Do this once:
 
 ```shell
-# Build with debug symbols (uses an additional ~20 GiB!) and run the QA testing ground
-IS_DEBUG=true scripts/e run --renderer-startup-dialog qa/index.html
+# move the old source for libreofficekit to libreofficekit.old
+mv src/third_party/libreofficekit{,.old}
+```
 
+**Linux/macOS**
+```bash
+# link src/third_party/libreofficekit to your local libreofficekit/libreoffice-core
+ln -s ../libreofficekit/libreoffice-core src/third_party/libreofficekit
+```
+
+**Windows**
+```bash
+# note you must use an administrator command prompt, and the source and target are flipped
+mklink /D ".\src\third_party\libreofficekit" "..\libreofficekit\libreoffice-core"
+```
+
+When you make a new local build of `libreofficekit`, make a new Electron build with `UPDATE_LOK=true`:
+```shell
+UPDATE_LOK=true scripts/e build
+```
+
+## Using a debug build in another project
+```shell
+# copy zipped runtime files to ~/another_project
+INJECT_TO="~/another_project" scripts/e build
+
+# this copies a fresh build of dist.zip, mksnapshot.zip, mksnapshot_args, and gen/v8/electron.S
+# dist.zip can be expanded into node_modules/electron/dist
+# mksnapshot.zip can be expanded into node_modules/electron-mksnapshot/bin
+# all other files can be copied into node_modules/electron-mksnapshot/bin
+```
+
+## Debugging
+
+```shell
+# Run the QA testing ground
+scripts/e run --renderer-startup-dialog qa/index.html
 
 # On Linux/Mac, it will report the PID of the renderer,
 # then you can start GDB with that PID. Assuming the renderer's PID is 1163:
@@ -63,40 +101,9 @@ scripts/e vs_devenv
 
 ```
 
-## How do I pull the upstream changes from Electron?
+## Pulling upstream changes from Electron
 
 Run `scripts/pull-upstream-changes.sh`
-
-## How do I use a local build of [`libreofficekit`](https://github.com/coparse-inc/libreofficekit)?
-
-This assumes you have already synced.
-
-Do this once:
-
-```shell
-# move the old source for libreofficekit to libreofficekit.old
-mv src/third_party/libreofficekit{,.old}
-```
-
-Linux/MacOs
-```bash
-# link src/third_party/libreofficekit to your local libreofficekit/libreoffice-core
-ln -s ../libreofficekit/libreoffice-core src/third_party/libreofficekit
-```
-
-Windows
-```bash
-# note you must use an administrator command prompt, and the source and target are flipped
-mklink /D ".\src\third_party\libreofficekit" "..\libreofficekit\libreoffice-core"
-```
-
-
-When you make a new local build of `libreofficekit`, remove the old build in electron-libreoffice's output:
-```shell
-rm -rf src/out/Default/libreofficekit
-```
-
-Then make a new build as stated in [How do I build it?](#how-do-i-build-it)
 
 # Fixing CI Failing
 
