@@ -1,2 +1,3 @@
 import("//electron/build/args/testing.gn")
 symbol_level = 2
+enable_dsyms = true
