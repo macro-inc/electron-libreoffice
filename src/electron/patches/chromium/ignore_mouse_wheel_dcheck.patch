@@ -1,0 +1,21 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Chase <chase@macro.com>
+Date: Mon, 30 Oct 2020 17:46:17 -0700
+Subject: pepper plugin support
+
+Relatively useless and a follow up to the upstream dcheck ignore
+
+diff --git a/third_party/blink/renderer/core/input/mouse_wheel_event_manager.cc b/third_party/blink/renderer/core/input/mouse_wheel_event_manager.cc
+index b1a79ed..0376cbf 100644
+--- a/third_party/blink/renderer/core/input/mouse_wheel_event_manager.cc
++++ b/third_party/blink/renderer/core/input/mouse_wheel_event_manager.cc
+@@ -79,7 +79,8 @@ WebInputEventResult MouseWheelEventManager::HandleWheelEvent(
+   if ((event.phase & kWheelEventPhaseNoEventMask) ||
+       (event.momentum_phase & kWheelEventPhaseNoEventMask)) {
+     // Filter wheel events with zero deltas and reset the wheel_target_ node.
+-    DCHECK(!event.delta_x && !event.delta_y);
++    // Annoying crash that doesn't actually help anyone
++    // DCHECK(!event.delta_x && !event.delta_y);
+     return WebInputEventResult::kNotHandled;
+   }
+ 
