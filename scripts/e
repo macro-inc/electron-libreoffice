@@ -36,6 +36,7 @@ GN_GOMA_FILE="$BUILD_TOOLS_PATH/third_party/goma.gn"
 IS_RELEASE="${IS_RELEASE:-false}"
 IS_DEBUG="${IS_DEBUG:-true}"
 INJECT_TO="${INJECT_TO:-false}"
+INJECT_TO="${INJECT_TO/#\~/$HOME}" # fix home dir paths
 FOR_APPLE_SILICON="${FOR_APPLE_SILICON:-false}"
 
 if [ "$IS_DEBUG" = "true" ]; then
