@@ -126,3 +126,5 @@ cherry-pick-51daffbf5cd8.patch
 dpwa_enable_window_controls_overlay_by_default.patch
 create_browser_v8_snapshot_file_name_fuse.patch
 cherry-pick-1eb1e18ad41d.patch
+cherry-pick-db31a3b7bf33.patch
+ignore_mouse_wheel_dcheck.patch
