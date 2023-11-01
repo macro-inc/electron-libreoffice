@@ -1,11 +1,11 @@
 diff --git a/autoninja.py b/autoninja.py
-index 539ee2ae..72ca730b 100644
+index 539ee2ae..72ca730b
 --- a/autoninja.py
 +++ b/autoninja.py
-@@ -180,6 +180,10 @@ def main(args):
-   # Call ninja.py so that it can find ninja binary installed by DEPS or one in
-   # PATH.
-   ninja_path = os.path.join(SCRIPT_DIR, 'ninja.py')
+@@ -157,6 +157,10 @@ def main(args):
+   # starting and stopping reproxy.
+   if not offline and use_remoteexec:
+     ninja_path = os.path.join(SCRIPT_DIR, 'ninja_reclient.py')
 +
 +  if sys.platform.startswith('win'):
 +    ninja_path = ninja_path.replace("\\", '\\\\')
