@@ -103,7 +103,7 @@ jobs:
           git config --global core.longpaths true
       - name: Checkout
         run: |
-          git -c protocol.version=2 clone --depth=1 https://${{ github.token }}@github.com/${{ github.repository }} '${{ inputs.working_dir }}'
+          git -c protocol.version=2 clone --depth=1 --branch=${{ github.ref_name }} --single-branch https://${{ github.token }}@github.com/${{ github.repository }} '${{ inputs.working_dir }}'
           cd ${{ inputs.working_dir }}
           git config --local gc.auto 0
       - name: Generate deps hash
@@ -196,6 +196,16 @@ jobs:
           & cmd /c call src\third_party\depot_tools\vpython3.bat src\tools\clang\scripts\update.py
           & cmd /c call src\third_party\depot_tools\vpython3.bat src/third_party/depot_tools/download_from_google_storage.py --no_resume --no_auth --bucket chromium-browser-clang/rc -s src/build/toolchain/win/rc/win/rc.exe.sha1
         shell: powershell
+      - name: Windows - Fix Esbuild
+        if: ${{ runner.os == 'Windows' }}
+        run: |
+          cd ${{ inputs.working_dir }}
+          scripts/e setup
+          # Fix esbuild with a known good executable
+          FIXING_ESBUILD="src/third_party/devtools-frontend/src/third_party/esbuild"
+          mkdir -p "$FIXING_ESBUILD"
+          curl -LO "https://github.com/coparse-inc/electron-libreoffice/releases/download/missingtools/esbuild.exe"
+        shell: bash
       - name: Build
         id: build
         run: |

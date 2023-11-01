@@ -39,15 +39,15 @@ INJECT_TO="${INJECT_TO:-false}"
 INJECT_TO="${INJECT_TO/#\~/$HOME}" # fix home dir paths
 FOR_APPLE_SILICON="${FOR_APPLE_SILICON:-false}"
 
-if [ "$IS_DEBUG" = "true" ]; then
-  echo "Preparing debug build"
-  export GN_CONFIG=//electron/build/args/debug.gn
-elif [ "$IS_RELEASE" = "true" ]; then
+if [ "$IS_RELEASE" = "true" ]; then
   echo "Preparing release build"
   export GN_CONFIG=//electron/build/args/release.gn
   export STRIP_BINARIES=true
   export GENERATE_SYMBOLS=true
   # export CHECK_DIST_MANIFEST=1
+elif [ "$IS_DEBUG" = "true" ]; then
+  echo "Preparing debug build"
+  export GN_CONFIG=//electron/build/args/debug.gn
 fi
 
 # The GH runners are x64 only, so we will need to cross compile
@@ -126,7 +126,7 @@ case "$1" in
       exit 0
     fi
 
-    if [ ! -d "$INJECT_TO" ]; then
+    if [ "$INJECT_TO" != "false" ] && [ ! -d "$INJECT_TO" ]; then
       echo "INJECT_TO directory does not exist";
     fi
 
@@ -156,7 +156,7 @@ case "$1" in
         gn desc out/Default v8:run_mksnapshot_default args > out/Default/mksnapshot_args
         ninja -C out/Default electron:electron_mksnapshot_zip
         if [ "$INJECT_TO" = "false" ]; then
-            (cd out/Default; 7za mksnapshot.zip mksnapshot_args gen/v8/embedded.S)
+            (cd out/Default; 7z a mksnapshot.zip mksnapshot_args gen/v8/embedded.S)
         fi
     else
       ninja -C out/Default electron:electron_mksnapshot -j "$NUMBER_OF_NINJA_PROCESSES"
@@ -169,7 +169,7 @@ case "$1" in
       (cd out/Default; zip mksnapshot.zip mksnapshot_args gen/v8/embedded.S)
     fi
 
-    if [ -d "$INJECT_TO" ]; then
+    if [ "$INJECT_TO" != "false" ] && [ -d "$INJECT_TO" ]; then
       (cd out/Default; cp dist.zip mksnapshot.zip mksnapshot_args gen/v8/embedded.S "$INJECT_TO");
       echo "Injected build into '$INJECT_TO'"
     fi
@@ -242,11 +242,12 @@ case "$1" in
       cp out/chromedriver/chromedriver.zip out/Default
     fi
 
-    # Build typescript defs
-    (cd -- electron && node script/yarn create-typescript-definitions)
+    # only create TS definitions when not in CI or in Linux on CI
+    if [ -n "$CI" ] || [ "$OS" = "linux" ]; then
+      # Build typescript defs
+      (cd -- electron && node script/yarn create-typescript-definitions)
 
-    # Prepare and mark files for upload in CI
-    if [ -n "$CI" ]; then
+      # Prepare and mark files for upload in CI
       (cd -- electron && python3 script/release/uploaders/upload.py --verbose)
     fi
 
