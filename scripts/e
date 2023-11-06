@@ -262,7 +262,9 @@ case "$1" in
     export RUN_GN_ONCE="${RUN_GN_ONCE:true}"
 
     # Only build if there are changes to src/electron since the last successful build
-    if [ -e "$LAST_RUN_STAMP" ] && find "$BASE_PATH/src/electron" -newer "$LAST_RUN_STAMP" -exec false {} +
+    if [ -e "$LAST_RUN_STAMP" ] && \
+      find "$BASE_PATH/src/electron" -newer "$LAST_RUN_STAMP" -exec false {} + && \
+      find "$BASE_PATH/src/third_party/libreofficekit/instdir" -newer "$LAST_RUN_STAMP" -exec false {} +
     then
       echo "No changes since last build"
     else

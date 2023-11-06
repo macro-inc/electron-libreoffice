@@ -9,15 +9,31 @@
       "type": "lldb",
       "request": "attach",
       "name": "Debug (Attach)",
-      "program": "${workspaceFolder}/src/out/Default/Electron.app/Contents/Frameworks/Electron Helper (Renderer).app/Contents/MacOS/Electron Helper (Renderer)",
+      "osx": {
+        "program": "${workspaceFolder}/src/out/Default/Electron.app/Contents/Frameworks/Electron Helper (Renderer).app/Contents/MacOS/Electron Helper (Renderer)",
+      },
+      "linux": {
+        "program": "${workspaceFolder}/src/out/Default/electron",
+      },
+      "windows": {
+        "program": "${workspaceFolder}/src/out/Default/Electron.exe",
+      },
       "initCommands": [
-        "settings set target.source-map ../.. ${workspaceFolder}/src",
-        "settings set target.exec-search-paths ${workspaceFolder}/src/out/Default",
-        "settings set target.env-vars CHROMIUM_LLDBINIT_SOURCED=1"
+        // ready now
+        "settings set target.env-vars CHROMIUM_LLDBINIT_SOURCED=1",
+      ],
+      "postRunCommands": [
+        // force loading C++ symbols
+        "command script import ${workspaceFolder}/eloklldb/libcxx_chrome_fix.py",
       ],
       "pid": "${command:pickProcess}",
-      "relativePathBase": "${workspaceFolder}/src/out/Default",
-      "breakpointMode": "file"
-    }
+      "sourceLanguages": [
+        "c++"
+      ],
+      "breakpointMode": "file",
+      "sourceMap": {
+        "../..": "${workspaceFolder}/src"
+      },
+    },
   ]
 }
