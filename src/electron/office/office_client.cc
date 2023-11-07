@@ -64,7 +64,7 @@ bool OfficeClient::IsValid() {
 }
 
 const ::UnoV8& OfficeClient::GetUnoV8() {
-  return OfficeSingleton::GetOffice()->getUnoV8();
+	return UnoV8Instance::Get();
 }
 
 // static

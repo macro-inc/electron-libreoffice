@@ -8,6 +8,7 @@
 #include "base/memory/singleton.h"
 #include "base/notreached.h"
 #include "base/path_service.h"
+#include "unov8.hxx"
 
 namespace electron::office {
 
@@ -22,6 +23,7 @@ OfficeSingleton::OfficeSingleton() {
           .Append(FILE_PATH_LITERAL("program"));
 
   instance.reset(lok::lok_cpp_init(libreoffice_path.AsUTF8Unsafe().c_str()));
+	::UnoV8Instance::Set(instance->getUnoV8());
 }
 
 OfficeSingleton::~OfficeSingleton() = default;
