@@ -243,24 +243,6 @@ std::string TypeToEventString(int type) {
       return "print_ranges";
     case LOK_CALLBACK_FONTS_MISSING:
       return "fonts_missing";
-    case LOK_DOC_CALLBACK_ON_NEW:
-      return "new";
-    case LOK_DOC_CALLBACK_ON_LOAD:
-      return "load";
-    case LOK_DOC_CALLBACK_ON_SAVE:
-      return "save";
-    case LOK_DOC_CALLBACK_ON_SAVE_DONE:
-      return "save_done";
-    case LOK_DOC_CALLBACK_ON_SAVE_AS:
-      return "save_as";
-    case LOK_DOC_CALLBACK_ON_SAVE_AS_DONE:
-      return "save_as_done";
-    case LOK_DOC_CALLBACK_ON_UNLOAD:
-      return "unload";
-    case LOK_DOC_CALLBACK_ON_TITLE_CHANGED:
-      return "title_changed";
-    case LOK_DOC_CALLBACK_ON_MODE_CHANGED:
-      return "mode_changed";
     case LOK_CALLBACK_MACRO_COLORIZER:
       return "macro_colorizer";
     case LOK_CALLBACK_MACRO_OVERLAY:
