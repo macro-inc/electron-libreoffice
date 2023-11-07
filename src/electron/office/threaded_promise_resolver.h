@@ -5,6 +5,8 @@
 #ifndef OFFICE_THREADED_PROMISE_RESOLVER_H_
 #define OFFICE_THREADED_PROMISE_RESOLVER_H_
 
+#include "base/memory/raw_ptr.h"
+#include "base/task/sequenced_task_runner.h"
 #include "v8-weak-callback-info.h"
 #include "v8/include/v8-context.h"
 #include "v8/include/v8-isolate.h"
@@ -31,9 +33,9 @@ class ThreadedPromiseResolver {
   ThreadedPromiseResolver& operator=(const ThreadedPromiseResolver&) = delete;
 
 
-  v8::Maybe<bool> Resolve(v8::Isolate* isolate, v8::Local<v8::Value> value);
-  v8::Maybe<bool> Reject(v8::Isolate* isolate, v8::Local<v8::Value> value);
-  v8::Local<v8::Context> GetCreationContext(v8::Isolate* isolate);
+  void Resolve(v8::Local<v8::Value> value);
+  void Reject(v8::Local<v8::Value> value);
+  v8::Local<v8::Context> GetCreationContext();
 
   ~ThreadedPromiseResolver();
 
@@ -42,6 +44,7 @@ class ThreadedPromiseResolver {
 
   bool IsValid();
 
+	base::raw_ptr<v8::Isolate> isolate_;
   v8::Global<v8::Promise::Resolver> resolver_;
   v8::Global<v8::Context> context_;
 };

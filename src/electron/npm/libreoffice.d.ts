@@ -10,9 +10,15 @@ interface HTMLLibreOfficeEmbed<Client = LibreOffice.DocumentClient>
   /**
    * renders a LibreOffice.DocumentClient
    * @param doc the DocumentClient to be rendered
+   * @param options options for rendering the document
    * @returns a Promise which is true if render succeeded or false if render failed
    */
-  renderDocument(doc: Client): Promise<boolean>;
+  renderDocument(doc: Client, options?: {
+    /** the initial zoom level */
+    zoom?: number;
+    /** disable input **/
+    disableInput?: boolean;
+  }): Promise<boolean>;
   /**
    * description converts twip to a css px
    * @param input - twip
@@ -383,51 +389,11 @@ declare namespace LibreOffice {
 
   interface OfficeClient {
     /**
-     * add an event listener
-     * @param eventName - the name of the event
-     * @param callback - the callback function
-     */
-    on(eventName: string, callback: () => void): void;
-
-    /**
-     * turn off an event listener
-     * @param eventName - the name of the event
-     * @param callback - the callback function
-     */
-    off(eventName: string, callback: () => void): void;
-
-    /**
-     * emit an event for an event listener
-     * @param eventName - the name of the event
-     * @param callback - the callback function
-     */
-    emit(eventName: string, callback: () => void): void;
-
-    /**
-     * returns details of filter types
-     * @returns the details of the filter types
-     */
-    getFilterTypes(): { [name: string]: { [name: string]: string } };
-
-    /**
      * set password required for loading or editing a document
      * @param url - the URL of the document, as sent to the callback
      * @param password - the password, undefined indicates no password
      */
-    setDocumentPassword(url: string, password?: string): void;
-
-    /**
-     * get version information of the LOKit process
-     * @returns the version info in JSON format
-     */
-    getVersionInfo(): { [name: string]: any };
-
-    /**
-     * posts a dialog event for the window with given id
-     * @param windowId - the id of the window to notify
-     * @param args - the arguments for the event
-     */
-    sendDialogEvent(windowId: number, args: string): void;
+    setDocumentPassword(url: string, password?: string): Promise<void>;
 
     /**
      * loads a given document
@@ -443,18 +409,8 @@ declare namespace LibreOffice {
      */
     loadDocumentFromArrayBuffer<C = DocumentClient>(
       buffer: ArrayBuffer
-    ): C | undefined;
-
-    /**
-     * run a macro
-     * @param url - the url for the macro (macro:// URI format)
-     * @returns true if it succeeded, false if it failed
-     */
-    runMacro(url: string): boolean;
+    ): Promise<C | undefined>;
 
     api: typeof import('./lok_api');
-
-    /** cleanup for window.beforeunload, do not call in any other circumstance */
-    _beforeunload(): void;
   }
 }

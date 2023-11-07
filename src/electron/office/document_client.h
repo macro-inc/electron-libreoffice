@@ -10,6 +10,7 @@
 #include <unordered_map>
 
 #include "base/files/file_path.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/single_thread_task_runner.h"
@@ -18,6 +19,7 @@
 #include "gin/dictionary.h"
 #include "gin/handle.h"
 #include "gin/wrappable.h"
+#include "office/document_holder.h"
 #include "office/event_bus.h"
 #include "office/threaded_promise_resolver.h"
 #include "shell/common/gin_helper/pinnable.h"
@@ -49,10 +51,6 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
                  lok::Document* document,
                  int view_id,
                  std::string path);
-
-  static void HandleLibreOfficeCallback(int type,
-                                        const char* payload,
-                                        void* callback);
 
   // gin::Wrappable
   static gin::WrapperInfo kWrapperInfo;
@@ -134,7 +132,6 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   // }
 
   std::string Path();
-  base::WeakPtr<OfficeClient> GetOfficeClient() { return office_client_; }
   base::WeakPtr<EventBus> GetEventBus() { return event_bus_.GetWeakPtr(); }
   void ForwardLibreOfficeEvent(int type, std::string payload);
 
@@ -164,18 +161,17 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   base::span<char> SaveToMemory(v8::Isolate* isolate,
                                 std::unique_ptr<char[]> format);
   void SaveToMemoryComplete(v8::Isolate* isolate,
-                            ThreadedPromiseResolver* resolver,
+                            ThreadedPromiseResolver resolver,
                             base::span<char> buffer);
   bool SaveAs(v8::Isolate* isolate,
               std::unique_ptr<char[]> path,
               std::unique_ptr<char[]> format,
               std::unique_ptr<char[]> options);
-  void SaveAsComplete(v8::Isolate* isolate, ThreadedPromiseResolver* resolver, bool success);
+  void SaveAsComplete(v8::Isolate* isolate, ThreadedPromiseResolver resolver, bool success);
 
   // has a
-  lok::Document* document_ = nullptr;
+  scoped_refptr<DocumentHolder> document_;
   std::string path_;
-  int view_id_ = -1;
   int tile_mode_;
 
   long document_height_in_twips_;
@@ -189,7 +185,6 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
 
   bool is_ready_;
   EventBus event_bus_;
-  base::WeakPtr<OfficeClient> office_client_;
 
   // prevents from being garbage collected
   v8::Global<v8::Value> mounted_;

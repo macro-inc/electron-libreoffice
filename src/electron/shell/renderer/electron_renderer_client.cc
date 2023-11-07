@@ -154,6 +154,11 @@ void ElectronRendererClient::WillReleaseScriptContext(
   electron_bindings_->EnvironmentDestroyed(env);
 }
 
+void ElectronExtensionsClient::DidInitializeWorkerContextOnWorkerThread(
+      v8::Local<v8::Context> context) override
+{
+}
+
 void ElectronRendererClient::WorkerScriptReadyForEvaluationOnWorkerThread(
     v8::Local<v8::Context> context) {
   RendererClientBase::WorkerScriptReadyForEvaluationOnWorkerThread(context);

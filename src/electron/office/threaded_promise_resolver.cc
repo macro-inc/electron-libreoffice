@@ -3,16 +3,19 @@
 // found in the LICENSE file.
 
 #include "threaded_promise_resolver.h"
-#include "office/async_scope.h"
 #include "base/logging.h"
+#include "base/threading/sequenced_task_runner_handle.h"
+#include "office/async_scope.h"
 #include "v8-maybe.h"
 
 namespace electron::office {
 ThreadedPromiseResolver::ThreadedPromiseResolver(
     v8::Isolate* isolate,
     v8::Local<v8::Promise::Resolver> resolver) {
-  context_.Reset(isolate, resolver->GetPromise()->GetCreationContext().ToLocalChecked());
-  context_.AnnotateStrongRetainer("office::ThreadedPromiseResolver::ThreadedPromiseResolver");
+  context_.Reset(isolate,
+                 resolver->GetPromise()->GetCreationContext().ToLocalChecked());
+  context_.AnnotateStrongRetainer(
+      "office::ThreadedPromiseResolver::ThreadedPromiseResolver");
   resolver_.Reset(isolate, std::move(resolver));
 }
 
@@ -27,52 +30,49 @@ bool ThreadedPromiseResolver::IsValid() {
   return !resolver_.IsEmpty() && !context_.IsEmpty();
 }
 
-v8::Maybe<bool> ThreadedPromiseResolver::Resolve(v8::Isolate* isolate,
-                                                 v8::Local<v8::Value> value) {
+void ThreadedPromiseResolver::Resolve(v8::Local<v8::Value> value) {
   if (!IsValid()) {
-    return v8::Nothing<bool>();
+    return;
   }
-  const v8::Isolate::Scope isolate_scope(isolate);
-  const v8::HandleScope handle_scope(isolate);
+  const v8::Isolate::Scope isolate_scope(isolate_);
+  const v8::HandleScope handle_scope(isolate_);
   const v8::MicrotasksScope microtasks_scope(
-      isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
+      isolate_, v8::MicrotasksScope::kDoNotRunMicrotasks);
 
   if (!IsValid()) {
-    return v8::Nothing<bool>();
+    return;
   }
-  v8::Local<v8::Context> context = GetCreationContext(isolate);
-  v8::Local<v8::Promise::Resolver> resolver = resolver_.Get(isolate);
+  v8::Local<v8::Context> context = GetCreationContext();
+  v8::Local<v8::Promise::Resolver> resolver = resolver_.Get(isolate_);
 
   if (!IsValid()) {
-    return v8::Nothing<bool>();
+    return;
   }
 
-  return resolver->Resolve(context, value);
+  base::IgnoreResult(resolver->Resolve(context, value));
 }
 
-v8::Maybe<bool> ThreadedPromiseResolver::Reject(v8::Isolate* isolate,
-                                                v8::Local<v8::Value> value) {
+void ThreadedPromiseResolver::Reject(v8::Local<v8::Value> value) {
   if (!IsValid())
-    return v8::Nothing<bool>();
-  const v8::Isolate::Scope isolate_scope(isolate);
-  const v8::HandleScope handle_scope(isolate);
+    return;
+  const v8::Isolate::Scope isolate_scope(isolate_);
+  const v8::HandleScope handle_scope(isolate_);
   const v8::MicrotasksScope microtasks_scope(
-      isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
+      isolate_, v8::MicrotasksScope::kDoNotRunMicrotasks);
 
   if (!IsValid())
-    return v8::Nothing<bool>();
-  v8::Local<v8::Context> context = GetCreationContext(isolate);
-  v8::Local<v8::Promise::Resolver> resolver = resolver_.Get(isolate);
+    return;
+  v8::Local<v8::Context> context = GetCreationContext();
+  v8::Local<v8::Promise::Resolver> resolver = resolver_.Get(isolate_);
 
   if (!IsValid())
-    return v8::Nothing<bool>();
+    return;
 
-  return resolver->Reject(context, value);
+  base::IgnoreResult(resolver->Reject(context, value));
 }
 
-v8::Local<v8::Context> ThreadedPromiseResolver::GetCreationContext(v8::Isolate* isolate)
-{
-  return v8::Local<v8::Context>::New(isolate, context_);
+v8::Local<v8::Context> ThreadedPromiseResolver::GetCreationContext() {
+  return v8::Local<v8::Context>::New(isolate_, context_);
 }
 
 }  // namespace electron::office

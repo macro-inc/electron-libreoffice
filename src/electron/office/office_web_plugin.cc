@@ -239,6 +239,8 @@ void OfficeWebPlugin::UpdateGeometry(const gfx::Rect& window_rect,
 
 void OfficeWebPlugin::UpdateFocus(bool focused,
                                   blink::mojom::FocusType focus_type) {
+  if (disable_input_)
+    return;
   // focusing without cursor interaction doesn't register with LOK, so for JS to
   // register a .focus() on the embed, simply simulate a click at the last
   // cursor position
@@ -275,6 +277,9 @@ void OfficeWebPlugin::UpdateVisibility(bool visibility) {
 blink::WebInputEventResult OfficeWebPlugin::HandleInputEvent(
     const blink::WebCoalescedInputEvent& event,
     ui::Cursor* cursor) {
+  if (disable_input_)
+    return blink::WebInputEventResult::kNotHandled;
+
   blink::WebInputEvent::Type event_type = event.Event().GetType();
 
   // TODO: handle gestures
@@ -818,9 +823,9 @@ void OfficeWebPlugin::UpdateScroll(int y_position) {
   take_snapshot_ = true;
 }
 
-bool OfficeWebPlugin::RenderDocument(
-    v8::Isolate* isolate,
-    gin::Handle<office::DocumentClient> client) {
+bool OfficeWebPlugin::RenderDocument(v8::Isolate* isolate,
+                                     gin::Handle<office::DocumentClient> client,
+                                     gin::Arguments* args) {
   if (client.IsEmpty()) {
     LOG(ERROR) << "invalid document client";
     return false;
@@ -829,6 +834,25 @@ bool OfficeWebPlugin::RenderDocument(
   if (!office) {
     LOG(ERROR) << "invalid office client";
     return false;
+  }
+
+  v8::Local<v8::Object> options;
+  if (args->GetNext(&options)) {
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+
+    if (v8::Local<v8::Value> zoom_value;
+        options->Get(context, gin::StringToV8(isolate, "zoom"))
+            .ToLocal(&zoom_value) &&
+        zoom_value->IsNumber()) {
+      zoom_ = zoom_value->NumberValue(context).ToChecked();
+    }
+
+    if (v8::Local<v8::Value> disable_input_value;
+        options->Get(context, gin::StringToV8(isolate, "disableInput"))
+            .ToLocal(&disable_input_value) &&
+        disable_input_value->IsBoolean()) {
+      disable_input_ = disable_input_value->BooleanValue(isolate);
+    }
   }
 
   // TODO: honestly, this is terrible, need to do this properly

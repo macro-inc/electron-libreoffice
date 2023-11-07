@@ -140,6 +140,8 @@ class RendererClientBase : public content::ContentRendererClient
       const GURL& script_url) override;
 
 #if BUILDFLAG(ENABLE_OFFICE)
+  void DidInitializeWorkerContextOnWorkerThread(
+      v8::Local<v8::Context> context) override;
   void WorkerScriptReadyForEvaluationOnWorkerThread(
       v8::Local<v8::Context> context) override;
   void WillDestroyWorkerContextOnWorkerThread(

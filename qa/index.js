@@ -36,8 +36,7 @@ picker.onchange = async () => {
     globalDoc = doc;
     embed.renderDocument(doc);
     thumb.silenceLogIt();
-    thumb.renderDocument(doc);
-    thumb.setZoom(0.2);
+    thumb.renderDocument(doc, { disableInput: true, zoom: 0.2});
     thumb.debounceUpdates(300);
     embed.focus();
   }

@@ -214,7 +214,8 @@ class OfficeWebPlugin : public blink::WebPlugin,
 
   // prepares the embed as the document client's mounted viewer
   bool RenderDocument(v8::Isolate* isolate,
-                      gin::Handle<office::DocumentClient> client);
+                      gin::Handle<office::DocumentClient> client,
+                      gin::Arguments* args);
   // debounces the renders at the specified interval
   void DebounceUpdates(int interval);
 
@@ -276,7 +277,7 @@ class OfficeWebPlugin : public blink::WebPlugin,
 
   // maybe has a
   lok::Document* document_ = nullptr;
-  office::DocumentClient* document_client_ = nullptr;
+	v8::Global<office::DocumentClient> document_client_;
   int view_id_ = -1;
 
   // painting
@@ -290,6 +291,7 @@ class OfficeWebPlugin : public blink::WebPlugin,
   int last_intersect_ = -1;
 
   bool visible_;
+	bool disable_input_;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
   office::CancelFlagPtr paint_cancel_flag_;

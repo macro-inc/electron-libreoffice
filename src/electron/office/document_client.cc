@@ -15,6 +15,7 @@
 #include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/pickle.h"
+#include "base/process/memory.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/task_runner_util.h"
@@ -27,10 +28,10 @@
 #include "gin/per_isolate_data.h"
 #include "net/base/filename_util.h"
 #include "office/async_scope.h"
+#include "office/document_holder.h"
 #include "office/event_bus.h"
 #include "office/lok_callback.h"
 #include "office/office_client.h"
-#include "office/office_singleton.h"
 #include "shell/common/gin_converters/gfx_converter.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
@@ -60,18 +61,15 @@ gin::WrapperInfo DocumentClient::kWrapperInfo = {gin::kEmbedderNativeGin};
 
 namespace {
 
-void lok_free(void* b) {
-  // this seems scary, because it is, but LOK's freeError is really just the
-  // LOK-friendly std::free we do this because Chromium has a special std::free
-  // override that breaks things on Windows
-  OfficeSingleton::GetOffice()->freeError((char*)b);
+inline void lok_safe_free(void* ptr) {
+  base::UncheckedFree(ptr);
 }
 
-struct LokFree {
-  void operator()(void* b) { lok_free(b); }
+struct LokSafeDeleter {
+  inline void operator()(void* ptr) const { base::UncheckedFree(ptr); }
 };
 
-typedef std::unique_ptr<char[], LokFree> LokStrPtr;
+typedef std::unique_ptr<char[], LokSafeDeleter> LokStrPtr;
 
 std::unique_ptr<char[]> stringify(const v8::Local<v8::Context>& context,
                                   const v8::Local<v8::Value>& val) {
@@ -107,10 +105,7 @@ std::unique_ptr<char[]> jsonStringify(const v8::Local<v8::Context>& context,
 
 }  // namespace
 
-DocumentClient::DocumentClient(base::WeakPtr<OfficeClient> office_client,
-                               lok::Document* document,
-                               int view_id,
-                               std::string path)
+DocumentClient::DocumentClient(DocumentHolder)
     : document_(document),
       path_(path),
       view_id_(view_id),
@@ -225,8 +220,6 @@ int DocumentClient::Mount(v8::Isolate* isolate) {
       mounted_.Reset(isolate, wrapper);
     }
   }
-
-  office_client_->MarkMounted(document_);
 
   RefreshSize();
 
@@ -344,13 +337,13 @@ void DocumentClient::OnClipboardChanged() {
 
     // free the clipboard item, can't use std::unique_ptr without a
     // wrapper class since it needs to be size aware
-    lok_free(out_streams[i]);
-    lok_free(out_mime_types[i]);
+    lok_safe_free(out_streams[i]);
+    lok_safe_free(out_mime_types[i]);
   }
   // free the clipboard item containers
-  lok_free(out_sizes);
-  lok_free(out_streams);
-  lok_free(out_mime_types);
+  lok_safe_free(out_sizes);
+  lok_safe_free(out_streams);
+  lok_safe_free(out_mime_types);
 }
 
 void DocumentClient::HandleUnoCommandResult(std::string payload) {
@@ -456,18 +449,18 @@ v8::Local<v8::Promise> DocumentClient::SaveToMemoryAsync(v8::Isolate* isolate,
                      isolate, std::move(format)),
       base::BindOnce(&DocumentClient::SaveToMemoryComplete,
                      weak_factory_.GetWeakPtr(), isolate,
-                     new ThreadedPromiseResolver(isolate, promise)));
+                     ThreadedPromiseResolver(isolate, promise)));
   return handle_scope.Escape(promise->GetPromise());
 }
 
 void DocumentClient::SaveToMemoryComplete(v8::Isolate* isolate,
-                                          ThreadedPromiseResolver* resolver,
+                                          ThreadedPromiseResolver resolver,
                                           base::span<char> buffer) {
   AsyncScope async(isolate);
-  v8::Local<v8::Context> context = resolver->GetCreationContext(isolate);
+  v8::Local<v8::Context> context = resolver.GetCreationContext();
   v8::Context::Scope context_scope(context);
   if (buffer.empty()) {
-    resolver->Resolve(isolate, {});
+    resolver.Resolve({});
     return;
   }
 
@@ -478,7 +471,7 @@ void DocumentClient::SaveToMemoryComplete(v8::Isolate* isolate,
   v8::Local<v8::ArrayBuffer> array_buffer =
       v8::ArrayBuffer::New(isolate, std::move(backing_store));
 
-  resolver->Resolve(isolate, array_buffer);
+  resolver.Resolve(array_buffer);
 }
 
 void DocumentClient::SetAuthor(const std::string& author,
@@ -658,13 +651,13 @@ v8::Local<v8::Value> DocumentClient::GetClipboard(gin::Arguments* args) {
 
     // free the clipboard item, can't use std::unique_ptr without a
     // wrapper class since it needs to be size aware
-    lok_free(out_streams[i]);
-    lok_free(out_mime_types[i]);
+    lok_safe_free(out_streams[i]);
+    lok_safe_free(out_mime_types[i]);
   }
   // free the clipboard item containers
-  lok_free(out_sizes);
-  lok_free(out_streams);
-  lok_free(out_mime_types);
+  lok_safe_free(out_sizes);
+  lok_safe_free(out_streams);
+  lok_safe_free(out_mime_types);
 
   return result;
 }
@@ -929,18 +922,18 @@ v8::Local<v8::Promise> DocumentClient::SaveAsAsync(v8::Isolate* isolate,
                      std::move(path), std::move(format), std::move(options)),
       base::BindOnce(&DocumentClient::SaveAsComplete,
                      weak_factory_.GetWeakPtr(), isolate,
-                     new ThreadedPromiseResolver(isolate, promise)));
+                     ThreadedPromiseResolver(isolate, promise)));
   return handle_scope.Escape(promise->GetPromise());
 }
 
 void DocumentClient::SaveAsComplete(v8::Isolate* isolate,
-                                    ThreadedPromiseResolver* resolver,
+                                    ThreadedPromiseResolver resolver,
                                     bool success) {
   AsyncScope async(isolate);
-  v8::Local<v8::Context> context = resolver->GetCreationContext(isolate);
+  v8::Local<v8::Context> context = resolver.GetCreationContext();
   v8::Context::Scope context_scope(context);
 
-  resolver->Resolve(isolate, v8::Boolean::New(isolate, success));
+  resolver.Resolve(v8::Boolean::New(isolate, success));
 }
 
 }  // namespace electron::office

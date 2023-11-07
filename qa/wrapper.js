@@ -158,10 +158,10 @@ class OfficeDoc extends HTMLElement {
   /**
    * @param {any} doc DocumentClient object to render
    */
-  renderDocument(doc) {
+  renderDocument(doc, options) {
     const embed = this.embed;
     embed.style.display = 'block';
-    embed.renderDocument(doc);
+    embed.renderDocument(doc, options);
     this.doc = doc;
     this._refreshSize();
     doc.on('document_size_changed', this._refreshSize);
@@ -169,7 +169,7 @@ class OfficeDoc extends HTMLElement {
     const logit = (x) => {
       if (!this.log) return;
       const now = Date.now();
-      console.log(lastTime - now, x);
+      console.log(now - lastTime, Date.now(), x);
       lastTime = now;
     };
     doc.on('invalidate_visible_cursor', ({ payload }) => {
