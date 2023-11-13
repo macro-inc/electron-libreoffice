@@ -11,14 +11,19 @@ interface HTMLLibreOfficeEmbed<Client = LibreOffice.DocumentClient>
    * renders a LibreOffice.DocumentClient
    * @param doc the DocumentClient to be rendered
    * @param options options for rendering the document
-   * @returns a Promise which is true if render succeeded or false if render failed
+   * @returns a unique restore key to restore the tiles if the embed is destroyed, empty if rendering failed
    */
-  renderDocument(doc: Client, options?: {
-    /** the initial zoom level */
-    zoom?: number;
-    /** disable input **/
-    disableInput?: boolean;
-  }): Promise<boolean>;
+  renderDocument(
+    doc: Client,
+    options?: {
+      /** the initial zoom level */
+      zoom?: number;
+      /** disable input **/
+      disableInput?: boolean;
+      /** restore key from a previous call to renderDocument **/
+      restoreKey?: string;
+    }
+  ): string;
   /**
    * description converts twip to a css px
    * @param input - twip
@@ -87,10 +92,24 @@ declare namespace LibreOffice {
     | { commandId: string; value: any; viewId?: number };
 
   type ContextMenuSeperator = { type: 'separator' };
-  type ContextMenuCommand<Commands> = { type: 'command'; text: string; enabled: 'false' | 'true'; command: Commands };
-  type ContextMenu<Commands> = { type: 'menu', menu: Array<ContextMenuCommand<Commands> | ContextMenuSeperator | ContextMenu<Commands>> };
+  type ContextMenuCommand<Commands> = {
+    type: 'command';
+    text: string;
+    enabled: 'false' | 'true';
+    command: Commands;
+  };
+  type ContextMenu<Commands> = {
+    type: 'menu';
+    menu: Array<
+      | ContextMenuCommand<Commands>
+      | ContextMenuSeperator
+      | ContextMenu<Commands>
+    >;
+  };
 
-  interface DocumentEvents<Commands extends string | number = keyof UnoCommands> {
+  interface DocumentEvents<
+    Commands extends string | number = keyof UnoCommands
+  > {
     document_size_changed: EventPayload<TwipsRect>;
     invalidate_visible_cursor: EventPayload<TwipsRect>;
     cursor_visible: EventPayload<boolean>;
@@ -177,9 +196,7 @@ declare namespace LibreOffice {
      * Sets the author of the document
      * @param author - the new authors name
      */
-    setAuthor(
-      author: string,
-    ): void;
+    setAuthor(author: string): void;
 
     /**
      * posts a UNO command to the document
@@ -285,7 +302,9 @@ declare namespace LibreOffice {
      * @param command - the UNO command for which possible values are requested
      * @returns the command object with possible values
      */
-    getCommandValues<K extends keyof GCV = keyof GCV>(command: K): GCV[K];
+    getCommandValues<K extends keyof GCV = keyof GCV>(
+      command: K
+    ): Promise<GCV[K]>;
 
     /**
      * sets the cursor to a given outline node
@@ -383,6 +402,11 @@ declare namespace LibreOffice {
      * @returns {boolean}
      */
     isReady(): boolean;
+
+    /**
+     * run immediately after loading a document for documents that will be rendered
+     */
+    initializeForRendering(): Promise<void>;
 
     as: import('./lok_api').text.GenericTextDocument['as'];
   }

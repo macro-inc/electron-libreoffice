@@ -11,6 +11,7 @@
 
 #include "LibreOfficeKit/LibreOfficeKit.hxx"
 #include "base/bind.h"
+#include "base/callback_forward.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/native_library.h"
@@ -26,13 +27,11 @@
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
 #include "gin/per_isolate_data.h"
-#include "office/async_scope.h"
 #include "office/document_client.h"
-#include "office/event_bus.h"
+#include "office/document_holder.h"
 #include "office/lok_callback.h"
 #include "office/office_instance.h"
-#include "office/threaded_promise_resolver.h"
-#include "shell/common/gin_converters/std_converter.h"
+#include "office/promise.h"
 #include "unov8.hxx"
 #include "v8/include/v8-function.h"
 #include "v8/include/v8-isolate.h"
@@ -41,9 +40,6 @@
 #include "v8/include/v8-object.h"
 #include "v8/include/v8-persistent-handle.h"
 #include "v8/include/v8-primitive.h"
-
-// Uncomment to log all document events
-// #define DEBUG_EVENTS
 
 namespace electron::office {
 
@@ -60,25 +56,6 @@ void OfficeClient::OnLoaded(lok::Office* client) {
   office_ = client;
   ::UnoV8Instance::Set(client->getUnoV8());
   loaded_.Signal();
-  LOG(ERROR) << "LOK LOADED!";
-}
-
-void OfficeClient::HandleDocumentCallback(int type,
-                                          const char* payload,
-                                          void* callback_context) {
-  DocumentCallbackContext* context =
-      static_cast<DocumentCallbackContext*>(callback_context);
-  if (context->invalid.IsSet() || !context->client.MaybeValid())
-    return;
-
-#ifdef DEBUG_EVENTS
-  LOG(ERROR) << lok_callback::TypeToEventString(type) << " " << payload;
-#endif
-
-  context->task_runner->PostTask(
-      FROM_HERE,
-      base::BindOnce(&DocumentClient::ForwardLibreOfficeEvent, context->client,
-                     type, payload ? std::string(payload) : std::string()));
 }
 
 // instance
@@ -154,9 +131,6 @@ gin::ObjectTemplateBuilder OfficeClient::GetObjectTemplateBuilder(
   }
   return gin::ObjectTemplateBuilder(isolate, GetTypeName(),
                                     constructor->InstanceTemplate())
-      .SetMethod("on", &OfficeClient::On)
-      .SetMethod("off", &OfficeClient::Off)
-      .SetMethod("emit", &OfficeClient::Emit)
       .SetMethod("setDocumentPassword", &OfficeClient::SetDocumentPasswordAsync)
       .SetMethod("loadDocument", &OfficeClient::LoadDocumentAsync)
       .SetMethod("loadDocumentFromArrayBuffer",
@@ -167,7 +141,7 @@ const char* OfficeClient::GetTypeName() {
   return "OfficeClient";
 }
 
-lok::Office* OfficeClient::GetOffice() {
+lok::Office* OfficeClient::GetOffice() const {
   return office_;
 }
 
@@ -181,239 +155,137 @@ std::string OfficeClient::GetLastError() {
   return result;
 }
 
-DocumentClient* OfficeClient::PrepareDocumentClient(lok::Document* document) {
-  DocumentClient* doc_client = new DocumentClient(weak_factory_.GetWeakPtr(),
-                                                  doc.first, doc.second, path);
-
-  if (document_contexts_.find(doc.first) == document_contexts_.end()) {
-    DocumentCallbackContext* context = new DocumentCallbackContext{
-        base::SequencedTaskRunnerHandle::Get(), doc_client->GetWeakPtr()};
-
-    doc_client->SetView();
-    doc.first->registerCallback(OfficeClient::HandleDocumentCallback, context);
-    document_contexts_.emplace(doc.first, context);
-  }
-
-  return doc_client;
-}
-
-OfficeClient::LOKDocWithViewId OfficeClient::LoadDocument(
-    const std::string& path) {
-  GetOffice()->setOptionalFeatures(
-      LibreOfficeKitOptionalFeatures::LOK_FEATURE_NO_TILED_ANNOTATIONS);
-
-  lok::Document* doc =
-      GetOffice()->documentLoad(path.c_str(), "Language=en-US,Batch=true");
-
+namespace {
+void ResolveLoadWithDocumentClient(Promise<DocumentClient> promise,
+                                   const std::string& path,
+                                   lok::Document* doc) {
   if (!doc) {
-    LOG(ERROR) << "Unable to load '" << path
-               << "': " << GetOffice()->getError();
-    return std::make_pair(nullptr, -1);
+    promise.Resolve();
+    return;
   }
 
-  int view_id = doc->getView();
-  return std::make_pair(doc, view_id);
+  auto* doc_client = new DocumentClient(DocumentHolderWithView(doc, path));
+
+  promise.Resolve(doc_client);
 }
+
+// high priority IO, don't block on renderer thread sequence
+void PostBlockingAsync(base::OnceClosure closure,
+                       const base::Location& from_here = FROM_HERE) {
+  base::ThreadPool::PostTask(
+      from_here, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
+      std::move(closure));
+}
+
+}  // namespace
 
 v8::Local<v8::Promise> OfficeClient::LoadDocumentAsync(
     v8::Isolate* isolate,
     const std::string& path) {
-  v8::EscapableHandleScope handle_scope(isolate);
-  v8::Local<v8::Promise::Resolver> promise =
-      v8::Promise::Resolver::New(isolate->GetCurrentContext()).ToLocalChecked();
-  auto load_document_ =
-      base::BindOnce(&OfficeClient::LoadDocument, base::Unretained(this), path);
-  auto load_document_complete_ = base::BindPostTask(
-      task_runner_,
-      base::BindOnce(&OfficeClient::LoadDocumentComplete,
-                     weak_factory_.GetWeakPtr(), isolate,
-                     ThreadedPromiseResolver(isolate, promise), path));
+  Promise<DocumentClient> promise(isolate);
+  auto promise_handle = promise.GetHandle();
+
+  auto load_ = base::BindOnce(
+      [](const base::WeakPtr<OfficeClient>& client, const std::string& path) {
+        return client->GetOffice()->documentLoad(path.c_str(),
+                                                 "Language=en-US,Batch=true");
+      },
+      weak_factory_.GetWeakPtr(), std::string(path));
+  auto complete_ = base::BindOnce(&ResolveLoadWithDocumentClient,
+                                  std::move(promise), std::string(path));
+  auto async_ = std::move(load_).Then(
+      base::BindPostTask(task_runner_, std::move(complete_)));
+
   if (loaded_.is_signaled()) {
-    base::ThreadPool::PostTaskAndReplyWithResult(
-        FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
-        std::move(load_document_), std::move(load_document_complete_));
+    PostBlockingAsync(std::move(async_));
   } else {
-    loaded_.Post(
-        FROM_HERE,
-        base::BindOnce(
-            [](decltype(load_document_) load,
-               decltype(load_document_complete_) complete) {
-              base::ThreadPool::PostTaskAndReplyWithResult(
-                  FROM_HERE,
-                  {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
-                  std::move(load), std::move(complete));
-            },
-            std::move(load_document_), std::move(load_document_complete_)));
+    auto deferred_ = base::BindOnce(
+        [](decltype(async_) async) { PostBlockingAsync(std::move(async)); },
+        std::move(async_));
+
+    loaded_.Post(FROM_HERE, std::move(deferred_));
   }
 
-  return handle_scope.Escape(promise->GetPromise());
-}
-
-void OfficeClient::LoadDocumentComplete(v8::Isolate* isolate,
-                                        ThreadedPromiseResolver resolver,
-                                        const std::string& path,
-                                        std::pair<lok::Document*, int> doc) {
-  AsyncScope async(isolate);
-  v8::Local<v8::Context> context = resolver.GetCreationContext();
-  v8::Context::Scope context_scope(context);
-
-  if (!doc.first) {
-    resolver.Resolve({});
-    return;
-  }
-
-  if (!document_map_.emplace(path.c_str(), doc.first).second) {
-    LOG(ERROR) << "Unable to add LOK document to office client, out of memory?";
-    resolver.Resolve({});
-    return;
-  }
-  DocumentClient* doc_client = PrepareDocumentClient(doc, path);
-  if (!doc_client) {
-    resolver.Resolve({});
-    return;
-  }
-
-  doc_client->GetEventBus()->SetContext(isolate, context);
-  v8::Local<v8::Object> v8_doc_client;
-  if (!doc_client->GetWrapper(isolate).ToLocal(&v8_doc_client)) {
-    resolver.Resolve({});
-  }
-
-  resolver.Resolve(v8_doc_client);
-
-  // TODO: pass these options from the function call?
-  base::ThreadPool::PostTask(
-      FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
-      base::BindOnce(&lok::Document::initializeForRendering,
-                     base::Unretained(doc.first),
-                     R"({
-      ".uno:ShowBorderShadow": {
-        "type": "boolean",
-        "value": false
-      },
-      ".uno:HideWhitespace": {
-        "type": "boolean",
-        "value": false
-      },
-      ".uno:SpellOnline": {
-        "type": "boolean",
-        "value": false
-      },
-      ".uno:Author": {
-        "type": "string",
-        "value": "Macro User"
-      }
-    })"));
+  return promise_handle;
 }
 
 v8::Local<v8::Promise> OfficeClient::LoadDocumentFromArrayBuffer(
     v8::Isolate* isolate,
     v8::Local<v8::ArrayBuffer> array_buffer) {
-  v8::EscapableHandleScope handle_scope(isolate);
-  v8::Local<v8::Promise::Resolver> promise =
-      v8::Promise::Resolver::New(isolate->GetCurrentContext()).ToLocalChecked();
+  Promise<DocumentClient> promise(isolate);
+  auto promise_handle = promise.GetHandle();
+
   if (array_buffer->ByteLength() == 0) {
     LOG(ERROR) << "Empty array buffer provided";
-    base::IgnoreResult(promise->Resolve(isolate->GetCurrentContext(), {}));
-    return handle_scope.Escape(promise->GetPromise());
+    promise.Resolve();
+    return promise_handle;
   }
-  const std::string path = "memory://" + base::Token::CreateRandom().ToString();
-  auto load_document_complete_ = base::BindPostTask(
-      task_runner_,
-      base::BindOnce(&OfficeClient::LoadDocumentComplete,
-                     weak_factory_.GetWeakPtr(), isolate,
-                     ThreadedPromiseResolver(isolate, promise), path));
 
-  auto load_document_ = base::BindOnce(
-      [](OfficeClient& office_client, v8::Isolate* isolate,
-         v8::Global<v8::ArrayBuffer> global,
-         decltype(load_document_complete_) complete) {
-        // lambda
+  const std::string path = "memory://" + base::Token::CreateRandom().ToString();
+
+  auto load_ = base::BindOnce(
+      [](const base::WeakPtr<OfficeClient>& office_client, v8::Isolate* isolate,
+         v8::Global<v8::ArrayBuffer> global) {
         v8::Local<v8::ArrayBuffer> array_buffer = global.Get(isolate);
         array_buffer->GetBackingStore()->Data();
-        lok::Document* office = office_client.GetOffice()->loadFromMemory(
+        return office_client->GetOffice()->loadFromMemory(
             static_cast<char*>(array_buffer->GetBackingStore()->Data()),
             array_buffer->ByteLength());
-        load_document_complete_.Run(pair<Document*, int> args);
       },
-      // dependencies
-      this, isolate, v8::Global<v8::ArrayBuffer>(isolate, array_buffer),
-      std::move(load_document_complete_));
+      weak_factory_.GetWeakPtr(), isolate,
+      v8::Global<v8::ArrayBuffer>(isolate, array_buffer));
+
+  auto complete_ =
+      base::BindOnce(&ResolveLoadWithDocumentClient, std::move(promise), path);
+  auto async_ = std::move(load_).Then(
+      base::BindPostTask(task_runner_, std::move(complete_)));
 
   if (loaded_.is_signaled()) {
-    base::ThreadPool::PostTaskAndReplyWithResult(
+    // high priority IO, don't block on renderer thread sequence
+    base::ThreadPool::PostTask(
         FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
-        std::move(load_document_), std::move(load_document_complete_));
+        std::move(async_));
   } else {
-    loaded_.Post(
-        FROM_HERE,
-        base::BindOnce(
-            [](decltype(load_document_) load,
-               decltype(load_document_complete_) complete) {
-              // lambda
-              base::ThreadPool::PostTaskAndReplyWithResult(
-                  FROM_HERE,
-                  {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
-                  std::move(load), std::move(complete));
-            },
-            // dependencies
-            std::move(load_document_), std::move(load_document_complete_)));
+    auto deferred_ = base::BindOnce(
+        [](decltype(async_) async) {
+          // high priority IO, don't block on renderer thread sequence
+          base::ThreadPool::PostTask(
+              FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
+              std::move(async));
+        },
+        std::move(async_));
+
+    loaded_.Post(FROM_HERE, std::move(deferred_));
   }
 
-  if (loaded_.is_signaled()) {
-  } else {
-  }
-
-  if (!doc) {
-    LOG(ERROR) << "Unable to load document from memory: " << GetLastError();
-    base::IgnoreResult(promise->Resolve(isolate->GetCurrentContext(), {}));
-    return handle_scope.Escape(promise->GetPromise());
-  }
-
-  DocumentClient* doc_client = PrepareDocumentClient(
-      {doc, doc->createView()},
-      "memory://" + base::Token::CreateRandom().ToString());
-  doc_client->GetEventBus()->SetContext(isolate, isolate->GetCurrentContext());
-  v8::Local<v8::Object> v8_doc_client;
-  if (!doc_client->GetWrapper(isolate).ToLocal(&v8_doc_client)) {
-    return {};
-  }
-
-  return handle_scope.Escape(promise->GetPromise());
+  return promise_handle;
 }
 
 v8::Local<v8::Promise> OfficeClient::SetDocumentPasswordAsync(
     v8::Isolate* isolate,
     const std::string& url,
     const std::string& password) {
-  v8::EscapableHandleScope handle_scope(isolate);
-  v8::Local<v8::Promise::Resolver> promise =
-      v8::Promise::Resolver::New(isolate->GetCurrentContext()).ToLocalChecked();
+  Promise<void> promise(isolate);
+  auto handle = promise.GetHandle();
 
   if (loaded_.is_signaled()) {
     GetOffice()->setDocumentPassword(url.c_str(), password.c_str());
-    base::IgnoreResult(promise->Resolve(isolate->GetCurrentContext(), {}));
+    promise.Resolve();
   } else {
     auto async = base::BindOnce(
-        [](OfficeClient& client, ThreadedPromiseResolver promise,
-           std::string& url, std::string& password) {
-          client.GetOffice()->setDocumentPassword(url.c_str(),
-                                                  password.c_str());
-          promise.Resolve({});
+        [](const base::WeakPtr<OfficeClient>& client, Promise<void> promise,
+           const std::string& url, const std::string& password) {
+          client->GetOffice()->setDocumentPassword(url.c_str(),
+                                                   password.c_str());
+          promise.Resolve();
         },
-        this, ThreadedPromiseResolver(isolate, std::move(promise)),
-        std::move(url), std::move(password));
+        weak_factory_.GetWeakPtr(), std::move(promise), std::move(url),
+        std::move(password));
 
     loaded_.Post(FROM_HERE, base::BindPostTask(task_runner_, std::move(async)));
   }
 
-  return handle_scope.Escape(promise->GetPromise());
+  return handle;
 }
 
-OfficeClient::_DocumentCallbackContext::_DocumentCallbackContext(
-    scoped_refptr<base::SequencedTaskRunner> task_runner_,
-    base::WeakPtr<DocumentClient> client_)
-    : task_runner(task_runner_), client(client_) {}
-
-OfficeClient::_DocumentCallbackContext::~_DocumentCallbackContext() = default;
 }  // namespace electron::office

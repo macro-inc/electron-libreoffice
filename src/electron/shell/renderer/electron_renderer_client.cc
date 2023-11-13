@@ -10,6 +10,7 @@
 #include "content/public/renderer/render_frame.h"
 #include "electron/buildflags/buildflags.h"
 #include "net/http/http_request_headers.h"
+#include "office/office_instance.h"
 #include "shell/common/api/electron_bindings.h"
 #include "shell/common/gin_helper/dictionary.h"
 #include "shell/common/gin_helper/event_emitter_caller.h"
@@ -154,10 +155,12 @@ void ElectronRendererClient::WillReleaseScriptContext(
   electron_bindings_->EnvironmentDestroyed(env);
 }
 
-void ElectronExtensionsClient::DidInitializeWorkerContextOnWorkerThread(
-      v8::Local<v8::Context> context) override
-{
+#if BUILDFLAG(ENABLE_OFFICE)
+void ElectronRendererClient::DidInitializeWorkerContextOnWorkerThread(
+    v8::Local<v8::Context> context) {
+	office::OfficeInstance::Create();
 }
+#endif
 
 void ElectronRendererClient::WorkerScriptReadyForEvaluationOnWorkerThread(
     v8::Local<v8::Context> context) {

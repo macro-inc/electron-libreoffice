@@ -18,6 +18,11 @@
 
 #include "base/logging.h"
 #include "base/threading/thread_local.h"
+#include "office/document_holder.h"
+#include "office/lok_callback.h"
+
+// Uncomment to log all document events
+// #define DEBUG_EVENTS
 
 namespace electron::office {
 
@@ -54,6 +59,9 @@ void OfficeInstance::Initialize() {
           .Append(FILE_PATH_LITERAL("program"));
 
   instance_.reset(lok::lok_cpp_init(libreoffice_path.AsUTF8Unsafe().c_str()));
+  instance_->setOptionalFeatures(
+      LibreOfficeKitOptionalFeatures::LOK_FEATURE_NO_TILED_ANNOTATIONS);
+
   loaded_observers_->Notify(FROM_HERE, &OfficeLoadObserver::OnLoaded,
                             instance_.get());
 }
@@ -81,41 +89,67 @@ void OfficeInstance::RemoveLoadObserver(OfficeLoadObserver* observer) {
 
 void OfficeInstance::HandleDocumentCallback(int type,
                                             const char* payload,
-                                            void* document) {
+                                            void* idPair) {
   if (!IsValid()) {
     LOG(ERROR) << "Uninitialized for doc callback";
     return;
   }
-  std::string payload_(payload);
+  DocumentIdWithViewId* doc_id = static_cast<DocumentIdWithViewId*>(idPair);
   auto& observers = Get()->document_event_observers_;
-  auto it = observers.find((size_t)document);
+  auto it = observers.find(DocumentEventId(doc_id->id, type, doc_id->view_id));
   if (it == observers.end()) {
     // document received an event, but wasn't observed
     return;
   }
-  it->second->Notify(FROM_HERE, &DocumentEventObserver::DocumentCallback,
-                     payload, document);
+#ifdef DEBUG_EVENTS
+  LOG(ERROR) << lokCallbackTypeToString(type) << " " << payload;
+#endif
+  it->second->Notify(FROM_HERE, &DocumentEventObserver::DocumentCallback, type,
+                     payload);
 }
 
-void OfficeInstance::AddDocumentObserver(size_t id,
+void OfficeInstance::AddDocumentObserver(DocumentEventId id,
                                          DocumentEventObserver* observer) {
   DCHECK(IsValid());
-  auto& observers = Get()->document_event_observers_;
   auto it =
-      observers
+      document_event_observers_
           .try_emplace(id, base::MakeRefCounted<DocumentEventObserverList>())
           .first;
   it->second->AddObserver(observer);
+  auto& document_event_ids = Get()->document_id_to_document_event_ids_;
+  document_event_ids.emplace(id.document_id, id);
 }
 
-void OfficeInstance::RemoveDocumentObserver(size_t id,
+void OfficeInstance::RemoveDocumentObserver(DocumentEventId id,
                                             DocumentEventObserver* observer) {
   DCHECK(IsValid());
-  auto& observers = Get()->document_event_observers_;
-  auto it = observers.find(id);
-  if (it == observers.end()) {
+  auto it = document_event_observers_.find(id);
+  if (it == document_event_observers_.end()) {
     return;
   }
   it->second->RemoveObserver(observer);
 }
+
+void OfficeInstance::RemoveDocumentObservers(size_t document_id) {
+  DCHECK(IsValid());
+  auto& event_ids = document_id_to_document_event_ids_;
+  auto range = event_ids.equal_range(document_id);
+  for (auto it = range.first; it != range.second; ++it) {
+    document_event_observers_.erase(it->second);
+  }
+  event_ids.erase(document_id);
+}
+
+void OfficeInstance::RemoveDocumentObservers(size_t document_id,
+                                             DocumentEventObserver* observer) {
+  DCHECK(IsValid());
+  auto range = document_id_to_document_event_ids_.equal_range(document_id);
+  for (auto it = range.first; it != range.second; ++it) {
+    auto obs_it = document_event_observers_.find(it->second);
+    if (obs_it != document_event_observers_.end()) {
+      obs_it->second->RemoveObserver(observer);
+    }
+  }
+}
+
 }  // namespace electron::office

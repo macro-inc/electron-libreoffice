@@ -9,20 +9,22 @@
 #include <string>
 #include <unordered_map>
 
+#include "base/atomic_ref_count.h"
 #include "base/files/file_path.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/token.h"
 #include "gin/arguments.h"
-#include "gin/dictionary.h"
+#include "gin/converter.h"
 #include "gin/handle.h"
 #include "gin/wrappable.h"
+#include "office/document_event_observer.h"
 #include "office/document_holder.h"
-#include "office/event_bus.h"
-#include "office/threaded_promise_resolver.h"
-#include "shell/common/gin_helper/pinnable.h"
+#include "office/lok_tilebuffer.h"
+#include "office/v8_callback.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "ui/base/clipboard/clipboard.h"
@@ -41,16 +43,15 @@ namespace electron::office {
 
 class OfficeClient;
 
-class DocumentClient : public gin::Wrappable<DocumentClient> {
+class DocumentClient : public gin::Wrappable<DocumentClient>,
+                       public DocumentEventObserver {
  public:
+  DocumentClient();
+  explicit DocumentClient(DocumentHolderWithView holder);
+
   // disable copy
   DocumentClient(const DocumentClient&) = delete;
   DocumentClient& operator=(const DocumentClient&) = delete;
-
-  DocumentClient(base::WeakPtr<OfficeClient> office_client,
-                 lok::Document* document,
-                 int view_id,
-                 std::string path);
 
   // gin::Wrappable
   static gin::WrapperInfo kWrapperInfo;
@@ -59,11 +60,14 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   const char* GetTypeName() override;
 
   // v8 EventBus
-  void On(const std::string& event_name,
+  void On(v8::Isolate* isolate,
+          const std::u16string& event_name,
           v8::Local<v8::Function> listener_callback);
-  void Off(const std::string& event_name,
+  void Off(const std::u16string& event_name,
            v8::Local<v8::Function> listener_callback);
-  void Emit(const std::string& event_name, v8::Local<v8::Value> data);
+  void Emit(v8::Isolate* isolate,
+            const std::u16string& event_name,
+            v8::Local<v8::Value> data);
 
   // Exposed to v8 {
   // Loaded and capable of receiving events
@@ -76,10 +80,9 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
                               std::unique_ptr<char[]> json_buffer,
                               bool notifyWhenFinished);
   v8::Local<v8::Value> GotoOutline(int idx, gin::Arguments* args);
-  v8::Local<v8::Promise> SaveToMemoryAsync(v8::Isolate* isolate,
-                                           gin::Arguments* args);
-  v8::Local<v8::Promise> SaveAsAsync(v8::Isolate* isolate,
-                                     gin::Arguments* args);
+  v8::Local<v8::Promise> SaveToMemory(v8::Isolate* isolate,
+                                      gin::Arguments* args);
+  v8::Local<v8::Promise> SaveAs(v8::Isolate* isolate, gin::Arguments* args);
   std::vector<std::string> GetTextSelection(const std::string& mime_type,
                                             gin::Arguments* args);
   void SetTextSelection(int n_type, int n_x, int n_y);
@@ -91,14 +94,13 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   v8::Local<v8::Value> GetClipboard(gin::Arguments* args);
   bool SetClipboard(std::vector<v8::Local<v8::Object>> clipboard_data,
                     gin::Arguments* args);
-  bool OnPasteEvent(ui::Clipboard* clipboard, std::string clipboard_type);
   bool Paste(const std::string& mime_type,
              const std::string& data,
              gin::Arguments* args);
   void SetGraphicSelection(int n_type, int n_x, int n_y);
   void ResetSelection();
-  v8::Local<v8::Value> GetCommandValues(const std::string& command,
-                                        gin::Arguments* args);
+  v8::Local<v8::Promise> GetCommandValues(const std::string& command,
+                                          gin::Arguments* args);
   void SetOutlineState(bool column, int level, int index, bool hidden);
   void SetViewLanguage(int id, const std::string& language);
   void SelectPart(int part, int select);
@@ -111,15 +113,21 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   v8::Local<v8::Value> As(const std::string& type, v8::Isolate* isolate);
   // }
 
-  lok::Document* GetDocument();
+  // DocumentEventObserver
+  void DocumentCallback(int type, std::string payload) override;
 
   gfx::Size DocumentSizeTwips();
 
-  // returns the view ID associated with the mount
-  int Mount(v8::Isolate* isolate);
-  // returns if the view was unmounted, if false could be due to one view
-  // left/never mounted
-  // bool Unmount();
+  // returns true if this is the first mount for the document
+  bool Mount(v8::Isolate* isolate);
+  // return true if this is the last remaining mount for the document
+  bool Unmount();
+
+  void MarkRendererWillRemount(base::Token&& restore_key,
+                               scoped_refptr<TileBuffer>&& tile_buffer,
+                               Snapshot&& snapshot);
+  std::pair<scoped_refptr<TileBuffer>, Snapshot> GetRestoredTileBuffer(
+      const std::string& restore_key);
 
   int GetNumberOfPages() const;
 
@@ -132,47 +140,32 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   // }
 
   std::string Path();
-  base::WeakPtr<EventBus> GetEventBus() { return event_bus_.GetWeakPtr(); }
-  void ForwardLibreOfficeEvent(int type, std::string payload);
 
-  void Unmount();
-  void SetView();
   v8::Local<v8::Value> NewView(v8::Isolate* isolate);
+
+  DocumentHolderWithView GetDocument();
 
   base::WeakPtr<DocumentClient> GetWeakPtr();
 
  private:
-  DocumentClient();
   ~DocumentClient() override;
 
-  void HandleStateChange(std::string payload);
-  void HandleUnoCommandResult(std::string payload);
-  void HandleDocSizeChanged(std::string payload);
-  void HandleInvalidate(std::string payload);
+  void HandleStateChange(const std::string& payload);
+  void HandleUnoCommandResult(const std::string& payload);
+  void HandleDocSizeChanged();
+  void HandleInvalidate();
 
   void OnClipboardChanged();
 
   void RefreshSize();
 
-  int ViewId();
-  bool IsMounted();
-
   void EmitReady(v8::Isolate* isolate, v8::Global<v8::Context> context);
-  base::span<char> SaveToMemory(v8::Isolate* isolate,
-                                std::unique_ptr<char[]> format);
-  void SaveToMemoryComplete(v8::Isolate* isolate,
-                            ThreadedPromiseResolver resolver,
-                            base::span<char> buffer);
-  bool SaveAs(v8::Isolate* isolate,
-              std::unique_ptr<char[]> path,
-              std::unique_ptr<char[]> format,
-              std::unique_ptr<char[]> options);
-  void SaveAsComplete(v8::Isolate* isolate, ThreadedPromiseResolver resolver, bool success);
+  void ForwardEmit(int type, const std::string& payload);
+
+  v8::Local<v8::Promise> InitializeForRendering(v8::Isolate* isolate);
 
   // has a
-  scoped_refptr<DocumentHolder> document_;
-  std::string path_;
-  int tile_mode_;
+  DocumentHolderWithView document_holder_;
 
   long document_height_in_twips_;
   long document_width_in_twips_;
@@ -184,7 +177,17 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   std::vector<std::string> state_change_buffer_;
 
   bool is_ready_;
-  EventBus event_bus_;
+  std::unordered_map<base::Token,
+                     std::pair<scoped_refptr<TileBuffer>, Snapshot>,
+                     base::TokenHash>
+      tile_buffers_to_restore_;
+  // this doesn't really need to be atomic since all access should remain on the
+  // same renderer thread, but it makes the intention of its use clearer
+  base::AtomicRefCount mount_counter_;
+
+  std::unordered_map<int, std::vector<SafeV8Function>> event_listeners_;
+
+  raw_ptr<v8::Isolate> isolate_ = nullptr;
 
   // prevents from being garbage collected
   v8::Global<v8::Value> mounted_;
@@ -192,5 +195,29 @@ class DocumentClient : public gin::Wrappable<DocumentClient> {
   base::WeakPtrFactory<DocumentClient> weak_factory_{this};
 };
 
+// This only exists so that ForwardEmit doeesn't need to use trickery to invoke
+// callbacks
+struct EventPayload {
+  EventPayload(const int type, const std::string& payload)
+      : type(type), payload(payload) {}
+  const int type;
+  const std::string& payload;
+};
+
 }  // namespace electron::office
+
+namespace gin {
+using namespace electron::office;
+template <>
+struct Converter<EventPayload> {
+  static v8::Local<v8::Value> ToV8(v8::Isolate* isolate,
+                                   const EventPayload& val) {
+    Dictionary dict = Dictionary::CreateEmpty(isolate);
+    dict.Set("payload", lok_callback::PayloadToLocalValue(isolate, val.type,
+                                                          val.payload.c_str()));
+    return ConvertToV8(isolate, dict);
+  }
+};
+}  // namespace gin
+
 #endif  // OFFICE_DOCUMENT_CLIENT_H_

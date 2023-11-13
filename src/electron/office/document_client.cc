@@ -14,6 +14,7 @@
 #include "base/containers/span.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/pickle.h"
 #include "base/process/memory.h"
 #include "base/strings/stringprintf.h"
@@ -27,12 +28,13 @@
 #include "gin/object_template_builder.h"
 #include "gin/per_isolate_data.h"
 #include "net/base/filename_util.h"
-#include "office/async_scope.h"
 #include "office/document_holder.h"
-#include "office/event_bus.h"
 #include "office/lok_callback.h"
 #include "office/office_client.h"
+#include "office/office_instance.h"
+#include "office/promise.h"
 #include "shell/common/gin_converters/gfx_converter.h"
+#include "shell/common/gin_converters/std_converter.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "ui/base/clipboard/clipboard.h"
@@ -105,32 +107,25 @@ std::unique_ptr<char[]> jsonStringify(const v8::Local<v8::Context>& context,
 
 }  // namespace
 
-DocumentClient::DocumentClient(DocumentHolder)
-    : document_(document),
-      path_(path),
-      view_id_(view_id),
-      office_client_(std::move(office_client)) {
+DocumentClient::DocumentClient() = default;
+DocumentClient::DocumentClient(DocumentHolderWithView holder)
+    : document_holder_(std::move(holder)) {
   // assumes the document loaded succesfully from OfficeClient
-  DCHECK(document_);
+  DCHECK(document_holder_);
+  DCHECK(OfficeInstance::IsValid());
 
-  event_bus_.Handle(LOK_CALLBACK_DOCUMENT_SIZE_CHANGED,
-                    base::BindRepeating(&DocumentClient::HandleDocSizeChanged,
-                                        base::Unretained(this)));
-  event_bus_.Handle(LOK_CALLBACK_INVALIDATE_TILES,
-                    base::BindRepeating(&DocumentClient::HandleInvalidate,
-                                        base::Unretained(this)));
-
-  event_bus_.Handle(LOK_CALLBACK_STATE_CHANGED,
-                    base::BindRepeating(&DocumentClient::HandleStateChange,
-                                        base::Unretained(this)));
-
-  event_bus_.Handle(LOK_CALLBACK_UNO_COMMAND_RESULT,
-                    base::BindRepeating(&DocumentClient::HandleUnoCommandResult,
-                                        base::Unretained(this)));
+  document_holder_.AddDocumentObserver(LOK_CALLBACK_DOCUMENT_SIZE_CHANGED,
+                                       this);
+  document_holder_.AddDocumentObserver(LOK_CALLBACK_INVALIDATE_TILES, this);
+  document_holder_.AddDocumentObserver(LOK_CALLBACK_STATE_CHANGED, this);
+  document_holder_.AddDocumentObserver(LOK_CALLBACK_UNO_COMMAND_RESULT, this);
 }
 
 DocumentClient::~DocumentClient() {
-  LOG(ERROR) << "DOC CLIENT DESTROYED: " << path_;
+  if (!document_holder_)
+    return;
+  document_holder_.RemoveDocumentObservers();
+  LOG(ERROR) << "DOC CLIENT DESTROYED: " << document_holder_.Path();
 }
 
 // gin::Wrappable
@@ -153,8 +148,8 @@ gin::ObjectTemplateBuilder DocumentClient::GetObjectTemplateBuilder(
       .SetMethod("postUnoCommand", &DocumentClient::PostUnoCommand)
       .SetMethod("setAuthor", &DocumentClient::SetAuthor)
       .SetMethod("gotoOutline", &DocumentClient::GotoOutline)
-      .SetMethod("saveToMemory", &DocumentClient::SaveToMemoryAsync)
-      .SetMethod("saveAs", &DocumentClient::SaveAsAsync)
+      .SetMethod("saveToMemory", &DocumentClient::SaveToMemory)
+      .SetMethod("saveAs", &DocumentClient::SaveAs)
       .SetMethod("getTextSelection", &DocumentClient::GetTextSelection)
       .SetMethod("setTextSelection", &DocumentClient::SetTextSelection)
       .SetMethod("sendDialogEvent", &DocumentClient::SendDialogEvent)
@@ -179,7 +174,9 @@ gin::ObjectTemplateBuilder DocumentClient::GetObjectTemplateBuilder(
                  &DocumentClient::SendContentControlEvent)
       .SetMethod("as", &DocumentClient::As)
       .SetMethod("newView", &DocumentClient::NewView)
-      .SetProperty("isReady", &DocumentClient::IsReady);
+      .SetProperty("isReady", &DocumentClient::IsReady)
+      .SetProperty("initializeForRendering",
+                   &DocumentClient::InitializeForRendering);
 }
 
 const char* DocumentClient::GetTypeName() {
@@ -194,36 +191,24 @@ std::vector<gfx::Rect> DocumentClient::PageRects() const {
   return page_rects_;
 }
 
-lok::Document* DocumentClient::GetDocument() {
-  return document_;
-}
-
 gfx::Size DocumentClient::DocumentSizeTwips() {
   return gfx::Size(document_width_in_twips_, document_height_in_twips_);
 }
 
-bool DocumentClient::IsMounted() {
-  return !mounted_.IsEmpty();
-}
+bool DocumentClient::Mount(v8::Isolate* isolate) {
+  bool first_mount = mount_counter_.Increment() == 0;
 
-int DocumentClient::Mount(v8::Isolate* isolate) {
-  if (IsMounted()) {
-    return ViewId();
-  }
+  if (!first_mount)
+    return false;
 
-  {
-    v8::HandleScope scope(isolate);
-    v8::Local<v8::Value> wrapper;
-    if (GetWrapper(isolate).ToLocal(&wrapper)) {
-      event_bus_.SetContext(isolate, isolate->GetCurrentContext());
-      // prevent garbage collection
-      mounted_.Reset(isolate, wrapper);
-    }
+  v8::Local<v8::Value> wrapper;
+  if (GetWrapper(isolate).ToLocal(&wrapper)) {
+    mounted_.Reset(isolate, wrapper);
+  } else {
+    LOG(ERROR) << "unable to mount document client";
   }
 
   RefreshSize();
-
-  tile_mode_ = static_cast<LibreOfficeKitTileMode>(document_->getTileMode());
 
   base::SequencedTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
@@ -231,21 +216,21 @@ int DocumentClient::Mount(v8::Isolate* isolate) {
           &DocumentClient::EmitReady, GetWeakPtr(), isolate,
           v8::Global<v8::Context>(isolate, isolate->GetCurrentContext())));
 
-  return ViewId();
+  return true;
 }
 
-void DocumentClient::Unmount() {
-  if (!IsMounted())
-    return;
+bool DocumentClient::Unmount() {
+  bool not_last_mount = mount_counter_.Decrement();
+  if (not_last_mount)
+    return false;
 
-  view_id_ = -1;
-
-  // allow garbage collection
   mounted_.Reset();
+
+  return true;
 }
 
 int DocumentClient::GetNumberOfPages() const {
-  return document_->getParts();
+  return document_holder_->getParts();
 }
 //}
 
@@ -259,6 +244,7 @@ bool DocumentClient::CanUndo() {
   auto res = uno_state_.find(".uno:Undo");
   return res != uno_state_.end() && res->second == "enabled";
 }
+
 bool DocumentClient::CanRedo() {
   auto res = uno_state_.find(".uno:Redo");
   return res != uno_state_.end() && res->second == "enabled";
@@ -268,23 +254,51 @@ bool DocumentClient::CanRedo() {
 bool DocumentClient::CanEditText() {
   return true;
 }
+
 bool DocumentClient::HasEditableText() {
   return true;
 }
 // }
 
+void DocumentClient::MarkRendererWillRemount(
+    base::Token&& restore_key,
+    scoped_refptr<TileBuffer>&& tile_buffer,
+    Snapshot&& snapshot) {
+  tile_buffers_to_restore_[restore_key] =
+      std::make_pair(std::move(tile_buffer), std::move(snapshot));
+}
+
+std::pair<scoped_refptr<TileBuffer>, Snapshot>
+DocumentClient::GetRestoredTileBuffer(const std::string& restore_key) {
+  auto maybe_token = base::Token::FromString(restore_key);
+  if (!maybe_token)
+    return {};
+  auto token = maybe_token.value();
+
+  auto it = tile_buffers_to_restore_.find(token);
+  if (it == tile_buffers_to_restore_.end())
+    return {};
+
+  tile_buffers_to_restore_.erase(it);
+  return it->second;
+}
+
+DocumentHolderWithView DocumentClient::GetDocument() {
+  return document_holder_;
+}
+
 base::WeakPtr<DocumentClient> DocumentClient::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
 
-void DocumentClient::HandleStateChange(std::string payload) {
+void DocumentClient::HandleStateChange(const std::string& payload) {
   std::pair<std::string, std::string> pair =
       lok_callback::ParseStatusChange(payload);
   if (!pair.first.empty()) {
     uno_state_.insert(pair);
   }
 
-  if (!IsMounted() || !is_ready_) {
+  if (!is_ready_) {
     state_change_buffer_.emplace_back(payload);
   }
 }
@@ -307,7 +321,7 @@ void DocumentClient::OnClipboardChanged() {
   size_t* out_sizes = nullptr;
   char** out_streams = nullptr;
 
-  bool success = document_->getClipboard(
+  bool success = document_holder_->getClipboard(
       mime_types.size() ? mime_c_str.data() : nullptr, &out_count,
       &out_mime_types, &out_sizes, &out_streams);
 
@@ -346,33 +360,27 @@ void DocumentClient::OnClipboardChanged() {
   lok_safe_free(out_mime_types);
 }
 
-void DocumentClient::HandleUnoCommandResult(std::string payload) {
-  std::pair<std::string, bool> checker =
-      lok_callback::ParseUnoCommandResult(payload);
-
-  if ((checker.first == ".uno:Copy" || checker.first == ".uno:Cut") &&
-      checker.second) {
+void DocumentClient::HandleUnoCommandResult(const std::string& payload) {
+  using namespace std::literals::string_view_literals;
+  if (lok_callback::IsUnoCommandResultSuccessful(".uno:Copy"sv, payload) ||
+      lok_callback::IsUnoCommandResultSuccessful(".uno:Cut"sv, payload)) {
     OnClipboardChanged();
   }
 }
 
-void DocumentClient::HandleDocSizeChanged(std::string payload) {
+void DocumentClient::HandleDocSizeChanged() {
   RefreshSize();
 }
 
-void DocumentClient::HandleInvalidate(std::string payload) {
+void DocumentClient::HandleInvalidate() {
   is_ready_ = true;
 }
 
 void DocumentClient::RefreshSize() {
-  // not mounted
-  if (view_id_ == -1)
-    return;
+  document_holder_->getDocumentSize(&document_width_in_twips_,
+                                    &document_height_in_twips_);
 
-  document_->getDocumentSize(&document_width_in_twips_,
-                             &document_height_in_twips_);
-
-  LokStrPtr page_rect = LokStrPtr(document_->getPartPageRectangles());
+  LokStrPtr page_rect(document_holder_->getPartPageRectangles());
   std::string_view page_rect_sv(page_rect.get());
   std::string_view::const_iterator start = page_rect_sv.begin();
   int new_size = GetNumberOfPages();
@@ -380,30 +388,55 @@ void DocumentClient::RefreshSize() {
       lok_callback::ParseMultipleRects(start, page_rect_sv.end(), new_size);
 }
 
-std::string DocumentClient::Path() {
-  return path_;
-}
-
-void DocumentClient::On(const std::string& event_name,
+void DocumentClient::On(v8::Isolate* isolate,
+                        const std::u16string& event_name,
                         v8::Local<v8::Function> listener_callback) {
-  event_bus_.On(event_name, listener_callback);
+  int type = lok_callback::EventStringToType(event_name);
+  if (type < 0) {
+    LOG(ERROR) << "on, unknown event: " << event_name;
+  }
+  event_listeners_[type].emplace_back(isolate, listener_callback);
+
+  // store the isolate for emitting callbacks later in ForwardEmit
+  if (!isolate_) {
+    isolate_ = isolate;
+  } else {
+    DCHECK(isolate_ == isolate);
+  }
 }
 
-void DocumentClient::Off(const std::string& event_name,
+void DocumentClient::Off(const std::u16string& event_name,
                          v8::Local<v8::Function> listener_callback) {
-  event_bus_.Off(event_name, listener_callback);
+  int type = lok_callback::EventStringToType(event_name);
+  if (type < 0) {
+    LOG(ERROR) << "off, unknown event: " << event_name;
+  }
+  auto itr = event_listeners_.find(type);
+  if (itr == event_listeners_.end())
+    return;
+
+  auto& vec = itr->second;
+  vec.erase(std::remove(vec.begin(), vec.end(), listener_callback), vec.end());
 }
 
-void DocumentClient::Emit(const std::string& event_name,
+void DocumentClient::Emit(v8::Isolate* isolate,
+                          const std::u16string& event_name,
                           v8::Local<v8::Value> data) {
-  event_bus_.Emit(event_name, data);
+  int type = lok_callback::EventStringToType(event_name);
+  if (type < 0) {
+    LOG(ERROR) << "emit, unknown event: " << event_name;
+  }
+  auto itr = event_listeners_.find(type);
+  if (itr == event_listeners_.end())
+    return;
+  for (auto& callback : itr->second) {
+    V8FunctionInvoker<void(v8::Local<v8::Value>)>::Go(isolate, callback, data);
+  }
 }
-
-DocumentClient::DocumentClient() = default;
 
 v8::Local<v8::Value> DocumentClient::GotoOutline(int idx,
                                                  gin::Arguments* args) {
-  LokStrPtr result = LokStrPtr(document_->gotoOutline(idx));
+  LokStrPtr result(document_holder_->gotoOutline(idx));
   v8::Isolate* isolate = args->isolate();
 
   if (!result) {
@@ -420,63 +453,65 @@ v8::Local<v8::Value> DocumentClient::GotoOutline(int idx,
       .FromMaybe(v8::Local<v8::Value>());
 }
 
-base::span<char> DocumentClient::SaveToMemory(v8::Isolate* isolate,
-                                              std::unique_ptr<char[]> format) {
-  char* pOutput = nullptr;
-  size_t size = document_->saveToMemory(&pOutput, malloc,
-                                        format ? format.get() : nullptr);
-  SetView();
-  if (size < 0) {
-    return {};
-  }
-  return base::span<char>(pOutput, size);
+namespace {
+void* UncheckedAlloc(size_t size) {
+  void* ptr;
+  std::ignore = base::UncheckedMalloc(size, &ptr);
+  return ptr;
 }
 
-v8::Local<v8::Promise> DocumentClient::SaveToMemoryAsync(v8::Isolate* isolate,
-                                                         gin::Arguments* args) {
-  v8::EscapableHandleScope handle_scope(isolate);
-  v8::Local<v8::Promise::Resolver> promise =
-      v8::Promise::Resolver::New(isolate->GetCurrentContext()).ToLocalChecked();
+}  // namespace
+
+v8::Local<v8::Promise> DocumentClient::SaveToMemory(v8::Isolate* isolate,
+                                                    gin::Arguments* args) {
+  Promise<v8::Value> promise(isolate);
+  auto handle = promise.GetHandle();
   v8::Local<v8::Value> arguments;
   std::unique_ptr<char[]> format;
   if (args->GetNext(&arguments)) {
     format = stringify(isolate->GetCurrentContext(), arguments);
   }
 
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
-      base::BindOnce(&DocumentClient::SaveToMemory, base::Unretained(this),
-                     isolate, std::move(format)),
-      base::BindOnce(&DocumentClient::SaveToMemoryComplete,
-                     weak_factory_.GetWeakPtr(), isolate,
-                     ThreadedPromiseResolver(isolate, promise)));
-  return handle_scope.Escape(promise->GetPromise());
-}
+  document_holder_.PostBlocking(base::BindOnce(
+      [](Promise<v8::Value> promise, std::unique_ptr<char[]> format,
+         DocumentHolderWithView holder) {
+        char* pOutput = nullptr;
+        size_t size = holder->saveToMemory(&pOutput, UncheckedAlloc,
+                                           format ? format.get() : nullptr);
 
-void DocumentClient::SaveToMemoryComplete(v8::Isolate* isolate,
-                                          ThreadedPromiseResolver resolver,
-                                          base::span<char> buffer) {
-  AsyncScope async(isolate);
-  v8::Local<v8::Context> context = resolver.GetCreationContext();
-  v8::Context::Scope context_scope(context);
-  if (buffer.empty()) {
-    resolver.Resolve({});
-    return;
-  }
+        if (size <= 0) {
+          promise.Resolve({});
+          return;
+        }
 
-  // since buffer.data() is from a dangling malloc, add a free(...) deleter
-  auto backing_store = v8::ArrayBuffer::NewBackingStore(
-      buffer.data(), buffer.size(),
-      [](void* data, size_t, void*) { free(data); }, nullptr);
-  v8::Local<v8::ArrayBuffer> array_buffer =
-      v8::ArrayBuffer::New(isolate, std::move(backing_store));
+        promise.ResolveWith(base::BindOnce(
+            [](Promise<v8::Value>&& promise, char* data, size_t size) {
+              v8::Isolate* isolate = promise.isolate();
+              gin_helper::Locker locker(isolate);
+              v8::HandleScope handle_scope(isolate);
+              gin_helper::MicrotasksScope microtasks_scope(isolate);
+              v8::Context::Scope context_scope(promise.GetContext());
 
-  resolver.Resolve(array_buffer);
+              // since buffer.data() is from a dangling malloc, add a free(...)
+              // deleter
+              auto backing_store = v8::ArrayBuffer::NewBackingStore(
+                  data, size,
+                  [](void* data, size_t, void*) { base::UncheckedFree(data); },
+                  nullptr);
+              v8::Local<v8::ArrayBuffer> array_buffer =
+                  v8::ArrayBuffer::New(isolate, std::move(backing_store));
+              return v8::Global<v8::Value>(promise.isolate(), array_buffer);
+            },
+            std::move(promise), pOutput, size));
+      },
+      std::move(promise), std::move(format)));
+
+  return handle;
 }
 
 void DocumentClient::SetAuthor(const std::string& author,
                                gin::Arguments* args) {
-  document_->setAuthor(author.c_str());
+  document_holder_->setAuthor(author.c_str());
 }
 
 void DocumentClient::PostUnoCommand(const std::string& command,
@@ -512,9 +547,8 @@ void DocumentClient::PostUnoCommand(const std::string& command,
 void DocumentClient::PostUnoCommandInternal(const std::string& command,
                                             std::unique_ptr<char[]> json_buffer,
                                             bool notifyWhenFinished) {
-  SetView();
-  document_->postUnoCommand(command.c_str(), json_buffer.get(),
-                            notifyWhenFinished);
+  document_holder_->postUnoCommand(command.c_str(), json_buffer.get(),
+                                   notifyWhenFinished);
 }
 
 std::vector<std::string> DocumentClient::GetTextSelection(
@@ -523,7 +557,7 @@ std::vector<std::string> DocumentClient::GetTextSelection(
   char* used_mime_type;
 
   LokStrPtr text_selection(
-      document_->getTextSelection(mime_type.c_str(), &used_mime_type));
+      document_holder_->getTextSelection(mime_type.c_str(), &used_mime_type));
 
   LokStrPtr u_used_mime_type(used_mime_type);
 
@@ -531,12 +565,12 @@ std::vector<std::string> DocumentClient::GetTextSelection(
 }
 
 void DocumentClient::SetTextSelection(int n_type, int n_x, int n_y) {
-  document_->setTextSelection(n_type, n_x, n_y);
+  document_holder_->setTextSelection(n_type, n_x, n_y);
 }
 
 v8::Local<v8::Value> DocumentClient::GetPartName(int n_part,
                                                  gin::Arguments* args) {
-  LokStrPtr part_name(document_->getPartName(n_part));
+  LokStrPtr part_name(document_holder_->getPartName(n_part));
   if (!part_name)
     return v8::Undefined(args->isolate());
 
@@ -545,7 +579,7 @@ v8::Local<v8::Value> DocumentClient::GetPartName(int n_part,
 
 v8::Local<v8::Value> DocumentClient::GetPartHash(int n_part,
                                                  gin::Arguments* args) {
-  LokStrPtr part_hash(document_->getPartHash(n_part));
+  LokStrPtr part_hash(document_holder_->getPartHash(n_part));
   if (!part_hash)
     return v8::Undefined(args->isolate());
 
@@ -562,7 +596,7 @@ void DocumentClient::SendDialogEvent(uint64_t n_window_id,
   if (!json)
     return;
 
-  document_->sendDialogEvent(n_window_id, json.get());
+  document_holder_->sendDialogEvent(n_window_id, json.get());
 }
 
 v8::Local<v8::Value> DocumentClient::GetSelectionTypeAndText(
@@ -571,7 +605,7 @@ v8::Local<v8::Value> DocumentClient::GetSelectionTypeAndText(
   char* used_mime_type;
   char* p_text_char;
 
-  int selection_type = document_->getSelectionTypeAndText(
+  int selection_type = document_holder_->getSelectionTypeAndText(
       mime_type.c_str(), &p_text_char, &used_mime_type);
 
   // to safely de-allocate the strings
@@ -613,7 +647,7 @@ v8::Local<v8::Value> DocumentClient::GetClipboard(gin::Arguments* args) {
   size_t* out_sizes = nullptr;
   char** out_streams = nullptr;
 
-  bool success = document_->getClipboard(
+  bool success = document_holder_->getClipboard(
       mime_types.size() ? mime_c_str.data() : nullptr, &out_count,
       &out_mime_types, &out_sizes, &out_streams);
 
@@ -695,118 +729,81 @@ bool DocumentClient::SetClipboard(
   // add the nullptr terminator to the list of null-terminated strings
   mime_c_str.push_back(nullptr);
 
-  return document_->setClipboard(entries, mime_c_str.data(), in_sizes, streams);
-}
-
-bool DocumentClient::OnPasteEvent(ui::Clipboard* clipboard,
-                                  std::string clipboard_type) {
-  bool result = false;
-
-  if (clipboard_type == "text/plain;charset=utf-8") {
-    std::u16string system_clipboard_data;
-
-    clipboard->ReadText(ui::ClipboardBuffer::kCopyPaste, nullptr,
-                        &system_clipboard_data);
-
-    std::string converted_data = base::UTF16ToUTF8(system_clipboard_data);
-
-    const char* value =
-        strcpy(new char[converted_data.length() + 1], converted_data.c_str());
-
-    result =
-        document_->paste(clipboard_type.c_str(), value, converted_data.size());
-    delete value;
-  } else if (clipboard_type == "image/png") {
-    std::vector<uint8_t> image;
-    clipboard->ReadPng(ui::ClipboardBuffer::kCopyPaste, nullptr,
-                       base::BindOnce(
-                           [](std::vector<uint8_t>* image,
-                              const std::vector<uint8_t>& result) {
-                             *image = std::move(result);
-                           },
-                           &image));
-
-    if (image.empty()) {
-      LOG(ERROR) << "Unable to get image value";
-      return false;
-    }
-
-    result = document_->paste(
-        clipboard_type.c_str(),
-        static_cast<char*>(reinterpret_cast<char*>(image.data())),
-        image.size());
-  } else {
-    LOG(ERROR) << "Unsupported clipboard_type: " << clipboard_type;
-  }
-
-  return result;
+  return document_holder_->setClipboard(entries, mime_c_str.data(), in_sizes,
+                                        streams);
 }
 
 bool DocumentClient::Paste(const std::string& mime_type,
                            const std::string& data,
                            gin::Arguments* args) {
-  return document_->paste(mime_type.c_str(), data.c_str(), data.size());
+  return document_holder_->paste(mime_type.c_str(), data.c_str(), data.size());
 }
 
 void DocumentClient::SetGraphicSelection(int n_type, int n_x, int n_y) {
-  document_->setGraphicSelection(n_type, n_x, n_y);
+  document_holder_->setGraphicSelection(n_type, n_x, n_y);
 }
 
 void DocumentClient::ResetSelection() {
-  document_->resetSelection();
+  document_holder_->resetSelection();
 }
 
-v8::Local<v8::Value> DocumentClient::GetCommandValues(
+v8::Local<v8::Promise> DocumentClient::GetCommandValues(
     const std::string& command,
     gin::Arguments* args) {
-  LokStrPtr result(document_->getCommandValues(command.c_str()));
+  Promise<v8::Value> promise(args->isolate());
+  auto handle = promise.GetHandle();
 
-  v8::Isolate* isolate = args->isolate();
+  document_holder_.Post(base::BindOnce(
+      [](Promise<v8::Value>&& promise, std::string command,
+         DocumentHolderWithView doc_holder) {
+        LokStrPtr result(doc_holder->getCommandValues(command.c_str()));
+        if (!result) {
+          return promise.Resolve();
+        }
+        v8::Local<v8::String> res_json_str;
+        if (!v8::String::NewFromUtf8(promise.isolate(), result.get())
+                 .ToLocal(&res_json_str)) {
+          return promise.Resolve();
+        }
+        promise.Resolve(v8::JSON::Parse(promise.GetContext(), res_json_str)
+                            .FromMaybe(v8::Local<v8::Value>()));
+      },
+      std::move(promise), command));
 
-  if (!result) {
-    return {};
-  }
-
-  v8::Local<v8::String> res_json_str;
-  if (!v8::String::NewFromUtf8(isolate, result.get()).ToLocal(&res_json_str)) {
-    return {};
-  };
-
-  return v8::JSON::Parse(args->GetHolderCreationContext(), res_json_str)
-      .FromMaybe(v8::Local<v8::Value>());
+  return handle;
 }
 
 void DocumentClient::SetOutlineState(bool column,
                                      int level,
                                      int index,
                                      bool hidden) {
-  document_->setOutlineState(column, level, index, hidden);
+  document_holder_->setOutlineState(column, level, index, hidden);
 }
 
 void DocumentClient::SetViewLanguage(int id, const std::string& language) {
-  document_->setViewLanguage(id, language.c_str());
+  document_holder_->setViewLanguage(id, language.c_str());
 }
 
 void DocumentClient::SelectPart(int part, int select) {
-  document_->selectPart(part, select);
+  document_holder_->selectPart(part, select);
 }
 
 void DocumentClient::MoveSelectedParts(int position, bool duplicate) {
-  document_->moveSelectedParts(position, duplicate);
+  document_holder_->moveSelectedParts(position, duplicate);
 }
 
 void DocumentClient::RemoveTextContext(unsigned window_id,
                                        int before,
                                        int after) {
-  document_->removeTextContext(window_id, before, after);
+  document_holder_->removeTextContext(window_id, before, after);
 }
 
 void DocumentClient::CompleteFunction(const std::string& function_name) {
-  document_->completeFunction(function_name.c_str());
+  document_holder_->completeFunction(function_name.c_str());
 }
 
 void DocumentClient::SendFormFieldEvent(const std::string& arguments) {
-  document_->sendFormFieldEvent(arguments.c_str());
+  document_holder_->sendFormFieldEvent(arguments.c_str());
 }
 
 bool DocumentClient::SendContentControlEvent(
@@ -816,44 +813,25 @@ bool DocumentClient::SendContentControlEvent(
       jsonStringify(args->GetHolderCreationContext(), arguments);
   if (!json_buffer)
     return false;
-  document_->sendContentControlEvent(json_buffer.get());
+  document_holder_->sendContentControlEvent(json_buffer.get());
 
   return true;
 }
 
 v8::Local<v8::Value> DocumentClient::As(const std::string& type,
                                         v8::Isolate* isolate) {
-  void* component = document_->getXComponent();
+  void* component = document_holder_->getXComponent();
   return convert::As(isolate, component, type);
 }
 
-void DocumentClient::ForwardLibreOfficeEvent(int type, std::string payload) {
-  event_bus_.EmitLibreOfficeEvent(type, payload);
-}
-
-int DocumentClient::ViewId() {
-  if (!document_)
-    return -1;
-
-  return view_id_;
-}
-
 v8::Local<v8::Value> DocumentClient::NewView(v8::Isolate* isolate) {
-  DocumentClient* new_client = office_client_->PrepareDocumentClient(
-      std::make_pair(document_, document_->createView()), path_);
+  auto* new_client = new DocumentClient(document_holder_.NewView());
   v8::Local<v8::Object> result;
 
   if (!new_client->GetWrapper(isolate).ToLocal(&result))
     return v8::Undefined(isolate);
 
   return result;
-}
-
-void DocumentClient::SetView() {
-  if (ViewId() == -1)
-    return;
-
-  document_->setView(ViewId());
 }
 
 void DocumentClient::EmitReady(v8::Isolate* isolate,
@@ -882,28 +860,27 @@ void DocumentClient::EmitReady(v8::Isolate* isolate,
     state_change_buffer_.clear();
   }
 
-  event_bus_.Emit("ready", ready_value);
+  Emit(isolate, u"ready", ready_value);
 }
 
-bool DocumentClient::SaveAs(v8::Isolate* isolate,
-                            std::unique_ptr<char[]> path,
-                            std::unique_ptr<char[]> format,
-                            std::unique_ptr<char[]> options) {
-  bool success = document_->saveAs(path.get(), format ? format.get() : nullptr,
-                                   options ? options.get() : nullptr);
-  SetView();
-  return success;
+void DocumentClient::ForwardEmit(int type, const std::string& payload) {
+  DCHECK(isolate_);
+  auto itr = event_listeners_.find(type);
+  if (itr == event_listeners_.end())
+    return;
+  for (auto& callback : itr->second) {
+    V8FunctionInvoker<void(EventPayload)>::Go(isolate_, callback,
+                                              {type, payload});
+  }
 }
 
-v8::Local<v8::Promise> DocumentClient::SaveAsAsync(v8::Isolate* isolate,
-                                                   gin::Arguments* args) {
-  v8::EscapableHandleScope handle_scope(isolate);
-  v8::Local<v8::Promise::Resolver> promise =
-      v8::Promise::Resolver::New(isolate->GetCurrentContext()).ToLocalChecked();
+v8::Local<v8::Promise> DocumentClient::SaveAs(v8::Isolate* isolate,
+                                              gin::Arguments* args) {
   v8::Local<v8::Value> arguments;
   std::unique_ptr<char[]> path;
   std::unique_ptr<char[]> format;
   std::unique_ptr<char[]> options;
+
   if (!args->GetNext(&arguments)) {
     args->ThrowTypeError("missing path");
     return {};
@@ -915,25 +892,72 @@ v8::Local<v8::Promise> DocumentClient::SaveAsAsync(v8::Isolate* isolate,
   if (args->GetNext(&arguments)) {
     options = stringify(isolate->GetCurrentContext(), arguments);
   }
+  Promise<bool> promise(isolate);
+  auto holder = promise.GetHandle();
 
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
-      base::BindOnce(&DocumentClient::SaveAs, base::Unretained(this), isolate,
-                     std::move(path), std::move(format), std::move(options)),
-      base::BindOnce(&DocumentClient::SaveAsComplete,
-                     weak_factory_.GetWeakPtr(), isolate,
-                     ThreadedPromiseResolver(isolate, promise)));
-  return handle_scope.Escape(promise->GetPromise());
+  document_holder_.PostBlocking(base::BindOnce(
+      [](std::unique_ptr<char[]> path, std::unique_ptr<char[]> format,
+         std::unique_ptr<char[]> options, Promise<bool> promise,
+         DocumentHolderWithView doc) {
+        promise.Resolve(doc->saveAs(path.get(), format ? format.get() : nullptr,
+                                    options ? options.get() : nullptr));
+      },
+      std::move(path), std::move(format), std::move(options),
+      std::move(promise)));
+
+  return holder;
 }
 
-void DocumentClient::SaveAsComplete(v8::Isolate* isolate,
-                                    ThreadedPromiseResolver resolver,
-                                    bool success) {
-  AsyncScope async(isolate);
-  v8::Local<v8::Context> context = resolver.GetCreationContext();
-  v8::Context::Scope context_scope(context);
+v8::Local<v8::Promise> DocumentClient::InitializeForRendering(
+    v8::Isolate* isolate) {
+  document_holder_.PostBlocking(
+      base::BindOnce([](DocumentHolderWithView holder) {
+        static constexpr const char* options = R"({
+					".uno:ShowBorderShadow": {
+						"type": "boolean",
+						"value": false
+					},
+					".uno:HideWhitespace": {
+						"type": "boolean",
+						"value": false
+					},
+					".uno:SpellOnline": {
+						"type": "boolean",
+						"value": false
+					},
+					".uno:Author": {
+						"type": "string",
+						"value": "Macro User"
+					}
+				})";
+        holder->initializeForRendering(options);
+      }));
+  return {};
+}
 
-  resolver.Resolve(v8::Boolean::New(isolate, success));
+void DocumentClient::DocumentCallback(int type, std::string payload) {
+  switch (static_cast<LibreOfficeKitCallbackType>(type)) {
+      // internal monitors
+    case LOK_CALLBACK_DOCUMENT_SIZE_CHANGED:
+      HandleDocSizeChanged();
+      ForwardEmit(type, payload);
+      break;
+    case LOK_CALLBACK_INVALIDATE_TILES:
+      HandleInvalidate();
+      ForwardEmit(type, payload);
+      break;
+    case LOK_CALLBACK_STATE_CHANGED:
+      HandleStateChange(payload);
+      ForwardEmit(type, payload);
+      break;
+    case LOK_CALLBACK_UNO_COMMAND_RESULT:
+      HandleUnoCommandResult(payload);
+      ForwardEmit(type, payload);
+      break;
+    default:
+      ForwardEmit(type, payload);
+      break;
+  }
 }
 
 }  // namespace electron::office

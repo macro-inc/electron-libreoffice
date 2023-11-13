@@ -6,12 +6,14 @@
 #define OFFICE_PAINT_MANAGER_H_
 
 #include <vector>
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "office/cancellation_flag.h"
+#include "office/document_holder.h"
 #include "office/lok_tilebuffer.h"
 
 namespace electron::office {
@@ -22,7 +24,7 @@ class PaintManager {
    public:
     virtual void InvalidatePluginContainer() = 0;
     virtual base::WeakPtr<Client> GetWeakClient() = 0;
-    virtual office::TileBuffer* GetTileBuffer() = 0;
+    virtual scoped_refptr<office::TileBuffer> GetTileBuffer() = 0;
   };
 
   explicit PaintManager(Client* client);
@@ -31,7 +33,7 @@ class PaintManager {
   PaintManager(const PaintManager& other) = delete;
   PaintManager& operator=(const PaintManager& other) = delete;
 
-  void SchedulePaint(lok::Document* document,
+  void SchedulePaint(DocumentHolderWithView document,
                      int y_pos,
                      int view_height,
                      float scale,
@@ -53,7 +55,7 @@ class PaintManager {
 
   class Task {
    public:
-    Task(lok::Document* document,
+    Task(DocumentHolderWithView document,
          int y_pos,
          int view_height,
          float scale,
@@ -68,7 +70,7 @@ class PaintManager {
 
     std::size_t ContextHash() const noexcept;
 
-    lok::Document* document_;
+    DocumentHolderWithView document_;
     const int y_pos_;
     const int view_height_;
     const float scale_;
@@ -92,15 +94,15 @@ class PaintManager {
                            CancelFlagPtr cancel_flag,
                            bool full_paint,
                            float scale);
-  static bool PaintTile(TileBuffer* tile_buffer,
+  static bool PaintTile(scoped_refptr<office::TileBuffer> tile_buffer,
                         CancelFlagPtr cancel_flag,
-                        lok::Document* document,
+                        DocumentHolderWithView document,
                         unsigned int tile_index,
                         std::size_t context_hash,
                         base::RepeatingClosure completed);
-  static void PaintTileRange(TileBuffer* tile_buffer,
+  static void PaintTileRange(scoped_refptr<office::TileBuffer> tile_buffer,
                              CancelFlagPtr cancel_flag,
-                             lok::Document* document,
+                             DocumentHolderWithView document,
                              TileRange range,
                              std::size_t context_hash,
                              base::RepeatingClosure completed);

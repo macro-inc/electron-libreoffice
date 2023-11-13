@@ -10,14 +10,13 @@
 #include "base/logging.h"
 #include "base/time/time.h"
 #include "office/cancellation_flag.h"
-#include "office/lok_tilebuffer.h"
 
 // Uncomment to log paint manager events
 // #define DEBUG_PAINT_MANAGER
 
 namespace electron::office {
 
-PaintManager::Task::Task(lok::Document* document,
+PaintManager::Task::Task(DocumentHolderWithView document,
                          int y_pos,
                          int view_height,
                          float scale,
@@ -35,7 +34,8 @@ PaintManager::Task::Task(lok::Document* document,
 PaintManager::Task::~Task() = default;
 
 std::size_t PaintManager::Task::ContextHash() const noexcept {
-  return std::hash<void*>{}(document_) ^ (std::hash<float>{}(scale_) << 1);
+  return std::hash<void*>{}(document_.holder().get()) ^
+         (std::hash<float>{}(scale_) << 1);
 }
 
 PaintManager::PaintManager(Client* client)
@@ -48,7 +48,7 @@ PaintManager::~PaintManager() {
   ClearTasks();
 }
 
-void PaintManager::SchedulePaint(lok::Document* document,
+void PaintManager::SchedulePaint(DocumentHolderWithView document,
                                  int y_pos,
                                  int view_height,
                                  float scale,
@@ -178,10 +178,11 @@ void PaintManager::ScheduleNextPaint(std::vector<TileRange> tile_ranges_) {
 }
 
 void PaintManager::PostCurrentTask() {
-  if (skip_render_) return;
+  if (skip_render_)
+    return;
 
   std::size_t hash = 0;
-  if (auto* tile_buffer = client_->GetTileBuffer()) {
+  if (auto tile_buffer = client_->GetTileBuffer()) {
     hash = current_task_->ContextHash();
 
 #ifdef DEBUG_PAINT_MANAGER
@@ -215,9 +216,9 @@ void PaintManager::CurrentTaskComplete(Client* client,
   }
 }
 
-void PaintManager::PaintTileRange(TileBuffer* tile_buffer,
+void PaintManager::PaintTileRange(scoped_refptr<office::TileBuffer> tile_buffer,
                                   CancelFlagPtr cancel_flag,
-                                  lok::Document* document,
+                                  DocumentHolderWithView document,
                                   TileRange it,
                                   std::size_t context_hash,
                                   base::RepeatingClosure completed) {
@@ -229,14 +230,14 @@ void PaintManager::PaintTileRange(TileBuffer* tile_buffer,
   for (unsigned int tile_index = it.index_start; tile_index <= it.index_end;
        ++tile_index) {
     if (!PaintTile(tile_buffer, cancel_flag, document, tile_index, context_hash,
-                   completed)) 
+                   completed))
       break;
   }
 }
 
-bool PaintManager::PaintTile(TileBuffer* tile_buffer,
+bool PaintManager::PaintTile(scoped_refptr<office::TileBuffer> tile_buffer,
                              CancelFlagPtr cancel_flag,
-                             lok::Document* document,
+                             DocumentHolderWithView document,
                              unsigned int tile_index,
                              std::size_t context_hash,
                              base::RepeatingClosure completed) {
@@ -265,7 +266,8 @@ void PaintManager::PausePaint() {
 
 void PaintManager::ResumePaint(bool paint_next) {
   skip_render_ = false;
-  if (!paint_next) return;
+  if (!paint_next)
+    return;
 
   if (current_task_) {
     PostCurrentTask();

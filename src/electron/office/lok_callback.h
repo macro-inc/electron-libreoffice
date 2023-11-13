@@ -15,6 +15,7 @@
 namespace electron::office::lok_callback {
 
 std::string TypeToEventString(int type);
+int EventStringToType(const std::u16string& event_string);
 bool IsTypeJSON(int type);
 bool IsTypeCSV(int type);
 bool IsTypeMultipleCSV(int type);
@@ -33,7 +34,8 @@ std::vector<gfx::Rect> ParseMultipleRects(
     size_t size);
 
 std::pair<std::string, std::string> ParseStatusChange(std::string payload);
-std::pair<std::string, bool> ParseUnoCommandResult(std::string payload);
+bool IsUnoCommandResultSuccessful(const std::string_view name,
+                                  const std::string& payload);
 
 v8::Local<v8::Value> ParseJSON(v8::Isolate* isolate,
                                v8::Local<v8::String> json);

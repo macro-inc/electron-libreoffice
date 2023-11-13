@@ -6,10 +6,13 @@
 #define OFFICE_LOK_TILEBUFFER_H_
 
 #include <vector>
+#include "base/memory/ref_counted_delete_on_sequence.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "cc/paint/paint_canvas.h"
 #include "office/atomic_bitset.h"
 #include "office/cancellation_flag.h"
+#include "office/document_holder.h"
 #include "office/lok_callback.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -52,23 +55,25 @@ struct Snapshot {
   unsigned int column_end = 0;
   unsigned int row_start = 0;
   unsigned int row_end = 0;
+  unsigned int scroll_y_position = 0;
 
   Snapshot(std::vector<cc::PaintImage> tiles_,
            float scale_,
            int column_start_,
            int column_end_,
            int row_start_,
-           int row_end_);
+           int row_end_,
+           int scroll_y_position);
+
+  Snapshot(const Snapshot& other);
+  Snapshot& operator=(const Snapshot& other);
 
   Snapshot();
   ~Snapshot();
 };
 
-class TileBuffer {
+class TileBuffer : public base::RefCountedDeleteOnSequence<TileBuffer> {
  public:
-  TileBuffer();
-  ~TileBuffer();
-
   static constexpr int kTileSizePx = 256;
   static constexpr int kTileSizeTwips = kTileSizePx * lok_callback::kTwipPerPx;
 
@@ -92,9 +97,9 @@ class TileBuffer {
                                        float total_scale,
                                        bool scale_pending,
                                        bool scrolling);
-  const Snapshot MakeSnapshot(CancelFlagPtr cancel_flag, const gfx::Rect& rect);
+  Snapshot MakeSnapshot(CancelFlagPtr cancel_flag, const gfx::Rect& rect);
   bool PaintTile(CancelFlagPtr cancel_flag,
-                 lok::Document* document,
+                 DocumentHolderWithView document,
                  unsigned int tile_index,
                  std::size_t context_hash);
   void SetYPosition(float y);
@@ -110,6 +115,11 @@ class TileBuffer {
   void SetActiveContext(std::size_t active_context_hash);
 
  private:
+  friend class base::RefCountedDeleteOnSequence<TileBuffer>;
+  friend class base::DeleteHelper<TileBuffer>;
+  TileBuffer();
+  ~TileBuffer();
+
   unsigned int CoordToIndex(unsigned int x, unsigned int y) {
     return CoordToIndex(columns_, x, y);
   };

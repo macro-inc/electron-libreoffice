@@ -8,6 +8,7 @@
 #include "base/check.h"
 #include "base/logging.h"
 #include "base/memory/aligned_memory.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_image.h"
 #include "cc/paint/paint_image_builder.h"
@@ -28,7 +29,11 @@
 // #define TILEBUFFER_DEBUG_PAINT
 
 namespace electron::office {
-TileBuffer::TileBuffer() : valid_tile_(0), active_context_hash_(0) {
+TileBuffer::TileBuffer()
+    : base::RefCountedDeleteOnSequence<TileBuffer>(
+          base::SequencedTaskRunnerHandle::Get()),
+      valid_tile_(0),
+      active_context_hash_(0) {
   pool_buffer_ =
       std::shared_ptr<uint8_t[]>(static_cast<uint8_t*>(base::AlignedAlloc(
                                      kPoolAllocatedSize, kPoolAligned)),
@@ -42,16 +47,20 @@ Snapshot::Snapshot(std::vector<cc::PaintImage> tiles_,
                    int column_start_,
                    int column_end_,
                    int row_start_,
-                   int row_end_)
+                   int row_end_,
+                   int scroll_y_position)
     : tiles(std::move(tiles_)),
       scale(scale_),
       column_start(column_start_),
       column_end(column_end_),
       row_start(row_start_),
-      row_end(row_end_) {}
+      row_end(row_end_),
+      scroll_y_position(scroll_y_position) {}
 
 Snapshot::Snapshot() = default;
 Snapshot::~Snapshot() = default;
+Snapshot::Snapshot(const Snapshot& other) = default;
+Snapshot& Snapshot::operator=(const Snapshot& other) = default;
 
 TileBuffer::~TileBuffer() = default;
 
@@ -87,7 +96,7 @@ void TileBuffer::ResetScale(float scale) {
 }
 
 bool TileBuffer::PaintTile(CancelFlagPtr cancel_flag,
-                           lok::Document* document,
+                           DocumentHolderWithView document,
                            unsigned int tile_index,
                            std::size_t context_hash) {
   static const SkImageInfo image_info_ = SkImageInfo::Make(
@@ -514,8 +523,8 @@ size_t TileCount(std::vector<TileRange> tile_ranges_) {
   return result;
 }
 
-const Snapshot TileBuffer::MakeSnapshot(CancelFlagPtr cancel_flag,
-                                        const gfx::Rect& rect) {
+Snapshot TileBuffer::MakeSnapshot(CancelFlagPtr cancel_flag,
+                                  const gfx::Rect& rect) {
   std::vector<cc::PaintImage> tiles;
 
   auto offset_rect = gfx::RectF(rect);
@@ -550,7 +559,7 @@ const Snapshot TileBuffer::MakeSnapshot(CancelFlagPtr cancel_flag,
   }
 
   return Snapshot(std::move(tiles), scale_, column_start, column_end, row_start,
-                  row_end);
+                  row_end, y_pos_);
 }
 
 }  // namespace electron::office

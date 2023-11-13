@@ -1,0 +1,25 @@
+CompileFlags:
+  Add:
+    - '-std=c++17' # these are standard among the flags
+    - '-Wall'
+    - '-Werror'
+    - '-Wextra'
+    - '-Wimplicit-fallthrough'
+    - '-Wunreachable-code-aggressive'
+    - '-Wthread-safety'
+    - '-Wno-missing-field-initializers'
+    - '-Wno-unused-parameter'
+    - '-Wloop-analysis'
+    - '-Wno-unneeded-internal-declaration'
+    - '-Wenum-compare-conditional'
+    - '-Wno-psabi'
+    - '-Wno-ignored-pragma-optimize'
+    - '-Wno-unqualified-std-cast-call'
+    - '-Wmax-tokens'
+    - '-Wshadow'
+    - '-Wno-builtin-macro-redefined'
+    - '-Wheader-hygiene'
+    - '-Wstring-conversion'
+    - '-Wtautological-overlap-compare'
+    - '-Wno-deprecated-builtins' # parts of //base flag incorrectly
+  Compiler: clang++

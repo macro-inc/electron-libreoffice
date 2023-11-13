@@ -138,7 +138,7 @@ void ElectronRenderFrameObserver::DidInstallConditionalFeatures(
 
 #if BUILDFLAG(ENABLE_OFFICE)
   if (is_main_world && !is_dev_tools && !is_dev_tools_extension) {
-    office::OfficeClient::GetCurrent()->InstallToContext(context);
+    office::OfficeClient::InstallToContext(context);
   }
 #endif
 
@@ -175,7 +175,7 @@ void ElectronRenderFrameObserver::WillReleaseScriptContext(
     renderer_client_->WillReleaseScriptContext(context, render_frame_);
 #if BUILDFLAG(ENABLE_OFFICE)
   if (IsMainWorld(world_id)) {
-    office::OfficeClient::GetCurrent()->RemoveFromContext(context);
+    office::OfficeClient::RemoveFromContext(context);
   }
 #endif
 }

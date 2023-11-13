@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -125,149 +126,90 @@ std::vector<gfx::Rect> ParseMultipleRects(
   return result;
 }
 
-std::string TypeToEventString(int type) {
-  switch (static_cast<LibreOfficeKitCallbackType>(type)) {
-    case LOK_CALLBACK_INVALIDATE_TILES:
-      return "invalidate_tiles";
-    case LOK_CALLBACK_INVALIDATE_VISIBLE_CURSOR:
-      return "invalidate_visible_cursor";
-    case LOK_CALLBACK_TEXT_SELECTION:
-      return "text_selection";
-    case LOK_CALLBACK_TEXT_SELECTION_START:
-      return "text_selection_start";
-    case LOK_CALLBACK_TEXT_SELECTION_END:
-      return "text_selection_end";
-    case LOK_CALLBACK_CURSOR_VISIBLE:
-      return "cursor_visible";
-    case LOK_CALLBACK_VIEW_CURSOR_VISIBLE:
-      return "view_cursor_visible";
-    case LOK_CALLBACK_GRAPHIC_SELECTION:
-      return "graphic_selection";
-    case LOK_CALLBACK_GRAPHIC_VIEW_SELECTION:
-      return "graphic_view_selection";
-    case LOK_CALLBACK_CELL_CURSOR:
-      return "cell_cursor";
-    case LOK_CALLBACK_HYPERLINK_CLICKED:
-      return "hyperlink_clicked";
-    case LOK_CALLBACK_MOUSE_POINTER:
-      return "mouse_pointer";
-    case LOK_CALLBACK_STATE_CHANGED:
-      return "state_changed";
-    case LOK_CALLBACK_STATUS_INDICATOR_START:
-      return "status_indicator_start";
-    case LOK_CALLBACK_STATUS_INDICATOR_SET_VALUE:
-      return "status_indicator_set_value";
-    case LOK_CALLBACK_STATUS_INDICATOR_FINISH:
-      return "status_indicator_finish";
-    case LOK_CALLBACK_SEARCH_NOT_FOUND:
-      return "search_not_found";
-    case LOK_CALLBACK_DOCUMENT_SIZE_CHANGED:
-      return "document_size_changed";
-    case LOK_CALLBACK_SET_PART:
-      return "set_part";
-    case LOK_CALLBACK_SEARCH_RESULT_SELECTION:
-      return "search_result_selection";
-    case LOK_CALLBACK_DOCUMENT_PASSWORD:
-      return "document_password";
-    case LOK_CALLBACK_DOCUMENT_PASSWORD_TO_MODIFY:
-      return "document_password_to_modify";
-    case LOK_CALLBACK_CONTEXT_MENU:
-      return "context_menu";
-    case LOK_CALLBACK_INVALIDATE_VIEW_CURSOR:
-      return "invalidate_view_cursor";
-    case LOK_CALLBACK_TEXT_VIEW_SELECTION:
-      return "text_view_selection";
-    case LOK_CALLBACK_CELL_VIEW_CURSOR:
-      return "cell_view_cursor";
-    case LOK_CALLBACK_CELL_ADDRESS:
-      return "cell_address";
-    case LOK_CALLBACK_CELL_FORMULA:
-      return "cell_formula";
-    case LOK_CALLBACK_UNO_COMMAND_RESULT:
-      return "uno_command_result";
-    case LOK_CALLBACK_ERROR:
-      return "error";
-    case LOK_CALLBACK_VIEW_LOCK:
-      return "view_lock";
-    case LOK_CALLBACK_REDLINE_TABLE_SIZE_CHANGED:
-      return "redline_table_size_changed";
-    case LOK_CALLBACK_REDLINE_TABLE_ENTRY_MODIFIED:
-      return "redline_table_entry_modified";
-    case LOK_CALLBACK_INVALIDATE_HEADER:
-      return "invalidate_header";
-    case LOK_CALLBACK_COMMENT:
-      return "comment";
-    case LOK_CALLBACK_RULER_UPDATE:
-      return "ruler_update";
-    case LOK_CALLBACK_WINDOW:
-      return "window";
-    case LOK_CALLBACK_VALIDITY_LIST_BUTTON:
-      return "validity_list_button";
-    case LOK_CALLBACK_VALIDITY_INPUT_HELP:
-      return "validity_input_help";
-    case LOK_CALLBACK_CLIPBOARD_CHANGED:
-      return "clipboard_changed";
-    case LOK_CALLBACK_CONTEXT_CHANGED:
-      return "context_changed";
-    case LOK_CALLBACK_SIGNATURE_STATUS:
-      return "signature_status";
-    case LOK_CALLBACK_PROFILE_FRAME:
-      return "profile_frame";
-    case LOK_CALLBACK_CELL_SELECTION_AREA:
-      return "cell_selection_area";
-    case LOK_CALLBACK_CELL_AUTO_FILL_AREA:
-      return "cell_auto_fill_area";
-    case LOK_CALLBACK_TABLE_SELECTED:
-      return "table_selected";
-    case LOK_CALLBACK_REFERENCE_MARKS:
-      return "reference_marks";
-    case LOK_CALLBACK_JSDIALOG:
-      return "jsdialog";
-    case LOK_CALLBACK_CALC_FUNCTION_LIST:
-      return "calc_function_list";
-    case LOK_CALLBACK_TAB_STOP_LIST:
-      return "tab_stop_list";
-    case LOK_CALLBACK_FORM_FIELD_BUTTON:
-      return "form_field_button";
-    case LOK_CALLBACK_INVALIDATE_SHEET_GEOMETRY:
-      return "invalidate_sheet_geometry";
-    case LOK_CALLBACK_DOCUMENT_BACKGROUND_COLOR:
-      return "document_background_color";
-    case LOK_COMMAND_BLOCKED:
-      return "lok_command_blocked";
-    case LOK_CALLBACK_SC_FOLLOW_JUMP:
-      return "sc_follow_jump";
-    case LOK_CALLBACK_CONTENT_CONTROL:
-      return "content_control";
-    case LOK_CALLBACK_PRINT_RANGES:
-      return "print_ranges";
-    case LOK_CALLBACK_FONTS_MISSING:
-      return "fonts_missing";
-    case LOK_CALLBACK_MACRO_COLORIZER:
-      return "macro_colorizer";
-    case LOK_CALLBACK_MACRO_OVERLAY:
-      return "macro_overlay";
-    case LOK_CALLBACK_MEDIA_SHAPE:
-      return "media_shape";
-    case LOK_CALLBACK_EXPORT_FILE:
-      return "export_file";
-    case LOK_CALLBACK_VIEW_RENDER_STATE:
-      return "view_render_state";
-    case LOK_CALLBACK_APPLICATION_BACKGROUND_COLOR:
-      return "application_background_color";
-    case LOK_CALLBACK_A11Y_FOCUS_CHANGED:
-      return "a11y_focus_changed";
-    case LOK_CALLBACK_A11Y_CARET_CHANGED:
-      return "a11y_caret_changed";
-    case LOK_CALLBACK_A11Y_TEXT_SELECTION_CHANGED:
-      return "a11y_text_selection_changed";
-    case LOK_CALLBACK_COLOR_PALETTES:
-      return "color_palettes";
-    case LOK_CALLBACK_DOCUMENT_PASSWORD_RESET:
-      return "document_password_reset";
-    case LOK_CALLBACK_A11Y_FOCUSED_CELL_CHANGED:
-      return "a11y_focused_cell_changed";
+int EventStringToType(const std::u16string& eventString) {
+  static std::unordered_map<std::u16string, int> EventStringToTypeMap = {
+      {u"invalidate_tiles", LOK_CALLBACK_INVALIDATE_TILES},
+      {u"invalidate_visible_cursor", LOK_CALLBACK_INVALIDATE_VISIBLE_CURSOR},
+      {u"text_selection", LOK_CALLBACK_TEXT_SELECTION},
+      {u"text_selection_start", LOK_CALLBACK_TEXT_SELECTION_START},
+      {u"text_selection_end", LOK_CALLBACK_TEXT_SELECTION_END},
+      {u"cursor_visible", LOK_CALLBACK_CURSOR_VISIBLE},
+      {u"view_cursor_visible", LOK_CALLBACK_VIEW_CURSOR_VISIBLE},
+      {u"graphic_selection", LOK_CALLBACK_GRAPHIC_SELECTION},
+      {u"graphic_view_selection", LOK_CALLBACK_GRAPHIC_VIEW_SELECTION},
+      {u"cell_cursor", LOK_CALLBACK_CELL_CURSOR},
+      {u"hyperlink_clicked", LOK_CALLBACK_HYPERLINK_CLICKED},
+      {u"mouse_pointer", LOK_CALLBACK_MOUSE_POINTER},
+      {u"state_changed", LOK_CALLBACK_STATE_CHANGED},
+      {u"status_indicator_start", LOK_CALLBACK_STATUS_INDICATOR_START},
+      {u"status_indicator_set_value", LOK_CALLBACK_STATUS_INDICATOR_SET_VALUE},
+      {u"status_indicator_finish", LOK_CALLBACK_STATUS_INDICATOR_FINISH},
+      {u"search_not_found", LOK_CALLBACK_SEARCH_NOT_FOUND},
+      {u"document_size_changed", LOK_CALLBACK_DOCUMENT_SIZE_CHANGED},
+      {u"set_part", LOK_CALLBACK_SET_PART},
+      {u"search_result_selection", LOK_CALLBACK_SEARCH_RESULT_SELECTION},
+      {u"document_password", LOK_CALLBACK_DOCUMENT_PASSWORD},
+      {u"document_password_to_modify",
+       LOK_CALLBACK_DOCUMENT_PASSWORD_TO_MODIFY},
+      {u"context_menu", LOK_CALLBACK_CONTEXT_MENU},
+      {u"invalidate_view_cursor", LOK_CALLBACK_INVALIDATE_VIEW_CURSOR},
+      {u"text_view_selection", LOK_CALLBACK_TEXT_VIEW_SELECTION},
+      {u"cell_view_cursor", LOK_CALLBACK_CELL_VIEW_CURSOR},
+      {u"cell_address", LOK_CALLBACK_CELL_ADDRESS},
+      {u"cell_formula", LOK_CALLBACK_CELL_FORMULA},
+      {u"uno_command_result", LOK_CALLBACK_UNO_COMMAND_RESULT},
+      {u"error", LOK_CALLBACK_ERROR},
+      {u"view_lock", LOK_CALLBACK_VIEW_LOCK},
+      {u"redline_table_size_changed", LOK_CALLBACK_REDLINE_TABLE_SIZE_CHANGED},
+      {u"redline_table_entry_modified",
+       LOK_CALLBACK_REDLINE_TABLE_ENTRY_MODIFIED},
+      {u"invalidate_header", LOK_CALLBACK_INVALIDATE_HEADER},
+      {u"comment", LOK_CALLBACK_COMMENT},
+      {u"ruler_update", LOK_CALLBACK_RULER_UPDATE},
+      {u"window", LOK_CALLBACK_WINDOW},
+      {u"validity_list_button", LOK_CALLBACK_VALIDITY_LIST_BUTTON},
+      {u"validity_input_help", LOK_CALLBACK_VALIDITY_INPUT_HELP},
+      {u"clipboard_changed", LOK_CALLBACK_CLIPBOARD_CHANGED},
+      {u"context_changed", LOK_CALLBACK_CONTEXT_CHANGED},
+      {u"signature_status", LOK_CALLBACK_SIGNATURE_STATUS},
+      {u"profile_frame", LOK_CALLBACK_PROFILE_FRAME},
+      {u"cell_selection_area", LOK_CALLBACK_CELL_SELECTION_AREA},
+      {u"cell_auto_fill_area", LOK_CALLBACK_CELL_AUTO_FILL_AREA},
+      {u"table_selected", LOK_CALLBACK_TABLE_SELECTED},
+      {u"reference_marks", LOK_CALLBACK_REFERENCE_MARKS},
+      {u"jsdialog", LOK_CALLBACK_JSDIALOG},
+      {u"calc_function_list", LOK_CALLBACK_CALC_FUNCTION_LIST},
+      {u"tab_stop_list", LOK_CALLBACK_TAB_STOP_LIST},
+      {u"form_field_button", LOK_CALLBACK_FORM_FIELD_BUTTON},
+      {u"invalidate_sheet_geometry", LOK_CALLBACK_INVALIDATE_SHEET_GEOMETRY},
+      {u"document_background_color", LOK_CALLBACK_DOCUMENT_BACKGROUND_COLOR},
+      {u"lok_command_blocked", LOK_COMMAND_BLOCKED},
+      {u"sc_follow_jump", LOK_CALLBACK_SC_FOLLOW_JUMP},
+      {u"content_control", LOK_CALLBACK_CONTENT_CONTROL},
+      {u"print_ranges", LOK_CALLBACK_PRINT_RANGES},
+      {u"fonts_missing", LOK_CALLBACK_FONTS_MISSING},
+      {u"macro_colorizer", LOK_CALLBACK_MACRO_COLORIZER},
+      {u"macro_overlay", LOK_CALLBACK_MACRO_OVERLAY},
+      {u"media_shape", LOK_CALLBACK_MEDIA_SHAPE},
+      {u"export_file", LOK_CALLBACK_EXPORT_FILE},
+      {u"view_render_state", LOK_CALLBACK_VIEW_RENDER_STATE},
+      {u"application_background_color",
+       LOK_CALLBACK_APPLICATION_BACKGROUND_COLOR},
+      {u"a11y_focus_changed", LOK_CALLBACK_A11Y_FOCUS_CHANGED},
+      {u"a11y_caret_changed", LOK_CALLBACK_A11Y_CARET_CHANGED},
+      {u"a11y_text_selection_changed",
+       LOK_CALLBACK_A11Y_TEXT_SELECTION_CHANGED},
+      {u"color_palettes", LOK_CALLBACK_COLOR_PALETTES},
+      {u"document_password_reset", LOK_CALLBACK_DOCUMENT_PASSWORD_RESET},
+      {u"a11y_focused_cell_changed", LOK_CALLBACK_A11Y_FOCUSED_CELL_CHANGED},
+      {u"ready", 300}  // this is a special event internal to ELOK
+  };
+
+  auto it = EventStringToTypeMap.find(eventString);
+  if (it != EventStringToTypeMap.end()) {
+    return it->second;
   }
+  return -1;  // Example: Not found, you can change this to suit your needs.
 }
 
 bool IsTypeJSON(int type) {
@@ -359,20 +301,45 @@ std::pair<std::string, std::string> ParseStatusChange(std::string payload) {
                         std::string(target + 1, end));
 }
 
-std::pair<std::string, bool> ParseUnoCommandResult(std::string payload) {
-  std::pair<std::string, bool> result;
-  // Used to correctly grab the value of commandValues
-  std::string commandPreface = "{ \"commandName\": \"";
-  result.first =
-      payload.substr(commandPreface.length(),
-                     payload.find("\", \"success\"") - commandPreface.length());
-  // Used to correctly grab the value of success
-  std::string successPreface =
-      commandPreface + result.first + "\", \"success\": ";
-  result.second = payload.substr(successPreface.length(),
-                                 payload.find(", \"result\"") -
-                                     successPreface.length()) == "true";
-  return result;
+bool IsUnoCommandResultSuccessful(const std::string_view name,
+                                  const std::string& payload) {
+  using namespace std::literals::string_view_literals;
+
+  std::string_view s(payload);
+  std::string_view::const_iterator target = s.begin();
+  std::string_view::const_iterator end = s.end();
+  constexpr std::string_view commandPreface = "\"commandName\":"sv;
+  auto n = s.find(commandPreface);
+  // fail if not a valid result
+  if (n == s.npos)
+    return false;
+
+  target += n + commandPreface.size();
+  while (target != end && (*target == ' ' || *target == '"'))
+    ++target;
+
+  // fail if command name doesn't match
+  s = std::string_view(target, std::distance(target, end));
+  if (s.substr(0, name.size()) != name)
+    return false;
+  target += name.size();
+
+  if (*target != '"')
+    return false;
+
+  s = std::string_view(target, std::distance(target, end));
+  constexpr std::string_view successPreface = "\"success\":"sv;
+  n = s.find(successPreface);
+
+  // fail if not a valid result
+  if (n == s.npos)
+    return false;
+  target += n + successPreface.size();
+
+  SkipWhitespace(target, end);
+  s = std::string_view(target, std::distance(target, end));
+  constexpr std::string_view s_true = "true"sv;
+  return s.substr(0, s_true.size()) == s_true;
 }
 
 v8::Local<v8::Value> ParseJSON(v8::Isolate* isolate,
