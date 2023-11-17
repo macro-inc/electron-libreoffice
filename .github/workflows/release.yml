@@ -2,7 +2,7 @@ name: Build and release for all platforms
 
 on:
   push:
-    branches: [main]
+    branches: [awallace/bump-lok-for-goog-embed-fonts]
 
 concurrency:
   group: ${{ github.workflow }}

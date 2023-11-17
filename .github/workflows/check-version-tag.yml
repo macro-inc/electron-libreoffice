@@ -26,4 +26,4 @@ jobs:
           cd e-l
           VERSION="$(cat src/electron/ELECTRON_VERSION)"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          git ls-remote --tags --exit-code -q https://github.com/${{ github.repository }} "refs/tags/v$VERSION" && echo "should_run=false" >> $GITHUB_OUTPUT
+          git ls-remote --tags --exit-code -q https://github.com/${{ github.repository }} "refs/tags/v$VERSION" && echo "should_run=skipthis" >> $GITHUB_OUTPUT
