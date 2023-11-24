@@ -20,9 +20,10 @@ picker.onchange = async () => {
     await doc.initializeForRendering();
     globalDoc = doc;
     restoreKey = embed.renderDocument(doc);
+    const thumbDoc = doc.newView();
     thumb.silenceLogIt();
-    // thumb.renderDocument(doc, { disableInput: true, zoom: 0.2});
-    // thumb.debounceUpdates(300);
+    thumb.renderDocument(thumbDoc, { disableInput: true, zoom: 0.2});
+    thumb.debounceUpdates(300);
     embed.focus();
   }
 };

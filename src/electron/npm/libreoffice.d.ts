@@ -408,6 +408,11 @@ declare namespace LibreOffice {
      */
     initializeForRendering(): Promise<void>;
 
+    /**
+     * returns a new DocumentClient with a seperate LOK view
+     **/
+    newView(): DocumentClient<Events, Commands, CommandMap, GCV>;
+
     as: import('./lok_api').text.GenericTextDocument['as'];
   }
 
