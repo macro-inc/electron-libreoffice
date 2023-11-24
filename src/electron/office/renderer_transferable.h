@@ -17,7 +17,8 @@ struct RendererTransferable {
   std::vector<gfx::Rect> page_rects;
   int first_intersect = -1;
   int last_intersect = -1;
-	std::string last_cursor_rect;
+  std::string last_cursor_rect;
+  float zoom;
 
   RendererTransferable(scoped_refptr<TileBuffer>&& tile_buffer,
                        std::unique_ptr<PaintManager>&& paint_manager,
@@ -25,8 +26,8 @@ struct RendererTransferable {
                        std::vector<gfx::Rect> page_rects_cached,
                        int first_intersect,
                        int last_intersect,
-											 std::string&& last_cursor
-	);
+                       std::string&& last_cursor,
+                       float zoom);
 
   RendererTransferable();
   ~RendererTransferable();

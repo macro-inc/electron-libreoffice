@@ -117,7 +117,7 @@ void OfficeWebPlugin::Destroy() {
         std::move(restore_key_),
         {std::move(tile_buffer_), std::move(paint_manager_),
          std::move(snapshot_), std::move(page_rects_cached_), first_intersect_,
-         last_intersect_, std::move(last_cursor_rect_)});
+         last_intersect_, std::move(last_cursor_rect_), zoom_});
   }
   if (!doomed_) {
     auto* inst = office::OfficeInstance::Get();
@@ -1006,6 +1006,7 @@ std::string OfficeWebPlugin::RenderDocument(
     first_intersect_ = transferable.first_intersect;
     last_intersect_ = transferable.last_intersect;
     last_cursor_rect_ = std::move(transferable.last_cursor_rect);
+    zoom_ = transferable.zoom;
   }
 
   client->Mount(isolate);
