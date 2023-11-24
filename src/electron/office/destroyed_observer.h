@@ -7,9 +7,9 @@
 #include "base/observer_list_types.h"
 
 namespace electron::office {
-class DocumentEventObserver : public base::CheckedObserver {
+class DestroyedObserver : public base::CheckedObserver {
  public:
-  virtual void DocumentCallback(int type, std::string payload) = 0;
+  virtual void OnDestroyed() = 0;
 };
 }  // namespace electron::office
 

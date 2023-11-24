@@ -107,6 +107,8 @@ source_set("office_lib") {
     "atomic_bitset.h",
     "v8_callback.cc",
     "v8_callback.h",
+    "renderer_transferable.cc",
+    "renderer_transferable.h",
     "document_client.cc",
     "document_client.h",
     "document_holder.cc",

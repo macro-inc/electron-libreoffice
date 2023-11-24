@@ -40,6 +40,7 @@
 #include "office/lok_callback.h"
 #include "office/lok_tilebuffer.h"
 #include "office/office_client.h"
+#include "office/office_instance.h"
 #include "office/office_keys.h"
 #include "office/paint_manager.h"
 #include "shell/common/gin_converters/gfx_converter.h"
@@ -89,10 +90,14 @@ using namespace office;
 OfficeWebPlugin::OfficeWebPlugin(blink::WebPluginParams params,
                                  content::RenderFrame* render_frame)
     : render_frame_(render_frame),
+      tile_buffer_(base::MakeRefCounted<TileBuffer>()),
       restore_key_(base::Token::CreateRandom()),
       task_runner_(render_frame->GetTaskRunner(
           blink::TaskType::kInternalMediaRealTime)) {
   paint_manager_ = std::make_unique<office::PaintManager>(this);
+  auto* inst = office::OfficeInstance::Get();
+  if (inst)
+    inst->AddDestroyedObserver(this);
 };
 
 bool OfficeWebPlugin::Initialize(blink::WebPluginContainer* container) {
@@ -106,15 +111,33 @@ bool OfficeWebPlugin::Initialize(blink::WebPluginContainer* container) {
 }
 
 void OfficeWebPlugin::Destroy() {
-  if (document_client_) {
+  if (document_client_.MaybeValid()) {
     document_client_->Unmount();
     document_client_->MarkRendererWillRemount(
-        std::move(restore_key_), std::move(tile_buffer_), std::move(snapshot_));
+        std::move(restore_key_),
+        {std::move(tile_buffer_), std::move(paint_manager_),
+         std::move(snapshot_), std::move(page_rects_cached_), first_intersect_,
+         last_intersect_});
   }
-	if (document_) {
-		document_.RemoveDocumentObservers(this);
-	}
+  if (!doomed_) {
+    auto* inst = office::OfficeInstance::Get();
+    if (inst)
+      inst->RemoveDestroyedObserver(this);
+  }
+  if (document_) {
+    document_.RemoveDocumentObservers(this);
+  }
+
   delete this;
+}
+
+// the office client was destroyed, explicitly remove the hold on the document
+void OfficeWebPlugin::OnDestroyed() {
+  doomed_ = true;
+  auto* inst = office::OfficeInstance::Get();
+  if (inst)
+    inst->RemoveDestroyedObserver(this);
+  document_ = {};
 }
 
 v8::Local<v8::Object> OfficeWebPlugin::V8ScriptableObject(
@@ -179,8 +202,9 @@ void OfficeWebPlugin::UpdateSnapshot(const office::Snapshot snapshot) {
 
 void OfficeWebPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
   base::AutoReset<bool> auto_reset_in_paint(&in_paint_, true);
-  if (!visible_)
+  if (!visible_) {
     return;
+  }
 
   SkRect invalidate_rect =
       gfx::RectToSkRect(gfx::IntersectRects(css_plugin_rect_, rect));
@@ -192,8 +216,9 @@ void OfficeWebPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
   canvas->clipRect(invalidate_rect);
 
   // not mounted
-  if (!document_)
+  if (!document_) {
     return;
+  }
 
   if (!plugin_rect_.origin().IsOrigin())
     canvas->translate(plugin_rect_.x(), plugin_rect_.y());
@@ -217,7 +242,9 @@ void OfficeWebPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
     ScheduleAvailableAreaPaint();
     first_paint_ = false;
   } else {
-    paint_manager_->ScheduleNextPaint(missing);
+    if (!paint_manager_->ScheduleNextPaint(missing) && missing.size() != 0) {
+			ScheduleAvailableAreaPaint();
+		}
     first_paint_ = false;
   }
   scrolling_ = false;
@@ -320,8 +347,9 @@ blink::WebInputEventResult OfficeWebPlugin::HandleInputEvent(
 blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
     const blink::WebKeyboardEvent event,
     ui::Cursor* cursor) {
-  if (!document_)
+  if (!document_) {
     return blink::WebInputEventResult::kNotHandled;
+  }
 
   blink::WebInputEvent::Type type = event.GetType();
 
@@ -569,11 +597,11 @@ bool OfficeWebPlugin::HasEditableText() const {
 }
 
 bool OfficeWebPlugin::CanUndo() const {
-  return document_client_ && document_client_->CanUndo();
+  return document_client_.MaybeValid() && document_client_->CanUndo();
 }
 
 bool OfficeWebPlugin::CanRedo() const {
-  return document_client_ && document_client_->CanRedo();
+  return document_client_.MaybeValid() && document_client_->CanRedo();
 }
 
 content::RenderFrame* OfficeWebPlugin::render_frame() const {
@@ -624,7 +652,7 @@ void OfficeWebPlugin::OnGeometryChanged(double old_zoom,
 std::vector<gfx::Rect> OfficeWebPlugin::PageRects() {
   std::vector<gfx::Rect> result;
 
-  if (!document_)
+  if (!document_ || !document_client_.MaybeValid())
     return result;
   auto page_rects_ = document_client_->PageRects();
 
@@ -650,11 +678,15 @@ void OfficeWebPlugin::InvalidateAllTiles() {
 }
 
 gfx::Size OfficeWebPlugin::GetDocumentPixelSize() {
+  if (!document_client_.MaybeValid())
+    return {};
   auto size = document_client_->DocumentSizeTwips();
   return gfx::Size(ceil(TwipToPx(size.width())), ceil(TwipToPx(size.height())));
 }
 
 gfx::Size OfficeWebPlugin::GetDocumentCSSPixelSize() {
+  if (!document_client_.MaybeValid())
+    return {};
   auto size = document_client_->DocumentSizeTwips();
   return gfx::Size(
       ceil(office::lok_callback::TwipToPixel(size.width(), zoom_)),
@@ -692,8 +724,9 @@ void OfficeWebPlugin::OnViewportChanged(
 
 void OfficeWebPlugin::HandleInvalidateTiles(std::string payload) {
   // not mounted
-  if (!document_)
+  if (!document_) {
     return;
+  }
 
   std::string_view payload_sv(payload);
 
@@ -836,7 +869,7 @@ void OfficeWebPlugin::UpdateIntersectingPages() {
 }
 
 void OfficeWebPlugin::UpdateScroll(int y_position) {
-  if (!document_ || stop_scrolling_)
+  if (!document_ || !document_client_.MaybeValid() || stop_scrolling_)
     return;
 
   float view_height =
@@ -862,8 +895,6 @@ void OfficeWebPlugin::UpdateScroll(int y_position) {
   take_snapshot_ = true;
 }
 
-// TODO: finish reset case
-// TODO: add restore case
 std::string OfficeWebPlugin::RenderDocument(
     v8::Isolate* isolate,
     gin::Handle<office::DocumentClient> client,
@@ -894,12 +925,11 @@ std::string OfficeWebPlugin::RenderDocument(
     }
   }
 
-  // TODO: honestly, this is terrible, need to do this properly
-  // already mounted
-  bool needs_reset = document_ != client->GetDocument();
-  if (needs_reset) {
+  bool needs_reset = document_ && document_ != client->GetDocument();
+  if (needs_reset && document_client_.MaybeValid()) {
     document_client_->Unmount();
   }
+  bool needs_restore = maybe_restore_key.has_value();
 
   document_ = client->GetDocument();
   document_client_ = client->GetWeakPtr();
@@ -913,15 +943,27 @@ std::string OfficeWebPlugin::RenderDocument(
     tile_buffer_->InvalidateAllTiles();
   }
 
+  if (needs_restore) {
+    auto transferable = client->GetRestoredRenderer(maybe_restore_key.value());
+    tile_buffer_ = std::move(transferable.tile_buffer);
+    snapshot_ = std::move(transferable.snapshot);
+    paint_manager_ = std::move(transferable.paint_manager);
+    first_paint_ = false;
+  }
+
   client->Mount(isolate);
-  auto size = document_client_->DocumentSizeTwips();
-  scroll_y_position_ = 0;
-  tile_buffer_->SetYPosition(0);
-  tile_buffer_->Resize(size.width(), size.height(), TotalScale());
+  if (needs_restore) {
+    scroll_y_position_ = snapshot_.scroll_y_position;
+  } else {
+    auto size = document_client_->DocumentSizeTwips();
+    scroll_y_position_ = 0;
+    tile_buffer_->SetYPosition(0);
+    tile_buffer_->Resize(size.width(), size.height(), TotalScale());
+  }
 
   if (needs_reset) {
     // this is an awful hack
-    auto device_scale = device_scale_;
+    float device_scale = device_scale_;
     device_scale_ = 0;
     task_runner_->PostTask(
         FROM_HERE,
@@ -929,7 +971,9 @@ std::string OfficeWebPlugin::RenderDocument(
                        css_plugin_rect_, device_scale));
   }
 
-  document_->resetSelection();
+  if (!needs_restore) {
+    document_->resetSelection();
+  }
 
   document_.AddDocumentObserver(LOK_CALLBACK_DOCUMENT_SIZE_CHANGED, this);
   document_.AddDocumentObserver(LOK_CALLBACK_INVALIDATE_TILES, this);
@@ -943,8 +987,14 @@ std::string OfficeWebPlugin::RenderDocument(
         FROM_HERE,
         base::BindOnce(&OfficeWebPlugin::UpdateScroll, GetWeakPtr(), 0));
   }
+  if (needs_restore) {
+    task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&OfficeWebPlugin::OnGeometryChanged,
+                                  GetWeakPtr(), viewport_zoom_, device_scale_));
+    paint_manager_->ResumePaint();
+  }
 
-  return base::Token::CreateRandom().ToString();
+  return restore_key_.ToString();
 }
 
 void OfficeWebPlugin::ScheduleAvailableAreaPaint(bool invalidate) {
@@ -968,7 +1018,8 @@ void OfficeWebPlugin::ScheduleAvailableAreaPaint(bool invalidate) {
 
 void OfficeWebPlugin::TriggerFullRerender() {
   first_paint_ = true;
-  if (document_client_ && !document_client_->DocumentSizeTwips().IsEmpty()) {
+  if (document_client_.MaybeValid() &&
+      !document_client_->DocumentSizeTwips().IsEmpty()) {
     tile_buffer_->InvalidateAllTiles();
     ScheduleAvailableAreaPaint();
   }

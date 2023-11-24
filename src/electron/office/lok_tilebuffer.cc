@@ -61,6 +61,8 @@ Snapshot::Snapshot() = default;
 Snapshot::~Snapshot() = default;
 Snapshot::Snapshot(const Snapshot& other) = default;
 Snapshot& Snapshot::operator=(const Snapshot& other) = default;
+Snapshot& Snapshot::operator=(Snapshot&& other) noexcept = default;
+Snapshot::Snapshot(Snapshot&& other) noexcept = default;
 
 TileBuffer::~TileBuffer() = default;
 

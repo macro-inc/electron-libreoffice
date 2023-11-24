@@ -31,12 +31,9 @@ DocumentHolderWithView::DocumentHolderWithView(
   auto& owned_document = holder_->doc_;
   int count = owned_document->getViewsCount();
   if (count == 0) {
-    LOG(ERROR) << "Document didn't have count on construction";
     view_id_ = owned_document->createView();
-  }
-  if (holder_->HasOneRef()) {
+  } else if (holder_->HasOneRef()) {
     CHECK(count == 1);
-    LOG(ERROR) << "First document ref!";
     // getting the current view is not reliable, so we get the list
     std::vector<int> ids(count);
     owned_document->getViewIds(ids.data(), count);
@@ -49,7 +46,7 @@ DocumentHolderWithView::DocumentHolderWithView(
 
   owned_document->registerCallback(
       &OfficeInstance::HandleDocumentCallback,
-      new DocumentIdWithViewId(PtrToId(), view_id_));
+      new DocumentCallbackContext(PtrToId(), view_id_, OfficeInstance::Get()));
   deregisters_callback_ = true;
 }
 
@@ -73,7 +70,8 @@ DocumentHolderWithView& DocumentHolderWithView::operator=(
 // move constructor
 DocumentHolderWithView::DocumentHolderWithView(
     DocumentHolderWithView&& other) noexcept
-    : holder_(std::move(other.holder_)),
+    : view_id_(other.view_id_),
+      holder_(std::move(other.holder_)),
       deregisters_callback_(other.deregisters_callback_) {
   other.deregisters_callback_ = false;
 }
@@ -87,7 +85,7 @@ DocumentHolderWithView::DocumentHolderWithView(
 DocumentHolderWithView& DocumentHolderWithView::operator=(
     const DocumentHolderWithView& other) {
   if (this != &other) {
-    holder_ = std::move(other.holder_);
+    holder_ = other.holder_;
     view_id_ = other.view_id_;
     deregisters_callback_ = false;
   }
@@ -122,7 +120,7 @@ lok::Document* DocumentHolderWithView::operator->() const {
 }
 
 DocumentHolderWithView::operator bool() const {
-  return static_cast<bool>(holder_->doc_);
+  return holder_ && holder_->doc_;
 }
 
 bool DocumentHolderWithView::operator==(
@@ -189,10 +187,9 @@ void DocumentHolderWithView::RemoveDocumentObserver(
   DCHECK(OfficeInstance::IsValid());
   OfficeInstance::Get()->RemoveDocumentObserver({PtrToId(), event_id, view_id_},
                                                 observer);
-
 }
-void DocumentHolderWithView::RemoveDocumentObservers(DocumentEventObserver* observer)
-{
+void DocumentHolderWithView::RemoveDocumentObservers(
+    DocumentEventObserver* observer) {
   DCHECK(OfficeInstance::IsValid());
   OfficeInstance::Get()->RemoveDocumentObservers(PtrToId(), observer);
 }
@@ -203,7 +200,7 @@ void DocumentHolderWithView::RemoveDocumentObservers() {
 }
 
 size_t DocumentHolderWithView::PtrToId() {
-  return (size_t)holder_->doc_.get();
+  return holder_ ? (size_t)holder_->doc_.get() : 0;
 }
 
 }  // namespace electron::office

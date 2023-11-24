@@ -2,15 +2,16 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
-#ifndef OFFICE_OFFICE_SINGLETON_H_
-#define OFFICE_OFFICE_SINGLETON_H_
+#pragma once
 
 #include <map>
 #include <set>
 #include <unordered_map>
+#include <atomic>
 #include "base/hash/hash.h"
 #include "base/observer_list_threadsafe.h"
 #include "document_event_observer.h"
+#include "office/destroyed_observer.h"
 #include "office_load_observer.h"
 
 namespace lok {
@@ -46,6 +47,7 @@ struct ::std::hash<DocumentEventId> {
 }  // namespace std
 
 namespace electron::office {
+
 // This is separated from OfficeClient for two reasons:
 // 1. LOK is started before the V8 context arrives
 // 2. Keeps the thread-local magic safe from the V8 GC
@@ -57,13 +59,14 @@ class OfficeInstance {
   static void Create();
   static OfficeInstance* Get();
   static bool IsValid();
+  static void Unset();
 
   void AddLoadObserver(OfficeLoadObserver* observer);
   void RemoveLoadObserver(OfficeLoadObserver* observer);
 
   static void HandleDocumentCallback(int type,
                                      const char* payload,
-                                     void* idPair);
+                                     void* documentContext);
   void AddDocumentObserver(DocumentEventId id, DocumentEventObserver* observer);
   void RemoveDocumentObserver(DocumentEventId id,
                               DocumentEventObserver* observer);
@@ -71,25 +74,35 @@ class OfficeInstance {
                                DocumentEventObserver* observer);
   void RemoveDocumentObservers(size_t document_id);
 
+  void AddDestroyedObserver(DestroyedObserver* observer);
+  void RemoveDestroyedObserver(DestroyedObserver* observer);
+	void HandleClientDestroyed();
+
   // disable copy
   OfficeInstance(const OfficeInstance&) = delete;
   OfficeInstance& operator=(const OfficeInstance&) = delete;
 
  private:
   std::unique_ptr<lok::Office> instance_;
+	std::atomic<bool> unset_ = false;
+	std::atomic<bool> destroying_ = false;
   void Initialize();
 
   using OfficeLoadObserverList =
       base::ObserverListThreadSafe<OfficeLoadObserver>;
   using DocumentEventObserverList =
       base::ObserverListThreadSafe<DocumentEventObserver>;
+  using DestroyedObserverList =
+      base::ObserverListThreadSafe<DestroyedObserver>;
   const scoped_refptr<OfficeLoadObserverList> loaded_observers_;
   std::unordered_map<DocumentEventId, scoped_refptr<DocumentEventObserverList>>
       document_event_observers_;
   std::unordered_multimap<size_t, DocumentEventId>
       document_id_to_document_event_ids_;
+  const scoped_refptr<DestroyedObserverList> destroyed_observers_;
+
+  base::WeakPtrFactory<OfficeInstance> weak_factory_{this};
 };
 
 }  // namespace electron::office
 
-#endif  // OFFICE_OFFICE_SINGLETON_H_

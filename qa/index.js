@@ -6,22 +6,6 @@ const embed = document.getElementById('el-embed');
 /** @type OfficeDoc */
 const thumb = document.getElementById('el-thumb');
 
-// libreoffice.on('status_indicator_set_value', (x) => {
-//   console.log(x);
-// });
-
-// libreoffice.on('status_changed', (x) => {
-//   console.log('lo', x);
-// });
-
-// libreoffice.on('window', (x) => {
-//   console.log('lo', x);
-// });
-
-window.addEventListener('beforeunload', () => {
-  libreoffice._beforeunload();
-});
-
 let globalDoc;
 let zoom = 1.0;
 let uri;
@@ -33,11 +17,12 @@ picker.onchange = async () => {
   if (picker.files.length === 1) {
     uri = encodeURI('file:///' + picker.files[0].path.replace(/\\/g, '/'));
     const doc = await libreoffice.loadDocument(uri);
+    await doc.initializeForRendering();
     globalDoc = doc;
-    embed.renderDocument(doc);
+    restoreKey = embed.renderDocument(doc);
     thumb.silenceLogIt();
-    thumb.renderDocument(doc, { disableInput: true, zoom: 0.2});
-    thumb.debounceUpdates(300);
+    // thumb.renderDocument(doc, { disableInput: true, zoom: 0.2});
+    // thumb.debounceUpdates(300);
     embed.focus();
   }
 };
@@ -53,10 +38,10 @@ function zoomOut() {
   embed.setZoom(zoom);
 }
 
-function saveToMemory() {
-  const buffer = globalDoc.saveToMemory();
+async function saveToMemory() {
+  const buffer = await globalDoc.saveToMemory();
   console.log('saveToMemory', { buffer });
-  const newDoc = libreoffice.loadDocumentFromArrayBuffer(buffer);
+  const newDoc = await libreoffice.loadDocumentFromArrayBuffer(buffer);
   console.log('New doc', { text: newDoc.getText().getString() });
 }
 
@@ -73,6 +58,11 @@ function attachChildrenToNodes(outline, outlineTree) {
     const children = outline.filter((o) => o.parent === node.id);
     outlineTree[node.id].children = children;
   }
+}
+
+function remount() {
+  embed.remount();
+  embed.focus();
 }
 
 async function runColorizeWorker() {
@@ -529,123 +519,11 @@ function isWordBeforeEndOfParagraph(
   );
 }
 
-function saveAsOverlays() {
-  const start = Date.now();
-  globalDoc.postUnoCommand('.uno:SaveAs', {
-    URL: {
-      type: 'string',
-      value: `${uri}.fixed.docx`,
-    },
-    FilterName: {
-      type: 'string',
-      value: 'MS Word 2007 XML',
-    },
-  });
-  console.log(`took ${Date.now() - start}ms to save`);
-}
-function saveOverlays() {
-  const start = Date.now();
-  globalDoc.postUnoCommand('.uno:Save');
-  console.log(`took ${Date.now() - start}ms to save`);
-}
-
 /// <reference path="../src/electron/npm/libreoffice.d.ts" />
 function colorizeWorker() {
-  libreoffice.on('status_indicator_set_value', (x) => {
-    self.postMessage({ type: 'load_progress', percent: x });
-  });
   let doc;
   let shouldStop = false;
-  function colorize(text) {
-    // RGB is 24-bit (0xFFFFFF = (1 << 24) - 1;
-    const MAX_COLOR = 0xffffff;
-    // right-most bits, max # words is 2**WORD_BITS
-    const WORD_BITS = 9;
-    // how much each paragraph increments
-    const PARAGRAPH_SECTION_INCREMENT = 1 << WORD_BITS;
-    // the mask of bits used for the word index
-    const WORD_SECTION_MASK = PARAGRAPH_SECTION_INCREMENT - 1;
-    // the mask of the bits used for the paragraph index (starts with PARAGRAPH_SECTION_INCREMENT)
-    const PARAGRAPH_SECTION_MASK = MAX_COLOR - WORD_SECTION_MASK;
 
-    const paragraphAccess = text.as('container.XEnumerationAccess');
-    if (!paragraphAccess || !paragraphAccess.hasElements()) return;
-
-    const paragraphIter = paragraphAccess.createEnumeration();
-
-    if (!paragraphIter) return;
-
-    let color = PARAGRAPH_SECTION_INCREMENT;
-
-    while (paragraphIter.hasMoreElements()) {
-      let rawWordCount = 0;
-      const el = paragraphIter.nextElement();
-      const table = el.as('text.XTextTable');
-      if (table) {
-        // TODO: re-enable after reason for crash
-        // visitTextTable(table, colorizeCell, cancelable);
-        continue;
-      }
-      const paragraphTextRange = el.as('text.XTextRange');
-      if (!paragraphTextRange) {
-        continue;
-      }
-
-      const wordCursor = text
-        .createTextCursorByRange(paragraphTextRange)
-        .as('text.XWordCursor');
-      const rangeCompare = text.as('text.XTextRangeCompare');
-      if (!wordCursor || !rangeCompare) continue;
-
-      do {
-        // select the word
-        wordCursor.gotoStartOfWord(false);
-        wordCursor.gotoEndOfWord(true);
-
-        // color it
-        const props = wordCursor.as('beans.XPropertySet');
-        if (!props) continue;
-        props.setPropertyValue('CharColor', color);
-
-        rawWordCount++;
-        if ((++color & WORD_SECTION_MASK) == 0) {
-          throw (
-            'Ran out of word colors: ' +
-            rawWordCount +
-            '\n' +
-            wordCursor?.getString()
-          );
-        }
-        // despite what the documentation says, this will get stuck on a single word and return TRUE,
-        // for example, in some cases if it precedes a table it will just repeatedly provide the same word
-        wordCursor.gotoNextWord(false);
-      } while (
-        isWordBeforeEndOfParagraph(rangeCompare, wordCursor, paragraphTextRange)
-      );
-
-      color = (color + PARAGRAPH_SECTION_INCREMENT) & PARAGRAPH_SECTION_MASK;
-      if (color == 0) {
-        throw 'Ran out of colors';
-      }
-    }
-
-    console.log('Last color was', '0x' + color.toString(16));
-
-    return color;
-  }
-
-  function isWordBeforeEndOfParagraph(
-    rangeCompare,
-    wordCursor,
-    paragraphTextRange
-  ) {
-    return (
-      rangeCompare.compareRegionStarts(
-        wordCursor.getStart(),
-        paragraphTextRange.getEnd()
-      ) == 1
-    );
-  }
   self.addEventListener(
     'message',
     async function (e) {
@@ -654,23 +532,16 @@ function colorizeWorker() {
         case 'load':
           const timeStart = performance.now();
           self.postMessage({ type: 'loading', ...data });
-          doc = libreoffice.loadDocumentFromArrayBuffer(data.data);
+          doc = await libreoffice.loadDocumentFromArrayBuffer(data.data);
           console.log(`Loaded document in ${performance.now() - timeStart}ms`);
           self.postMessage({ type: 'loaded', file: data.file });
-          const xDoc = doc;
-          xDoc.startBatchUpdate();
-          const text = xDoc.getText();
-          colorize(text, shouldStop);
-          // Skip calling finishBatchUpdate because the document will be saved as a PDF and discarded
-          xDoc.as('frame.XStorable').storeToURL(data.file + '.pdf', {
-            FilterName: 'writer_pdf_Export',
-          });
-          xDoc.as('util.XCloseable').close(true);
+          doc.postUnoCommand('.uno:Colorize');
+          await doc.saveAs(data.file + '.pdf', 'pdf');
           self.postMessage({
             type: 'finished',
             time: (performance.now() - timeStart) / 1000,
           });
-          self.close();
+          // self.close();
           break;
         case 'stop':
           shouldStop = true;

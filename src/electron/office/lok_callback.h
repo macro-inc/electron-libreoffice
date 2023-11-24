@@ -2,8 +2,7 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
-#ifndef OFFICE_LOK_CALLBACK_H_
-#define OFFICE_LOK_CALLBACK_H_
+#pragma once
 
 #include <string>
 #include "ui/gfx/geometry/rect.h"
@@ -53,4 +52,4 @@ inline float TwipToPixel(float in, float zoom) {
 }
 
 }  // namespace electron::office::lok_callback
-#endif  // OFFICE_LOK_CALLBACK_H_
+

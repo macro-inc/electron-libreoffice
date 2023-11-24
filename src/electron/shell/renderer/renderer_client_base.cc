@@ -9,6 +9,8 @@
 #include <utility>
 #include <vector>
 
+#include "base/at_exit.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
@@ -596,17 +598,21 @@ bool RendererClientBase::IsWebViewFrame(
 }
 
 #if BUILDFLAG(ENABLE_OFFICE)
-void RendererClientBase::DidInitializeWorkerContextOnWorkerThread(
-    v8::Local<v8::Context> context) {
-	office::OfficeInstance::Create();
-}
 void RendererClientBase::WorkerScriptReadyForEvaluationOnWorkerThread(
     v8::Local<v8::Context> context) {
-  office::OfficeClient::InstallToContext(context);
+  // Uncomment to enable using LOK from workers
+  // By default it _will share the global lock_, so there's currently no benefit
+  // to this
+
+  // office::OfficeInstance::Create();
+  // office::OfficeClient::InstallToContext(context);
 }
 void RendererClientBase::WillDestroyWorkerContextOnWorkerThread(
     v8::Local<v8::Context> context) {
-  office::OfficeClient::RemoveFromContext(context);
+  // Uncomment to enable using LOK from workers. By default it _will share the
+  // global lock_, so there's currently no benefit to this
+
+  // office::OfficeClient::RemoveFromContext(context);
 }
 #endif
 

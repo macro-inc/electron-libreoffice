@@ -2,8 +2,7 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
-#ifndef OFFICE_CALLBACK_H_
-#define OFFICE_CALLBACK_H_
+#pragma once
 
 #include <utility>
 #include <vector>
@@ -12,8 +11,9 @@
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "gin/dictionary.h"
 #include "shell/common/gin_converters/std_converter.h"
-#include "shell/common/gin_helper/locker.h"
-#include "shell/common/gin_helper/microtasks_scope.h"
+#include "v8/include/v8-exception.h"
+#include "v8/include/v8-function.h"
+#include "v8/include/v8-microtask-queue.h"
 
 namespace electron::office {
 
@@ -63,11 +63,11 @@ struct V8FunctionInvoker<v8::Local<v8::Value>(ArgTypes...)> {
   static v8::Local<v8::Value> Go(v8::Isolate* isolate,
                                  const SafeV8Function& function,
                                  ArgTypes... raw) {
-    gin_helper::Locker locker(isolate);
     v8::EscapableHandleScope handle_scope(isolate);
     if (!function.IsAlive())
       return v8::Undefined(isolate);
-    gin_helper::MicrotasksScope microtasks_scope(isolate, true);
+		v8::MicrotasksScope microtasks_scope(
+			isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
     v8::Local<v8::Function> holder = function.NewHandle(isolate);
     v8::Local<v8::Context> context = holder->GetCreationContextChecked();
     v8::Context::Scope context_scope(context);
@@ -89,11 +89,11 @@ struct V8FunctionInvoker<void(ArgTypes...)> {
   static void Go(v8::Isolate* isolate,
                  const SafeV8Function& function,
                  ArgTypes... raw) {
-    gin_helper::Locker locker(isolate);
     v8::HandleScope handle_scope(isolate);
     if (!function.IsAlive())
       return;
-    gin_helper::MicrotasksScope microtasks_scope(isolate, true);
+		v8::MicrotasksScope microtasks_scope(
+			isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
     v8::Local<v8::Function> holder = function.NewHandle(isolate);
     v8::Local<v8::Context> context = holder->GetCreationContextChecked();
     v8::Context::Scope context_scope(context);
@@ -113,12 +113,12 @@ struct V8FunctionInvoker<ReturnType(ArgTypes...)> {
   static ReturnType Go(v8::Isolate* isolate,
                        const SafeV8Function& function,
                        ArgTypes... raw) {
-    gin_helper::Locker locker(isolate);
     v8::HandleScope handle_scope(isolate);
     ReturnType ret = ReturnType();
     if (!function.IsAlive())
       return ret;
-    gin_helper::MicrotasksScope microtasks_scope(isolate, true);
+		v8::MicrotasksScope microtasks_scope(
+			isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
     v8::Local<v8::Function> holder = function.NewHandle(isolate);
     v8::Local<v8::Context> context = holder->GetCreationContextChecked();
     v8::Context::Scope context_scope(context);
@@ -137,4 +137,3 @@ struct V8FunctionInvoker<ReturnType(ArgTypes...)> {
 
 }  // namespace electron::office
 
-#endif  // OFFICE_CALLBACK_H_

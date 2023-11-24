@@ -2,8 +2,7 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
-#ifndef OFFICE_CANCELLATION_FLAG_H
-#define OFFICE_CANCELLATION_FLAG_H
+#pragma once
 
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_refptr.h"
@@ -41,5 +40,3 @@ inline void CancelAndReset(CancelFlagPtr& flag) {
 }
 
 }  // namespace electron::office
-
-#endif  // OFFICE_CANCELLATION_FLAG_H

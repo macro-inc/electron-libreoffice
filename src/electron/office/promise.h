@@ -5,8 +5,7 @@
 // This is a modification of the Promise wrapper used in the Electron shell to
 // make it useful for other usecases
 
-#ifndef OFFICE_PROMISE_H_
-#define OFFICE_PROMISE_H_
+#pragma once
 
 #include <string>
 #include <tuple>
@@ -21,9 +20,10 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "gin/wrappable.h"
+#include "office/destroyed_observer.h"
 #include "shell/common/gin_converters/std_converter.h"
-#include "shell/common/gin_helper/locker.h"
-#include "shell/common/gin_helper/microtasks_scope.h"
+#include "v8-primitive.h"
+#include "v8/include/v8-microtask-queue.h"
 
 namespace electron::office {
 
@@ -76,10 +76,10 @@ class PromiseBase {
   v8::Local<v8::Promise> GetHandle() const;
 
   v8::Isolate* isolate() const { return isolate_; }
+  scoped_refptr<base::SequencedTaskRunner> task_runner() const;
 
  protected:
   v8::Local<v8::Promise::Resolver> resolver() const;
-  scoped_refptr<base::SequencedTaskRunner> task_runner() const;
 
  private:
   v8::Isolate* isolate_;
@@ -102,6 +102,13 @@ class Promise : public PromiseBase {
                                   std::move(promise), std::move(result)));
   }
 
+  static void ResolvePromise(Promise<RT> promise) {
+    promise.task_runner()->PostTask(
+        FROM_HERE, base::BindOnce([](Promise<RT> promise,
+                                     RT result) { promise.Resolve(); },
+                                  std::move(promise)));
+  }
+
   // Returns an already-resolved promise.
   static v8::Local<v8::Promise> ResolvedPromise(v8::Isolate* isolate,
                                                 RT result) {
@@ -119,25 +126,13 @@ class Promise : public PromiseBase {
   // Promise resolution is a microtask
   // We use the MicrotasksRunner to trigger the running of pending microtasks
   v8::Maybe<bool> Resolve(const RT& value) {
-    gin_helper::Locker locker(isolate());
     v8::HandleScope handle_scope(isolate());
-    gin_helper::MicrotasksScope microtasks_scope(isolate());
+    const v8::MicrotasksScope microtasks_scope(
+        isolate(), v8::MicrotasksScope::kDoNotRunMicrotasks);
     v8::Context::Scope context_scope(GetContext());
 
     return resolver()->Resolve(GetContext(),
                                gin::ConvertToV8(isolate(), value));
-  }
-
-  void ResolveWith(base::OnceCallback<RT(void)> callback) {
-    auto runner = task_runner();
-    auto resolve = base::BindPostTask(
-        task_runner(), base::BindOnce(
-                           [](Promise<RT>&& promise, RT value) {
-                             promise.Resolve(value.Get(promise.isolate()));
-                           },
-                           std::move(this)));
-    runner->PostTaskAndReplyWithResult(FROM_HERE, std::move(callback),
-                                       std::move(resolve));
   }
 
   void Resolve() { PromiseBase::Resolve(); }
@@ -149,8 +144,9 @@ class Promise : public PromiseBase {
                 std::is_base_of<gin::Wrappable<std::remove_pointer_t<P>>,
                                 std::remove_pointer_t<P>>::value>>
   void Resolve(P value) {
-    gin_helper::Locker locker(isolate());
     v8::HandleScope handle_scope(isolate());
+    const v8::MicrotasksScope microtasks_scope(
+        isolate(), v8::MicrotasksScope::kDoNotRunMicrotasks);
     v8::Context::Scope context_scope(GetContext());
     v8::Local<v8::Value> result;
     // nullptr
@@ -162,7 +158,7 @@ class Promise : public PromiseBase {
       Resolve();
     }
 
-		std::ignore = resolver()->Resolve(GetContext(), result);
+    std::ignore = resolver()->Resolve(GetContext(), result);
   }
 };
 
@@ -187,7 +183,9 @@ class Promise<v8::Value> : public PromiseBase {
 
   void Resolve();
   void Resolve(v8::Local<v8::Value> value);
-  void ResolveWith(base::OnceCallback<v8::Global<v8::Value>(void)> callback);
+  static void ResolvePromise(Promise<v8::Value> promise,
+                             v8::Global<v8::Value> result);
+  static void ResolvePromise(Promise<v8::Value> promise);
 };
 
 }  // namespace electron::office
@@ -204,4 +202,3 @@ struct Converter<electron::office::Promise<T>> {
 
 }  // namespace gin
 
-#endif  // OFFICE_PROMISE_H_

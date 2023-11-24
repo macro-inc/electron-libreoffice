@@ -11,6 +11,7 @@
 #include <vector>
 #include "LibreOfficeKit/LibreOfficeKit.hxx"
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/containers/span.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
@@ -114,18 +115,24 @@ DocumentClient::DocumentClient(DocumentHolderWithView holder)
   DCHECK(document_holder_);
   DCHECK(OfficeInstance::IsValid());
 
-  document_holder_.AddDocumentObserver(LOK_CALLBACK_DOCUMENT_SIZE_CHANGED,
-                                       this);
-  document_holder_.AddDocumentObserver(LOK_CALLBACK_INVALIDATE_TILES, this);
-  document_holder_.AddDocumentObserver(LOK_CALLBACK_STATE_CHANGED, this);
-  document_holder_.AddDocumentObserver(LOK_CALLBACK_UNO_COMMAND_RESULT, this);
+  static constexpr int internal_monitors[] = {
+      LOK_CALLBACK_DOCUMENT_SIZE_CHANGED,
+      LOK_CALLBACK_INVALIDATE_TILES,
+      LOK_CALLBACK_STATE_CHANGED,
+      LOK_CALLBACK_UNO_COMMAND_RESULT,
+  };
+  for (auto event_type : internal_monitors) {
+    document_holder_.AddDocumentObserver(event_type, this);
+    event_types_registered_.emplace(event_type);
+  }
+  OfficeInstance::Get()->AddDestroyedObserver(this);
 }
 
 DocumentClient::~DocumentClient() {
   if (!document_holder_)
     return;
   document_holder_.RemoveDocumentObservers();
-  LOG(ERROR) << "DOC CLIENT DESTROYED: " << document_holder_.Path();
+  OfficeInstance::Get()->RemoveDestroyedObserver(this);
 }
 
 // gin::Wrappable
@@ -175,8 +182,8 @@ gin::ObjectTemplateBuilder DocumentClient::GetObjectTemplateBuilder(
       .SetMethod("as", &DocumentClient::As)
       .SetMethod("newView", &DocumentClient::NewView)
       .SetProperty("isReady", &DocumentClient::IsReady)
-      .SetProperty("initializeForRendering",
-                   &DocumentClient::InitializeForRendering);
+      .SetMethod("initializeForRendering",
+                 &DocumentClient::InitializeForRendering);
 }
 
 const char* DocumentClient::GetTypeName() {
@@ -261,26 +268,22 @@ bool DocumentClient::HasEditableText() {
 // }
 
 void DocumentClient::MarkRendererWillRemount(
-    base::Token&& restore_key,
-    scoped_refptr<TileBuffer>&& tile_buffer,
-    Snapshot&& snapshot) {
-  tile_buffers_to_restore_[restore_key] =
-      std::make_pair(std::move(tile_buffer), std::move(snapshot));
+    base::Token restore_key,
+    RendererTransferable&& renderer_transferable) {
+  tile_buffers_to_restore_[std::move(restore_key)] =
+      std::move(renderer_transferable);
 }
 
-std::pair<scoped_refptr<TileBuffer>, Snapshot>
-DocumentClient::GetRestoredTileBuffer(const std::string& restore_key) {
-  auto maybe_token = base::Token::FromString(restore_key);
-  if (!maybe_token)
+RendererTransferable DocumentClient::GetRestoredRenderer(
+    const base::Token& restore_key) {
+  auto it = tile_buffers_to_restore_.find(restore_key);
+  if (it == tile_buffers_to_restore_.end()) {
     return {};
-  auto token = maybe_token.value();
+  }
 
-  auto it = tile_buffers_to_restore_.find(token);
-  if (it == tile_buffers_to_restore_.end())
-    return {};
-
+  RendererTransferable res = std::move(it->second);
   tile_buffers_to_restore_.erase(it);
-  return it->second;
+  return res;
 }
 
 DocumentHolderWithView DocumentClient::GetDocument() {
@@ -396,6 +399,9 @@ void DocumentClient::On(v8::Isolate* isolate,
     LOG(ERROR) << "on, unknown event: " << event_name;
   }
   event_listeners_[type].emplace_back(isolate, listener_callback);
+  if (event_types_registered_.emplace(type).second) {
+    document_holder_.AddDocumentObserver(type, this);
+  }
 
   // store the isolate for emitting callbacks later in ForwardEmit
   if (!isolate_) {
@@ -417,6 +423,13 @@ void DocumentClient::Off(const std::u16string& event_name,
 
   auto& vec = itr->second;
   vec.erase(std::remove(vec.begin(), vec.end(), listener_callback), vec.end());
+  // This would be used to remove observers, but in reality they're likely to
+  // be-reregistered with a different function, and this would remove the
+  // internal monitors.
+  /* if (vec.size() == 0) {
+// 	event_types_registered_.erase(type);
+// 	document_holder_.RemoveDocumentObserver(type, this);
+}*/
 }
 
 void DocumentClient::Emit(v8::Isolate* isolate,
@@ -480,29 +493,33 @@ v8::Local<v8::Promise> DocumentClient::SaveToMemory(v8::Isolate* isolate,
                                            format ? format.get() : nullptr);
 
         if (size <= 0) {
-          promise.Resolve({});
+          Promise<v8::Value>::ResolvePromise(std::move(promise));
           return;
         }
 
-        promise.ResolveWith(base::BindOnce(
-            [](Promise<v8::Value>&& promise, char* data, size_t size) {
-              v8::Isolate* isolate = promise.isolate();
-              gin_helper::Locker locker(isolate);
-              v8::HandleScope handle_scope(isolate);
-              gin_helper::MicrotasksScope microtasks_scope(isolate);
-              v8::Context::Scope context_scope(promise.GetContext());
+        promise.task_runner()->PostTask(
+            FROM_HERE,
+            base::BindOnce(
+                [](Promise<v8::Value> promise, char* data, size_t size) {
+                  v8::Isolate* isolate = promise.isolate();
+                  v8::HandleScope handle_scope(isolate);
+                  v8::MicrotasksScope microtasks_scope(
+                      isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
+                  v8::Context::Scope context_scope(promise.GetContext());
 
-              // since buffer.data() is from a dangling malloc, add a free(...)
-              // deleter
-              auto backing_store = v8::ArrayBuffer::NewBackingStore(
-                  data, size,
-                  [](void* data, size_t, void*) { base::UncheckedFree(data); },
-                  nullptr);
-              v8::Local<v8::ArrayBuffer> array_buffer =
-                  v8::ArrayBuffer::New(isolate, std::move(backing_store));
-              return v8::Global<v8::Value>(promise.isolate(), array_buffer);
-            },
-            std::move(promise), pOutput, size));
+                  // since buffer.data() is from a dangling malloc, add a
+                  // free(...) deleter
+                  auto backing_store = v8::ArrayBuffer::NewBackingStore(
+                      data, size,
+                      [](void* data, size_t, void*) {
+                        base::UncheckedFree(data);
+                      },
+                      nullptr);
+                  v8::Local<v8::ArrayBuffer> array_buffer =
+                      v8::ArrayBuffer::New(isolate, std::move(backing_store));
+                  promise.Resolve(array_buffer);
+                },
+                std::move(promise), pOutput, size));
       },
       std::move(promise), std::move(format)));
 
@@ -536,9 +553,8 @@ void DocumentClient::PostUnoCommand(const std::string& command,
   if (nonblocking) {
     base::ThreadPool::PostTask(
         FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
-        base::BindOnce(&DocumentClient::PostUnoCommandInternal,
-                       base::Unretained(this), command, std::move(json_buffer),
-                       true));
+        base::BindOnce(&DocumentClient::PostUnoCommandInternal, GetWeakPtr(),
+                       command, std::move(json_buffer), true));
   } else {
     PostUnoCommandInternal(command, std::move(json_buffer), notifyWhenFinished);
   }
@@ -631,7 +647,8 @@ v8::Local<v8::Value> DocumentClient::GetClipboard(gin::Arguments* args) {
 
   if (args->GetNext(&mime_types)) {
     for (const std::string& mime_type : mime_types) {
-      // c_str() gaurantees that the string is null-terminated, data() does not
+      // c_str() gaurantees that the string is null-terminated, data()
+      // does not
       mime_c_str.push_back(mime_type.c_str());
     }
 
@@ -641,8 +658,8 @@ v8::Local<v8::Value> DocumentClient::GetClipboard(gin::Arguments* args) {
 
   size_t out_count;
 
-  // these are arrays of out_count size, variable size arrays in C are simply
-  // pointers to the first element
+  // these are arrays of out_count size, variable size arrays in C are
+  // simply pointers to the first element
   char** out_mime_types = nullptr;
   size_t* out_sizes = nullptr;
   char** out_streams = nullptr;
@@ -651,7 +668,8 @@ v8::Local<v8::Value> DocumentClient::GetClipboard(gin::Arguments* args) {
       mime_types.size() ? mime_c_str.data() : nullptr, &out_count,
       &out_mime_types, &out_sizes, &out_streams);
 
-  // we'll be refrencing this and the context frequently inside of the loop
+  // we'll be refrencing this and the context frequently inside of the
+  // loop
   v8::Isolate* isolate = args->isolate();
 
   // return an empty array if we failed
@@ -668,7 +686,8 @@ v8::Local<v8::Value> DocumentClient::GetClipboard(gin::Arguments* args) {
     if (buffer_size <= 0)
       continue;
 
-    // allocate a new ArrayBuffer and copy the stream to the backing store
+    // allocate a new ArrayBuffer and copy the stream to the backing
+    // store
     v8::Local<v8::ArrayBuffer> buffer =
         v8::ArrayBuffer::New(isolate, buffer_size);
     std::memcpy(buffer->GetBackingStore()->Data(), out_streams[i], buffer_size);
@@ -754,7 +773,7 @@ v8::Local<v8::Promise> DocumentClient::GetCommandValues(
   auto handle = promise.GetHandle();
 
   document_holder_.Post(base::BindOnce(
-      [](Promise<v8::Value>&& promise, std::string command,
+      [](Promise<v8::Value> promise, std::string command,
          DocumentHolderWithView doc_holder) {
         LokStrPtr result(doc_holder->getCommandValues(command.c_str()));
         if (!result) {
@@ -864,10 +883,10 @@ void DocumentClient::EmitReady(v8::Isolate* isolate,
 }
 
 void DocumentClient::ForwardEmit(int type, const std::string& payload) {
-  DCHECK(isolate_);
   auto itr = event_listeners_.find(type);
   if (itr == event_listeners_.end())
     return;
+  DCHECK(isolate_);
   for (auto& callback : itr->second) {
     V8FunctionInvoker<void(EventPayload)>::Go(isolate_, callback,
                                               {type, payload});
@@ -899,8 +918,9 @@ v8::Local<v8::Promise> DocumentClient::SaveAs(v8::Isolate* isolate,
       [](std::unique_ptr<char[]> path, std::unique_ptr<char[]> format,
          std::unique_ptr<char[]> options, Promise<bool> promise,
          DocumentHolderWithView doc) {
-        promise.Resolve(doc->saveAs(path.get(), format ? format.get() : nullptr,
-                                    options ? options.get() : nullptr));
+        bool res = doc->saveAs(path.get(), format ? format.get() : nullptr,
+                               options ? options.get() : nullptr);
+        Promise<bool>::ResolvePromise(std::move(promise), res);
       },
       std::move(path), std::move(format), std::move(options),
       std::move(promise)));
@@ -958,6 +978,10 @@ void DocumentClient::DocumentCallback(int type, std::string payload) {
       ForwardEmit(type, payload);
       break;
   }
+}
+
+void DocumentClient::OnDestroyed() {
+  delete this;
 }
 
 }  // namespace electron::office

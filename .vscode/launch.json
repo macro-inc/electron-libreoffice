@@ -19,6 +19,8 @@
         "program": "${workspaceFolder}/src/out/Default/Electron.exe",
       },
       "initCommands": [
+        // make sure we have all the symbols
+        "settings set target.exec-search-paths '${workspaceFolder}/src/out/Default' '${workspaceFolder}/src/third_party/libreofficekit/instdir'",
         // ready now
         "settings set target.env-vars CHROMIUM_LLDBINIT_SOURCED=1",
       ],

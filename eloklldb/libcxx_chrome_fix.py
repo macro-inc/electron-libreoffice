@@ -82,13 +82,12 @@ def duplicate_and_modify_formatters(debugger: lldb.SBDebugger, depth=0):
     original_category: lldb.SBTypeCategory = debugger.GetCategory("cplusplus")
 
     if not original_category:
-        if depth == 3:
-            print("Giving up!")
-            print("After stopping at a breakpoint, fix things with the command: crfix")
+        if depth == 0:
+            print("After stopping at a breakpoint, run this command: crfix")
             fallback_to_command(debugger)
-        elif depth == 0:
-            print("Could not get C++ types, attempting after breakpoint")
-            attempt_after_breakpoint(debugger)
+        # elif depth == 0:
+        #     print("Could not get C++ types, attempting after breakpoint")
+        #     attempt_after_breakpoint(debugger)
         elif depth > 3:
             print("Command failed! Try using it after stopping at a breakpoint")
         else:

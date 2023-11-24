@@ -2,8 +2,7 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
-#ifndef OFFICE_PAINT_MANAGER_H_
-#define OFFICE_PAINT_MANAGER_H_
+#pragma once
 
 #include <vector>
 #include "base/memory/scoped_refptr.h"
@@ -42,7 +41,7 @@ class PaintManager {
 
   // this should be called after the container is invalidated and the canvas is
   // painted by the TileBuffer
-  void ScheduleNextPaint(std::vector<TileRange> tile_ranges_ = {});
+  bool ScheduleNextPaint(std::vector<TileRange> tile_ranges_ = {});
 
   // should be used to prevent lingering tasks during zooms
   void ClearTasks();
@@ -118,4 +117,3 @@ class PaintManager {
 
 }  // namespace electron::office
 
-#endif  // OFFICE_PAINT_MANAGER_H_

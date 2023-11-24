@@ -2,8 +2,7 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
-#ifndef OFFICE_OFFICE_CLIENT_H_
-#define OFFICE_OFFICE_CLIENT_H_
+#pragma once
 
 #include <atomic>
 #include <memory>
@@ -12,6 +11,7 @@
 
 #include "base/files/file_path.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/one_shot_event.h"
 #include "base/synchronization/atomic_flag.h"
 #include "base/task/sequenced_task_runner.h"
@@ -37,10 +37,15 @@ namespace electron::office {
 class EventBus;
 class DocumentClient;
 
-class OfficeClient : public gin::Wrappable<OfficeClient>, OfficeLoadObserver {
+class OfficeClient : public gin::Wrappable<OfficeClient>,
+                     public OfficeLoadObserver {
  public:
+  static gin::WrapperInfo kWrapperInfo;
   static constexpr char kGlobalEntry[] = "libreoffice";
+  OfficeClient();
+  ~OfficeClient() override;
 
+  static base::WeakPtr<OfficeClient> GetWeakPtr();
   static void InstallToContext(v8::Local<v8::Context> context);
   static void RemoveFromContext(v8::Local<v8::Context> context);
 
@@ -49,7 +54,6 @@ class OfficeClient : public gin::Wrappable<OfficeClient>, OfficeLoadObserver {
   OfficeClient& operator=(const OfficeClient&) = delete;
 
   // gin::Wrappable
-  static gin::WrapperInfo kWrapperInfo;
   gin::ObjectTemplateBuilder GetObjectTemplateBuilder(
       v8::Isolate* isolate) override;
   const char* GetTypeName() override;
@@ -57,16 +61,9 @@ class OfficeClient : public gin::Wrappable<OfficeClient>, OfficeLoadObserver {
   // OfficeLoadObserver
   void OnLoaded(lok::Office* office) override;
 
-  // v8 EventBus
-  void On(const std::string& event_name,
-          v8::Local<v8::Function> listener_callback);
-  void Off(const std::string& event_name,
-           v8::Local<v8::Function> listener_callback);
-  void Emit(const std::string& event_name, v8::Local<v8::Value> data);
-
   lok::Office* GetOffice() const;
-
-  DocumentClient* PrepareDocumentClient(lok::Document* document);
+  v8::Local<v8::Value> GetHandle(v8::Isolate* isolate);
+  void Unset();
 
  protected:
   // Exposed to v8 {
@@ -79,15 +76,14 @@ class OfficeClient : public gin::Wrappable<OfficeClient>, OfficeLoadObserver {
   v8::Local<v8::Promise> LoadDocumentFromArrayBuffer(
       v8::Isolate* isolate,
       v8::Local<v8::ArrayBuffer> array_buffer);
+  void HandleBeforeUnload();
   // }
 
  private:
-  OfficeClient();
-  ~OfficeClient() override;
-
   lok::Office* office_ = nullptr;
 
   v8::Global<v8::Context> context_;
+  v8::Global<v8::Value> self_;
   base::OneShotEvent loaded_;
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
@@ -95,4 +91,3 @@ class OfficeClient : public gin::Wrappable<OfficeClient>, OfficeLoadObserver {
 };
 
 }  // namespace electron::office
-#endif  // OFFICE_OFFICE_CLIENT_H_

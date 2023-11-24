@@ -2,8 +2,7 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
-#ifndef OFFICE_DOCUMENT_HOLDER_H_
-#define OFFICE_DOCUMENT_HOLDER_H_
+#pragma once
 
 #include <string>
 #include "base/callback_forward.h"
@@ -93,18 +92,19 @@ class DocumentHolderWithView {
   scoped_refptr<DocumentHolder> holder_;
   bool deregisters_callback_ = false;
 
-	size_t PtrToId();
+  size_t PtrToId();
 };
 
-struct DocumentIdWithViewId {
+struct DocumentCallbackContext {
  public:
-  DocumentIdWithViewId(const size_t id_, const int view_id_)
-      : id(id_), view_id(id_) {}
+  DocumentCallbackContext(const size_t id_,
+                          const int view_id_,
+                          const void* office_instance_)
+      : id(id_), view_id(view_id_), office_instance(office_instance_) {}
 
   const size_t id;
   const int view_id;
+  const void* office_instance;
 };
-
 }  // namespace electron::office
 
-#endif  // OFFICE_DOCUMENT_HOLDER_H_

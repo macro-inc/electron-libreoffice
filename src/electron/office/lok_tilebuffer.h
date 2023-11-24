@@ -2,8 +2,7 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
-#ifndef OFFICE_LOK_TILEBUFFER_H_
-#define OFFICE_LOK_TILEBUFFER_H_
+#pragma once
 
 #include <vector>
 #include "base/memory/ref_counted_delete_on_sequence.h"
@@ -65,8 +64,12 @@ struct Snapshot {
            int row_end_,
            int scroll_y_position);
 
+	// copy
   Snapshot(const Snapshot& other);
   Snapshot& operator=(const Snapshot& other);
+	// move
+  Snapshot& operator=(Snapshot&& other) noexcept;
+  Snapshot(Snapshot&& other) noexcept;
 
   Snapshot();
   ~Snapshot();
@@ -113,11 +116,11 @@ class TileBuffer : public base::RefCountedDeleteOnSequence<TileBuffer> {
                                     TileRange range_limit);
 
   void SetActiveContext(std::size_t active_context_hash);
+  TileBuffer();
 
  private:
   friend class base::RefCountedDeleteOnSequence<TileBuffer>;
   friend class base::DeleteHelper<TileBuffer>;
-  TileBuffer();
   ~TileBuffer();
 
   unsigned int CoordToIndex(unsigned int x, unsigned int y) {
@@ -211,4 +214,3 @@ class TileBuffer : public base::RefCountedDeleteOnSequence<TileBuffer> {
 };
 }  // namespace electron::office
 
-#endif  // !OFFICE_LOK_TILEBUFFER_H_

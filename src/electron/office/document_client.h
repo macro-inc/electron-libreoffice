@@ -8,6 +8,7 @@
 #include <map>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "base/atomic_ref_count.h"
 #include "base/files/file_path.h"
@@ -21,9 +22,11 @@
 #include "gin/converter.h"
 #include "gin/handle.h"
 #include "gin/wrappable.h"
+#include "office/destroyed_observer.h"
 #include "office/document_event_observer.h"
 #include "office/document_holder.h"
 #include "office/lok_tilebuffer.h"
+#include "office/renderer_transferable.h"
 #include "office/v8_callback.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkImage.h"
@@ -44,7 +47,8 @@ namespace electron::office {
 class OfficeClient;
 
 class DocumentClient : public gin::Wrappable<DocumentClient>,
-                       public DocumentEventObserver {
+                       public DocumentEventObserver,
+                       public DestroyedObserver {
  public:
   DocumentClient();
   explicit DocumentClient(DocumentHolderWithView holder);
@@ -116,6 +120,9 @@ class DocumentClient : public gin::Wrappable<DocumentClient>,
   // DocumentEventObserver
   void DocumentCallback(int type, std::string payload) override;
 
+  // DestroyedObserver
+  void OnDestroyed() override;
+
   gfx::Size DocumentSizeTwips();
 
   // returns true if this is the first mount for the document
@@ -123,11 +130,9 @@ class DocumentClient : public gin::Wrappable<DocumentClient>,
   // return true if this is the last remaining mount for the document
   bool Unmount();
 
-  void MarkRendererWillRemount(base::Token&& restore_key,
-                               scoped_refptr<TileBuffer>&& tile_buffer,
-                               Snapshot&& snapshot);
-  std::pair<scoped_refptr<TileBuffer>, Snapshot> GetRestoredTileBuffer(
-      const std::string& restore_key);
+  void MarkRendererWillRemount(base::Token restore_key,
+                               RendererTransferable&& renderer_transferable);
+  RendererTransferable GetRestoredRenderer(const base::Token& restore_key);
 
   int GetNumberOfPages() const;
 
@@ -177,15 +182,15 @@ class DocumentClient : public gin::Wrappable<DocumentClient>,
   std::vector<std::string> state_change_buffer_;
 
   bool is_ready_;
-  std::unordered_map<base::Token,
-                     std::pair<scoped_refptr<TileBuffer>, Snapshot>,
-                     base::TokenHash>
+  std::unordered_map<base::Token, RendererTransferable, base::TokenHash>
       tile_buffers_to_restore_;
   // this doesn't really need to be atomic since all access should remain on the
   // same renderer thread, but it makes the intention of its use clearer
   base::AtomicRefCount mount_counter_;
 
   std::unordered_map<int, std::vector<SafeV8Function>> event_listeners_;
+  // used to track what has a registered observer
+  std::unordered_set<int> event_types_registered_;
 
   raw_ptr<v8::Isolate> isolate_ = nullptr;
 

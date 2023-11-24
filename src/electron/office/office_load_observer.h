@@ -2,8 +2,7 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
-#ifndef OFFICE_LOAD_OBSERVER_H_
-#define OFFICE_LOAD_OBSERVER_H_
+#pragma once
 
 #include "base/observer_list_types.h"
 
@@ -20,4 +19,3 @@ class OfficeLoadObserver : public base::CheckedObserver {
 };
 }  // namespace electron::office
 
-#endif

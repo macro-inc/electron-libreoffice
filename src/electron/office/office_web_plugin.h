@@ -6,8 +6,7 @@
 // rights reserved. Use of this source code is governed by a BSD-style license
 // that can be found in the LICENSE file in src/.
 
-#ifndef OFFICE_OFFICE_WEB_PLUGIN_H_
-#define OFFICE_OFFICE_WEB_PLUGIN_H_
+#pragma once
 
 #include <stdint.h>
 
@@ -22,6 +21,7 @@
 #include "cc/paint/paint_image_builder.h"
 #include "gin/handle.h"
 #include "include/core/SkImage.h"
+#include "office/destroyed_observer.h"
 #include "office/document_client.h"
 #include "office/document_event_observer.h"
 #include "office/document_holder.h"
@@ -69,7 +69,8 @@ blink::WebPlugin* CreateInternalPlugin(blink::WebPluginParams params,
 
 class OfficeWebPlugin : public blink::WebPlugin,
                         public office::PaintManager::Client,
-                        public office::DocumentEventObserver {
+                        public office::DocumentEventObserver,
+                        public office::DestroyedObserver {
  public:
   OfficeWebPlugin(blink::WebPluginParams params,
                   content::RenderFrame* render_frame);
@@ -177,6 +178,9 @@ class OfficeWebPlugin : public blink::WebPlugin,
 
   // DocumentEventObserver
   void DocumentCallback(int type, std::string payload) override;
+
+  // DestroyedObserver
+  void OnDestroyed() override;
 
  private:
   // call `Destroy()` instead.
@@ -293,10 +297,11 @@ class OfficeWebPlugin : public blink::WebPlugin,
   std::vector<gfx::Rect> page_rects_cached_;
   int first_intersect_ = -1;
   int last_intersect_ = -1;
-	base::Token restore_key_;
+  base::Token restore_key_;
 
-  bool visible_;
-  bool disable_input_;
+  bool visible_ = true;
+  bool disable_input_ = false;
+  bool doomed_ = false;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
   office::CancelFlagPtr paint_cancel_flag_;
@@ -312,4 +317,3 @@ class OfficeWebPlugin : public blink::WebPlugin,
 };
 
 }  // namespace electron
-#endif  // OFFICE_OFFICE_WEB_PLUGIN_H_

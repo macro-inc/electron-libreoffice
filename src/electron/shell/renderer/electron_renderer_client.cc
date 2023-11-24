@@ -155,13 +155,6 @@ void ElectronRendererClient::WillReleaseScriptContext(
   electron_bindings_->EnvironmentDestroyed(env);
 }
 
-#if BUILDFLAG(ENABLE_OFFICE)
-void ElectronRendererClient::DidInitializeWorkerContextOnWorkerThread(
-    v8::Local<v8::Context> context) {
-	office::OfficeInstance::Create();
-}
-#endif
-
 void ElectronRendererClient::WorkerScriptReadyForEvaluationOnWorkerThread(
     v8::Local<v8::Context> context) {
   RendererClientBase::WorkerScriptReadyForEvaluationOnWorkerThread(context);

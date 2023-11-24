@@ -5,6 +5,7 @@
 #include "promise.h"
 #include "base/bind.h"
 #include "base/task/bind_post_task.h"
+#include "v8/include/v8-exception.h"
 
 namespace electron::office {
 
@@ -31,23 +32,26 @@ PromiseBase::~PromiseBase() = default;
 
 v8::Maybe<bool> PromiseBase::Reject() {
   v8::HandleScope handle_scope(isolate());
-  gin_helper::MicrotasksScope microtasks_scope(isolate());
+  const v8::MicrotasksScope microtasks_scope(
+      isolate(), v8::MicrotasksScope::kDoNotRunMicrotasks);
   v8::Context::Scope context_scope(GetContext());
 
-  return resolver()->Reject(GetContext(), {});
+  return resolver()->Reject(GetContext(), v8::Undefined(isolate()));
 }
 
 v8::Maybe<bool> PromiseBase::Resolve() {
   v8::HandleScope handle_scope(isolate());
-  gin_helper::MicrotasksScope microtasks_scope(isolate());
+  const v8::MicrotasksScope microtasks_scope(
+      isolate(), v8::MicrotasksScope::kDoNotRunMicrotasks);
   v8::Context::Scope context_scope(GetContext());
 
-  return resolver()->Resolve(GetContext(), {});
+  return resolver()->Resolve(GetContext(), v8::Undefined(isolate()));
 }
 
 v8::Maybe<bool> PromiseBase::Reject(v8::Local<v8::Value> except) {
   v8::HandleScope handle_scope(isolate());
-  gin_helper::MicrotasksScope microtasks_scope(isolate());
+  const v8::MicrotasksScope microtasks_scope(
+      isolate(), v8::MicrotasksScope::kDoNotRunMicrotasks);
   v8::Context::Scope context_scope(GetContext());
 
   return resolver()->Reject(GetContext(), except);
@@ -55,7 +59,8 @@ v8::Maybe<bool> PromiseBase::Reject(v8::Local<v8::Value> except) {
 
 v8::Maybe<bool> PromiseBase::RejectWithErrorMessage(base::StringPiece message) {
   v8::HandleScope handle_scope(isolate());
-  gin_helper::MicrotasksScope microtasks_scope(isolate());
+  const v8::MicrotasksScope microtasks_scope(
+      isolate(), v8::MicrotasksScope::kDoNotRunMicrotasks);
   v8::Context::Scope context_scope(GetContext());
 
   v8::Local<v8::Value> error =
@@ -95,25 +100,31 @@ v8::Local<v8::Promise> Promise<void>::ResolvedPromise(v8::Isolate* isolate) {
 }
 
 void Promise<v8::Value>::Resolve() {
-	Resolve({});
+  Resolve(v8::Undefined(isolate()));
 }
 
 void Promise<v8::Value>::Resolve(v8::Local<v8::Value> value) {
   std::ignore = resolver()->Resolve(GetContext(), value);
 }
 
-void Promise<v8::Value>::ResolveWith(
-    base::OnceCallback<v8::Global<v8::Value>(void)> callback) {
-  auto runner = task_runner();
-  auto resolve = base::BindPostTask(
-      task_runner(),
+// static
+void Promise<v8::Value>::ResolvePromise(Promise<v8::Value> promise,
+                                        v8::Global<v8::Value> result) {
+  promise.task_runner()->PostTask(
+      FROM_HERE,
       base::BindOnce(
-          [](Promise<v8::Value>&& promise, v8::Global<v8::Value> value) {
-            promise.Resolve(value.Get(promise.isolate()));
+          [](Promise<v8::Value> promise, v8::Global<v8::Value> result) {
+            promise.Resolve(result.Get(promise.isolate()));
           },
-          std::move(*this)));
-  runner->PostTaskAndReplyWithResult(FROM_HERE, std::move(callback),
-                                     std::move(resolve));
+          std::move(promise), std::move(result)));
+}
+
+// static
+void Promise<v8::Value>::ResolvePromise(Promise<v8::Value> promise) {
+  promise.task_runner()->PostTask(
+      FROM_HERE,
+      base::BindOnce([](Promise<v8::Value> promise) { promise.Resolve(); },
+                     std::move(promise)));
 }
 
 }  // namespace electron::office

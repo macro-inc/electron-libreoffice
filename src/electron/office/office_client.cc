@@ -44,10 +44,7 @@
 namespace electron::office {
 
 namespace {
-v8::Global<v8::Value>* Instance() {
-  static base::NoDestructor<v8::Global<v8::Value>> inst;
-  return inst.get();
-}
+static base::NoDestructor<base::ThreadLocalOwnedPointer<OfficeClient>> lazy_tls;
 }  // namespace
 
 gin::WrapperInfo OfficeClient::kWrapperInfo = {gin::kEmbedderNativeGin};
@@ -56,6 +53,10 @@ void OfficeClient::OnLoaded(lok::Office* client) {
   office_ = client;
   ::UnoV8Instance::Set(client->getUnoV8());
   loaded_.Signal();
+}
+
+v8::Local<v8::Value> OfficeClient::GetHandle(v8::Isolate* isolate) {
+  return self_.Get(isolate);
 }
 
 // instance
@@ -77,25 +78,25 @@ static void GetOfficeHandle(v8::Local<v8::Name> name,
   v8::MicrotasksScope microtasks_scope(
       isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
 
-  DCHECK(!Instance()->IsEmpty());
-  info.GetReturnValue().Set(*Instance());
+  DCHECK(lazy_tls->Get());
+  info.GetReturnValue().Set(lazy_tls->Get()->GetHandle(isolate));
 }
 }  // namespace
 
+// static
 void OfficeClient::InstallToContext(v8::Local<v8::Context> context) {
   v8::Context::Scope context_scope(context);
   v8::Isolate* isolate = context->GetIsolate();
   v8::MicrotasksScope microtasks_scope(
       isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
 
-  if (Instance()->IsEmpty()) {
-    OfficeClient* client = new OfficeClient;
-    v8::Local<v8::Object> wrapper;
-    if (!client->GetWrapper(isolate).ToLocal(&wrapper) || wrapper.IsEmpty()) {
-      NOTREACHED();
-    }
-    Instance()->Reset(isolate, wrapper);
+  auto client = std::make_unique<OfficeClient>();
+  v8::Local<v8::Object> wrapper;
+  if (!client->GetWrapper(isolate).ToLocal(&wrapper) || wrapper.IsEmpty()) {
+    NOTREACHED();
   }
+  client->self_.Reset(isolate, wrapper);
+  lazy_tls->Set(std::move(client));
 
   context->Global()
       ->SetAccessor(
@@ -105,17 +106,29 @@ void OfficeClient::InstallToContext(v8::Local<v8::Context> context) {
       .Check();
 }
 
+void OfficeClient::Unset() {
+  context_.Reset();
+  self_.Reset();
+}
+
+// static
 void OfficeClient::RemoveFromContext(v8::Local<v8::Context> /*context*/) {
-  Instance()->Reset();
+  if (lazy_tls->Get())
+    lazy_tls->Get()->Unset();
+  lazy_tls->Set(nullptr);
 }
 
 OfficeClient::OfficeClient()
     : task_runner_(base::SequencedTaskRunnerHandle::Get()) {
-  OfficeInstance::Get()->AddLoadObserver(this);
+	auto* inst = OfficeInstance::Get();
+	if (inst)
+		inst->AddLoadObserver(this);
 }
 
 OfficeClient::~OfficeClient() {
-  OfficeInstance::Get()->RemoveLoadObserver(this);
+	auto* inst = OfficeInstance::Get();
+	if (inst)
+		inst->RemoveLoadObserver(this);
 };
 
 gin::ObjectTemplateBuilder OfficeClient::GetObjectTemplateBuilder(
@@ -123,18 +136,22 @@ gin::ObjectTemplateBuilder OfficeClient::GetObjectTemplateBuilder(
   gin::PerIsolateData* data = gin::PerIsolateData::From(isolate);
   v8::Local<v8::FunctionTemplate> constructor =
       data->GetFunctionTemplate(&kWrapperInfo);
+
   if (constructor.IsEmpty()) {
     constructor = v8::FunctionTemplate::New(isolate);
     constructor->SetClassName(gin::StringToV8(isolate, GetTypeName()));
     constructor->ReadOnlyPrototype();
     data->SetFunctionTemplate(&kWrapperInfo, constructor);
   }
+
   return gin::ObjectTemplateBuilder(isolate, GetTypeName(),
                                     constructor->InstanceTemplate())
       .SetMethod("setDocumentPassword", &OfficeClient::SetDocumentPasswordAsync)
       .SetMethod("loadDocument", &OfficeClient::LoadDocumentAsync)
       .SetMethod("loadDocumentFromArrayBuffer",
-                 &OfficeClient::LoadDocumentFromArrayBuffer);
+                 &OfficeClient::LoadDocumentFromArrayBuffer)
+      .SetMethod("__handleBeforeUnload",
+                 &OfficeClient::HandleBeforeUnload);
 }
 
 const char* OfficeClient::GetTypeName() {
@@ -156,9 +173,12 @@ std::string OfficeClient::GetLastError() {
 }
 
 namespace {
-void ResolveLoadWithDocumentClient(Promise<DocumentClient> promise,
+void ResolveLoadWithDocumentClient(const base::WeakPtr<OfficeClient>& client,
+                                   Promise<DocumentClient> promise,
                                    const std::string& path,
                                    lok::Document* doc) {
+  if (!client.MaybeValid())
+    return; // don't resolve the promise, the v8 context probably doesn't exist
   if (!doc) {
     promise.Resolve();
     return;
@@ -187,22 +207,28 @@ v8::Local<v8::Promise> OfficeClient::LoadDocumentAsync(
 
   auto load_ = base::BindOnce(
       [](const base::WeakPtr<OfficeClient>& client, const std::string& path) {
+        if (!client.MaybeValid())
+          return static_cast<lok::Document*>(nullptr);
+
         return client->GetOffice()->documentLoad(path.c_str(),
                                                  "Language=en-US,Batch=true");
       },
       weak_factory_.GetWeakPtr(), std::string(path));
-  auto complete_ = base::BindOnce(&ResolveLoadWithDocumentClient,
-                                  std::move(promise), std::string(path));
+  auto complete_ =
+      base::BindOnce(&ResolveLoadWithDocumentClient, weak_factory_.GetWeakPtr(),
+                     std::move(promise), std::string(path));
   auto async_ = std::move(load_).Then(
       base::BindPostTask(task_runner_, std::move(complete_)));
 
   if (loaded_.is_signaled()) {
+    LOG(ERROR) << "office client should be loaded";
     PostBlockingAsync(std::move(async_));
   } else {
     auto deferred_ = base::BindOnce(
         [](decltype(async_) async) { PostBlockingAsync(std::move(async)); },
         std::move(async_));
 
+    LOG(ERROR) << "deferred doc load";
     loaded_.Post(FROM_HERE, std::move(deferred_));
   }
 
@@ -225,18 +251,27 @@ v8::Local<v8::Promise> OfficeClient::LoadDocumentFromArrayBuffer(
 
   auto load_ = base::BindOnce(
       [](const base::WeakPtr<OfficeClient>& office_client, v8::Isolate* isolate,
-         v8::Global<v8::ArrayBuffer> global) {
+         v8::Global<v8::ArrayBuffer> global, v8::Global<v8::Context> context) {
+        v8::HandleScope handle_scope(isolate);
+        v8::MicrotasksScope microtasks_scope(
+            isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
+        v8::Context::Scope context_scope(
+            v8::Local<v8::Context>::New(isolate, context));
+
         v8::Local<v8::ArrayBuffer> array_buffer = global.Get(isolate);
         array_buffer->GetBackingStore()->Data();
+
         return office_client->GetOffice()->loadFromMemory(
             static_cast<char*>(array_buffer->GetBackingStore()->Data()),
             array_buffer->ByteLength());
       },
       weak_factory_.GetWeakPtr(), isolate,
-      v8::Global<v8::ArrayBuffer>(isolate, array_buffer));
+      v8::Global<v8::ArrayBuffer>(isolate, array_buffer),
+      v8::Global<v8::Context>(isolate, promise.GetContext()));
 
   auto complete_ =
-      base::BindOnce(&ResolveLoadWithDocumentClient, std::move(promise), path);
+      base::BindOnce(&ResolveLoadWithDocumentClient, weak_factory_.GetWeakPtr(),
+                     std::move(promise), path);
   auto async_ = std::move(load_).Then(
       base::BindPostTask(task_runner_, std::move(complete_)));
 
@@ -275,6 +310,9 @@ v8::Local<v8::Promise> OfficeClient::SetDocumentPasswordAsync(
     auto async = base::BindOnce(
         [](const base::WeakPtr<OfficeClient>& client, Promise<void> promise,
            const std::string& url, const std::string& password) {
+          if (!client.MaybeValid())
+            return;
+
           client->GetOffice()->setDocumentPassword(url.c_str(),
                                                    password.c_str());
           promise.Resolve();
@@ -286,6 +324,20 @@ v8::Local<v8::Promise> OfficeClient::SetDocumentPasswordAsync(
   }
 
   return handle;
+}
+
+base::WeakPtr<OfficeClient> OfficeClient::GetWeakPtr() {
+  if (!lazy_tls->Get())
+    return {};
+  return lazy_tls->Get()->weak_factory_.GetWeakPtr();
+}
+
+// This is the only place where the OfficeInstance should be used directly
+void OfficeClient::HandleBeforeUnload()
+{
+	auto* inst = OfficeInstance::Get();
+	if (inst)
+		inst->HandleClientDestroyed();
 }
 
 }  // namespace electron::office

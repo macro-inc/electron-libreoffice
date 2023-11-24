@@ -81,6 +81,7 @@ class OfficeDoc extends HTMLElement {
     const container = document.createElement('div');
     container.className = 'container';
 
+    /** @type HTMLLibreOfficeEmbed */
     this.embed = document.createElement('embed');
     this.embed.setAttribute('type', 'application/x-libreoffice');
     this.embed.style.display = 'none';
@@ -143,7 +144,7 @@ class OfficeDoc extends HTMLElement {
     const old_scroll = this.scroller.scrollTop;
     this.embed.setZoom(zoom);
     this._refreshSize();
-    this.scroller.scrollTop = zoom / old_zoom * old_scroll;
+    this.scroller.scrollTop = (zoom / old_zoom) * old_scroll;
     if (this._cursor_payload) this._setCursor(this._cursor_payload);
   }
 
@@ -161,7 +162,8 @@ class OfficeDoc extends HTMLElement {
   renderDocument(doc, options) {
     const embed = this.embed;
     embed.style.display = 'block';
-    embed.renderDocument(doc, options);
+    this.restoreKey = embed.renderDocument(doc, options);
+    console.log('restore key', this.restoreKey);
     this.doc = doc;
     this._refreshSize();
     doc.on('document_size_changed', this._refreshSize);
@@ -175,32 +177,46 @@ class OfficeDoc extends HTMLElement {
     doc.on('invalidate_visible_cursor', ({ payload }) => {
       this._cursor_payload = payload;
       this._setCursor(payload);
+      logit('cursor set');
     });
     // doc.on('text_selection_start', logit);
-    // doc.on('text_selection_end', logit);
+    doc.on('text_selection_end', logit);
     // doc.on('text_selection', logit);
     doc.on('hyperlink_clicked', logit);
     doc.on('cursor_visible', logit);
     doc.on('set_part', logit);
     doc.on('context_menu', logit);
-    // doc.on('state_changed', logit);
+    doc.on('state_changed', logit);
     doc.on('window', logit);
     doc.on('jsdialog', logit);
     doc.on('uno_command_result', logit);
-    doc.on('new', logit);
-    doc.on('load', logit);
-    doc.on('save', logit);
-    doc.on('save_done', logit);
-    doc.on('save_as', logit);
-    doc.on('save_as_done', logit);
-    doc.on('unload', logit);
-    doc.on('title_changed', logit);
-    doc.on('mode_changed', logit);
-    // doc.on('redline_table_size_changed', logit);
-    // doc.on('redline_table_entry_modified', logit);
+    doc.on('redline_table_size_changed', logit);
+    doc.on('redline_table_entry_modified', logit);
     doc.on('macro_overlay', logit);
     doc.on('macro_colorizer', logit);
     // doc.on('comment', logit);
+  }
+
+  remount() {
+    const { width, height } = this.embed.documentSize;
+    const { scrollTop } = this.scroller;
+    const pages = this.scroller.removeChild(this.pages);
+    this.scroller.removeChild(this.embed);
+
+    this.embed = document.createElement('embed');
+    this.embed.setAttribute('type', 'application/x-libreoffice');
+    this.embed.style.display = 'block';
+    this._setDimensions(width, height);
+
+    this.scroller.appendChild(this.embed);
+    this.scroller.appendChild(pages);
+
+    this.ignoreScroll = true;
+    this.renderDocument(this.doc, {
+      restoreKey: this.restoreKey,
+    });
+
+    this.scroller.scrollTop = scrollTop;
   }
 
   focus() {
@@ -208,6 +224,10 @@ class OfficeDoc extends HTMLElement {
   }
 
   _handleScroll() {
+    if (this.ignoreScroll && this.scroller.scrollTop == 0) {
+      this.ignoreScroll = false;
+      return;
+    }
     this.embed.updateScroll(this.scroller.scrollTop);
   }
 

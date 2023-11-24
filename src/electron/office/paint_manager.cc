@@ -120,7 +120,7 @@ std::unique_ptr<PaintManager::Task> PaintManager::Task::MergeWith(
 
 // this duplicates a lot of the above and is generally a hacky mess to get
 // things to paint consistently
-void PaintManager::ScheduleNextPaint(std::vector<TileRange> tile_ranges_) {
+bool PaintManager::ScheduleNextPaint(std::vector<TileRange> tile_ranges_) {
   // merge tile_ranges_ with next
   if (!tile_ranges_.empty() && (current_task_ || next_task_) &&
       client_->GetTileBuffer()) {
@@ -174,7 +174,10 @@ void PaintManager::ScheduleNextPaint(std::vector<TileRange> tile_ranges_) {
 
   if (current_task_) {
     PostCurrentTask();
-  }
+		return true;
+	} else {
+		return false;
+	}
 }
 
 void PaintManager::PostCurrentTask() {

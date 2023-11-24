@@ -40,10 +40,11 @@ OfficeInstance* OfficeInstance::Get() {
 }
 
 OfficeInstance::OfficeInstance()
-    : loaded_observers_(base::MakeRefCounted<OfficeLoadObserverList>()) {
+    : loaded_observers_(base::MakeRefCounted<OfficeLoadObserverList>()),
+      destroyed_observers_(base::MakeRefCounted<DestroyedObserverList>()) {
   base::ThreadPool::PostTask(
       FROM_HERE, {base::TaskPriority::USER_BLOCKING},
-      base::BindOnce(&OfficeInstance::Initialize, base::Unretained(this)));
+      base::BindOnce(&OfficeInstance::Initialize, weak_factory_.GetWeakPtr()));
 }
 
 OfficeInstance::~OfficeInstance() = default;
@@ -58,16 +59,23 @@ void OfficeInstance::Initialize() {
       module_path.Append(FILE_PATH_LITERAL("libreofficekit"))
           .Append(FILE_PATH_LITERAL("program"));
 
-  instance_.reset(lok::lok_cpp_init(libreoffice_path.AsUTF8Unsafe().c_str()));
-  instance_->setOptionalFeatures(
-      LibreOfficeKitOptionalFeatures::LOK_FEATURE_NO_TILED_ANNOTATIONS);
-
-  loaded_observers_->Notify(FROM_HERE, &OfficeLoadObserver::OnLoaded,
-                            instance_.get());
+  if (!unset_)
+    instance_.reset(lok::lok_cpp_init(libreoffice_path.AsUTF8Unsafe().c_str()));
+  if (!unset_)
+    instance_->setOptionalFeatures(
+        LibreOfficeKitOptionalFeatures::LOK_FEATURE_NO_TILED_ANNOTATIONS);
+  if (!unset_)
+    loaded_observers_->Notify(FROM_HERE, &OfficeLoadObserver::OnLoaded,
+                              instance_.get());
 }
 
 bool OfficeInstance::IsValid() {
   return Get() && Get()->instance_;
+}
+
+void OfficeInstance::Unset() {
+  Get()->unset_ = true;
+  Get()->instance_.reset();
 }
 
 void OfficeInstance::AddLoadObserver(OfficeLoadObserver* observer) {
@@ -80,23 +88,23 @@ void OfficeInstance::AddLoadObserver(OfficeLoadObserver* observer) {
 
 void OfficeInstance::RemoveLoadObserver(OfficeLoadObserver* observer) {
   loaded_observers_->RemoveObserver(observer);
-  // Is the observer pattern overkill if there's only one global OfficeClient?
-  // Yes. But we clear when the first observer says farewell because it's thread
-  // safe and we can guarantee there is no context without tracking it
-  if (lazy_tls->Get())
-    lazy_tls->Set(nullptr);
 }
 
 void OfficeInstance::HandleDocumentCallback(int type,
                                             const char* payload,
-                                            void* idPair) {
-  if (!IsValid()) {
+                                            void* documentContext) {
+  DocumentCallbackContext* context =
+      static_cast<DocumentCallbackContext*>(documentContext);
+  const OfficeInstance* office_instance =
+      static_cast<const OfficeInstance*>(context->office_instance);
+
+  if (!office_instance->instance_) {
     LOG(ERROR) << "Uninitialized for doc callback";
     return;
   }
-  DocumentIdWithViewId* doc_id = static_cast<DocumentIdWithViewId*>(idPair);
-  auto& observers = Get()->document_event_observers_;
-  auto it = observers.find(DocumentEventId(doc_id->id, type, doc_id->view_id));
+  auto& observers = office_instance->document_event_observers_;
+  auto it =
+      observers.find(DocumentEventId(context->id, type, context->view_id));
   if (it == observers.end()) {
     // document received an event, but wasn't observed
     return;
@@ -105,7 +113,7 @@ void OfficeInstance::HandleDocumentCallback(int type,
   LOG(ERROR) << lokCallbackTypeToString(type) << " " << payload;
 #endif
   it->second->Notify(FROM_HERE, &DocumentEventObserver::DocumentCallback, type,
-                     payload);
+                     std::string(payload));
 }
 
 void OfficeInstance::AddDocumentObserver(DocumentEventId id,
@@ -150,6 +158,19 @@ void OfficeInstance::RemoveDocumentObservers(size_t document_id,
       obs_it->second->RemoveObserver(observer);
     }
   }
+}
+
+void OfficeInstance::AddDestroyedObserver(DestroyedObserver* observer) {
+  destroyed_observers_->AddObserver(observer);
+}
+
+void OfficeInstance::RemoveDestroyedObserver(DestroyedObserver* observer) {
+  destroyed_observers_->RemoveObserver(observer);
+}
+
+void OfficeInstance::HandleClientDestroyed()
+{
+	destroyed_observers_->Notify(FROM_HERE, &DestroyedObserver::OnDestroyed);
 }
 
 }  // namespace electron::office
