@@ -117,7 +117,7 @@ void OfficeWebPlugin::Destroy() {
         std::move(restore_key_),
         {std::move(tile_buffer_), std::move(paint_manager_),
          std::move(snapshot_), std::move(page_rects_cached_), first_intersect_,
-         last_intersect_});
+         last_intersect_, std::move(last_cursor_rect_)});
   }
   if (!doomed_) {
     auto* inst = office::OfficeInstance::Get();
@@ -243,8 +243,8 @@ void OfficeWebPlugin::Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) {
     first_paint_ = false;
   } else {
     if (!paint_manager_->ScheduleNextPaint(missing) && missing.size() != 0) {
-			ScheduleAvailableAreaPaint();
-		}
+      ScheduleAvailableAreaPaint();
+    }
     first_paint_ = false;
   }
   scrolling_ = false;
@@ -274,10 +274,10 @@ void OfficeWebPlugin::UpdateFocus(bool focused,
   // register a .focus() on the embed, simply simulate a click at the last
   // cursor position
   if (document_ && focused && focus_type == blink::mojom::FocusType::kScript) {
-    if (last_cursor_.empty())
+    if (last_cursor_rect_.empty())
       return;
 
-    std::string_view payload_sv(last_cursor_);
+    std::string_view payload_sv(last_cursor_rect_);
     std::string_view::const_iterator start = payload_sv.begin();
     gfx::Rect pos = office::lok_callback::ParseRect(start, payload_sv.end());
     document_.Post(base::BindOnce(
@@ -297,9 +297,66 @@ void OfficeWebPlugin::UpdateVisibility(bool visibility) {
   visible_ = visibility;
 }
 
+namespace {
+// this is kind of stupid, since there's probably a way to get this directly
+// from blink, but it works
+ui::mojom::CursorType cssCursorToMojom(const std::string& css) {
+  using ui::mojom::CursorType;
+  static const base::NoDestructor<std::unordered_map<std::string, CursorType>>
+      map({{"auto", CursorType::kNull},
+           {"default", CursorType::kNull},
+           {"none", CursorType::kNone},
+           {"context-menu", CursorType::kContextMenu},
+           {"help", CursorType::kHelp},
+           {"pointer", CursorType::kPointer},
+           {"progress", CursorType::kProgress},
+           {"wait", CursorType::kWait},
+           {"cell", CursorType::kCell},
+           {"crosshair", CursorType::kCross},
+           {"text", CursorType::kIBeam},
+           {"vertical-text", CursorType::kVerticalText},
+           {"alias", CursorType::kAlias},
+           {"copy", CursorType::kCopy},
+           {"move", CursorType::kMove},
+           {"no-drop", CursorType::kNoDrop},
+           {"not-allowed", CursorType::kNotAllowed},
+           {"grab", CursorType::kGrab},
+           {"grabbing", CursorType::kGrabbing},
+           {"e-resize", CursorType::kEastResize},
+           {"n-resize", CursorType::kNorthResize},
+           {"ne-resize", CursorType::kNorthEastResize},
+           {"nw-resize", CursorType::kNorthWestResize},
+           {"s-resize", CursorType::kSouthResize},
+           {"se-resize", CursorType::kSouthEastResize},
+           {"sw-resize", CursorType::kSouthWestResize},
+           {"w-resize", CursorType::kWestResize},
+           {"ew-resize", CursorType::kEastWestResize},
+           {"ns-resize", CursorType::kNorthSouthResize},
+           {"nesw-resize", CursorType::kNorthEastSouthWestResize},
+           {"nwse-resize", CursorType::kNorthWestSouthEastResize},
+           {"col-resize", CursorType::kColumnResize},
+           {"row-resize", CursorType::kRowResize},
+           {"all-scroll", CursorType::kMove},
+           {"zoom-in", CursorType::kZoomIn},
+           {"zoom-out", CursorType::kZoomOut}});
+  auto it = map->find(css);
+  return it == map->end() ? CursorType::kNull : it->second;
+}
+}  // namespace
+
 blink::WebInputEventResult OfficeWebPlugin::HandleInputEvent(
     const blink::WebCoalescedInputEvent& event,
     ui::Cursor* cursor) {
+  base::TimeTicks now = base::TimeTicks::Now();
+  // we debounce this because getting the computed value calculates layout and
+  // the cursor is often the same
+  if (last_css_cursor_time_.is_null() ||
+      (now - last_css_cursor_time_) > base::Milliseconds(10)) {
+    last_css_cursor_time_ = now;
+    cursor_type_ = cssCursorToMojom(
+        container_->GetElement().GetComputedValue("cursor").Ascii());
+  }
+  *cursor = cursor_type_;
   if (disable_input_)
     return blink::WebInputEventResult::kNotHandled;
 
@@ -308,10 +365,6 @@ blink::WebInputEventResult OfficeWebPlugin::HandleInputEvent(
   // TODO: handle gestures
   if (blink::WebInputEvent::IsGestureEventType(event_type))
     return blink::WebInputEventResult::kNotHandled;
-
-  // if (container_ && container_->WasTargetForLastMouseEvent()) {
-  //   *cursor = cursor_type_;
-  // }
 
   if (blink::WebInputEvent::IsKeyboardEventType(event_type))
     return HandleKeyEvent(
@@ -949,6 +1002,10 @@ std::string OfficeWebPlugin::RenderDocument(
     snapshot_ = std::move(transferable.snapshot);
     paint_manager_ = std::move(transferable.paint_manager);
     first_paint_ = false;
+    page_rects_cached_ = std::move(transferable.page_rects);
+    first_intersect_ = transferable.first_intersect;
+    last_intersect_ = transferable.last_intersect;
+    last_cursor_rect_ = std::move(transferable.last_cursor_rect);
   }
 
   client->Mount(isolate);
@@ -1077,7 +1134,7 @@ void OfficeWebPlugin::DocumentCallback(int type, std::string payload) {
     }
     case LOK_CALLBACK_INVALIDATE_VISIBLE_CURSOR: {
       if (!payload.empty()) {
-        last_cursor_ = std::move(payload);
+        last_cursor_rect_ = std::move(payload);
       }
       break;
     }

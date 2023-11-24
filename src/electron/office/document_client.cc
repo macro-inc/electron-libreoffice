@@ -487,7 +487,9 @@ v8::Local<v8::Promise> DocumentClient::SaveToMemory(v8::Isolate* isolate,
 
   document_holder_.PostBlocking(base::BindOnce(
       [](Promise<v8::Value> promise, std::unique_ptr<char[]> format,
-         DocumentHolderWithView holder) {
+         base::WeakPtr<OfficeClient> office, DocumentHolderWithView holder) {
+        if (!office.MaybeValid())
+          return;
         char* pOutput = nullptr;
         size_t size = holder->saveToMemory(&pOutput, UncheckedAlloc,
                                            format ? format.get() : nullptr);
@@ -500,7 +502,10 @@ v8::Local<v8::Promise> DocumentClient::SaveToMemory(v8::Isolate* isolate,
         promise.task_runner()->PostTask(
             FROM_HERE,
             base::BindOnce(
-                [](Promise<v8::Value> promise, char* data, size_t size) {
+                [](Promise<v8::Value> promise, char* data, size_t size,
+                   base::WeakPtr<OfficeClient> office) {
+                  if (!office.MaybeValid())
+                    return;
                   v8::Isolate* isolate = promise.isolate();
                   v8::HandleScope handle_scope(isolate);
                   v8::MicrotasksScope microtasks_scope(
@@ -519,9 +524,9 @@ v8::Local<v8::Promise> DocumentClient::SaveToMemory(v8::Isolate* isolate,
                       v8::ArrayBuffer::New(isolate, std::move(backing_store));
                   promise.Resolve(array_buffer);
                 },
-                std::move(promise), pOutput, size));
+                std::move(promise), pOutput, size, std::move(office)));
       },
-      std::move(promise), std::move(format)));
+      std::move(promise), std::move(format), OfficeClient::GetWeakPtr()));
 
   return handle;
 }
@@ -774,6 +779,7 @@ v8::Local<v8::Promise> DocumentClient::GetCommandValues(
 
   document_holder_.Post(base::BindOnce(
       [](Promise<v8::Value> promise, std::string command,
+         base::WeakPtr<OfficeClient> office,
          DocumentHolderWithView doc_holder) {
         LokStrPtr result(doc_holder->getCommandValues(command.c_str()));
         if (!result) {
@@ -787,7 +793,7 @@ v8::Local<v8::Promise> DocumentClient::GetCommandValues(
         promise.Resolve(v8::JSON::Parse(promise.GetContext(), res_json_str)
                             .FromMaybe(v8::Local<v8::Value>()));
       },
-      std::move(promise), command));
+      std::move(promise), command, OfficeClient::GetWeakPtr()));
 
   return handle;
 }
@@ -917,21 +923,21 @@ v8::Local<v8::Promise> DocumentClient::SaveAs(v8::Isolate* isolate,
   document_holder_.PostBlocking(base::BindOnce(
       [](std::unique_ptr<char[]> path, std::unique_ptr<char[]> format,
          std::unique_ptr<char[]> options, Promise<bool> promise,
-         DocumentHolderWithView doc) {
+         base::WeakPtr<OfficeClient> office, DocumentHolderWithView doc) {
         bool res = doc->saveAs(path.get(), format ? format.get() : nullptr,
                                options ? options.get() : nullptr);
         Promise<bool>::ResolvePromise(std::move(promise), res);
       },
       std::move(path), std::move(format), std::move(options),
-      std::move(promise)));
+      std::move(promise), OfficeClient::GetWeakPtr()));
 
   return holder;
 }
 
 v8::Local<v8::Promise> DocumentClient::InitializeForRendering(
     v8::Isolate* isolate) {
-  document_holder_.PostBlocking(
-      base::BindOnce([](DocumentHolderWithView holder) {
+  document_holder_.PostBlocking(base::BindOnce(
+      [](base::WeakPtr<OfficeClient> office, DocumentHolderWithView holder) {
         static constexpr const char* options = R"({
 					".uno:ShowBorderShadow": {
 						"type": "boolean",
@@ -951,7 +957,8 @@ v8::Local<v8::Promise> DocumentClient::InitializeForRendering(
 					}
 				})";
         holder->initializeForRendering(options);
-      }));
+      },
+      OfficeClient::GetWeakPtr()));
   return {};
 }
 

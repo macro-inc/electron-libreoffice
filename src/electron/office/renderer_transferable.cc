@@ -12,13 +12,15 @@ RendererTransferable::RendererTransferable(
     Snapshot snapshot,
     std::vector<gfx::Rect> page_rects_cached,
     int first_intersect,
-    int last_intersect)
+    int last_intersect,
+    std::string&& last_cursor)
     : tile_buffer(std::move(tile_buffer)),
       paint_manager(std::move(paint_manager)),
       snapshot(std::move(snapshot)),
       page_rects(std::move(page_rects_cached)),
       first_intersect(first_intersect),
-      last_intersect(last_intersect) {}
+      last_intersect(last_intersect),
+      last_cursor_rect(std::move(last_cursor)) {}
 
 RendererTransferable::RendererTransferable() = default;
 RendererTransferable::~RendererTransferable() = default;

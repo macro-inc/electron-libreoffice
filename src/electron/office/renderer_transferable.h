@@ -17,13 +17,16 @@ struct RendererTransferable {
   std::vector<gfx::Rect> page_rects;
   int first_intersect = -1;
   int last_intersect = -1;
+	std::string last_cursor_rect;
 
   RendererTransferable(scoped_refptr<TileBuffer>&& tile_buffer,
                        std::unique_ptr<PaintManager>&& paint_manager,
                        Snapshot snapshot,
                        std::vector<gfx::Rect> page_rects_cached,
                        int first_intersect,
-                       int last_intersect);
+                       int last_intersect,
+											 std::string&& last_cursor
+	);
 
   RendererTransferable();
   ~RendererTransferable();

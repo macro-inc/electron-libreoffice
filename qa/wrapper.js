@@ -177,16 +177,15 @@ class OfficeDoc extends HTMLElement {
     doc.on('invalidate_visible_cursor', ({ payload }) => {
       this._cursor_payload = payload;
       this._setCursor(payload);
-      logit('cursor set');
     });
     // doc.on('text_selection_start', logit);
-    doc.on('text_selection_end', logit);
+    // doc.on('text_selection_end', logit);
     // doc.on('text_selection', logit);
     doc.on('hyperlink_clicked', logit);
     doc.on('cursor_visible', logit);
     doc.on('set_part', logit);
     doc.on('context_menu', logit);
-    doc.on('state_changed', logit);
+    // doc.on('state_changed', logit);
     doc.on('window', logit);
     doc.on('jsdialog', logit);
     doc.on('uno_command_result', logit);
@@ -194,6 +193,9 @@ class OfficeDoc extends HTMLElement {
     doc.on('redline_table_entry_modified', logit);
     doc.on('macro_overlay', logit);
     doc.on('macro_colorizer', logit);
+    doc.on('mouse_pointer', ({ payload }) => {
+      embed.style.cursor = payload;
+    });
     // doc.on('comment', logit);
   }
 

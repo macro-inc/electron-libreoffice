@@ -278,7 +278,8 @@ class OfficeWebPlugin : public blink::WebPlugin,
   // current cursor
   ui::mojom::CursorType cursor_type_ = ui::mojom::CursorType::kPointer;
   bool has_focus_;
-  std::string last_cursor_;
+  std::string last_cursor_rect_;
+	base::TimeTicks last_css_cursor_time_ = base::TimeTicks();
   // }
 
   // owned by
