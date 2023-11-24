@@ -221,14 +221,11 @@ v8::Local<v8::Promise> OfficeClient::LoadDocumentAsync(
       base::BindPostTask(task_runner_, std::move(complete_)));
 
   if (loaded_.is_signaled()) {
-    LOG(ERROR) << "office client should be loaded";
     PostBlockingAsync(std::move(async_));
   } else {
     auto deferred_ = base::BindOnce(
         [](decltype(async_) async) { PostBlockingAsync(std::move(async)); },
         std::move(async_));
-
-    LOG(ERROR) << "deferred doc load";
     loaded_.Post(FROM_HERE, std::move(deferred_));
   }
 
