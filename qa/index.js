@@ -561,3 +561,60 @@ function fn2workerURL(fn) {
   const blob = new Blob([`(${fn.toString()})()`], { type: 'text/javascript' });
   return URL.createObjectURL(blob);
 }
+
+async function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function testDocClient() {
+  console.log("running some document client commands... please be patient");
+  if (!globalDoc) {
+    console.log("doc is not defined");
+  }
+
+  console.log("initializing the doc for rendering")
+  await globalDoc.initializeForRendering();
+  await sleep(100);
+
+  console.log("running command values for .uno:ViewAnnotations")
+  globalDoc.getCommandValues('.uno:ViewAnnotations').comments
+  await sleep(100);
+
+  console.log("setting author to New author");
+  globalDoc.setAuthor('New author');
+  await sleep(100);
+
+  console.log("saving the doc to memory");
+  await globalDoc.saveToMemory();
+  await sleep(100);
+
+  console.log("toggling track changes")
+  globalDoc.postUnoCommand('.uno:TrackChanges');
+  await sleep(100);
+
+  console.log("cast doc as property set and set RecordChanges to true");
+  globalDoc.as('text.XTextDocument');
+  await sleep(100);
+
+  console.log("cast doc as property set and set RecordChanges to true")
+  globalDoc
+    .as('beans.XPropertySet')
+    .setPropertyValue('RecordChanges', true);
+  await sleep(100);
+
+  console.log("creating a new view from the document")
+  globalDoc.newView();
+  await sleep(100);
+
+  console.log("testing save as pdf")
+  globalDoc.saveAs(`./${new Date()}.pdf`, 'pdf');
+  await sleep(100);
+
+  console.log("testing save as docx")
+  globalDoc.saveAs(`./${new Date()}.docx`, 'docx');
+  await sleep(100);
+
+  console.log("resetSelection")
+  globalDoc.resetSelection();
+  await sleep(100);
+}

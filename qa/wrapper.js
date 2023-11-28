@@ -230,7 +230,7 @@ class OfficeDoc extends HTMLElement {
       this.ignoreScroll = false;
       return;
     }
-    this.embed.updateScroll(this.scroller.scrollTop);
+    this.embed.updateScroll(Math.floor(this.scroller.scrollTop, 0));
   }
 
   _refreshSize = () => {
