@@ -128,6 +128,7 @@ declare namespace LibreOffice {
     redline_table_entry_modified: any;
     redline_table_size_changed: any;
     invalidate_tiles: any;
+    mouse_pointer: any;
   }
 
   type DocumentEventHandler<
