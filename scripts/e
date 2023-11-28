@@ -262,7 +262,9 @@ case "$1" in
     export RUN_GN_ONCE="${RUN_GN_ONCE:true}"
 
     # Only build if there are changes to src/electron since the last successful build
-    if [ -e "$LAST_RUN_STAMP" ] && find "$BASE_PATH/src/electron" -newer "$LAST_RUN_STAMP" -exec false {} +
+    if [ -e "$LAST_RUN_STAMP" ] && \
+      find "$BASE_PATH/src/electron" -newer "$LAST_RUN_STAMP" -exec false {} + && \
+      find "$BASE_PATH/src/third_party/libreofficekit/instdir" -newer "$LAST_RUN_STAMP" -exec false {} +
     then
       echo "No changes since last build"
     else
@@ -319,13 +321,18 @@ case "$1" in
   test)
     GDB_PREFIX=""
     OUT_DIR="out/$ELECTRON_OUT_DIR"
+    FLAGS=("${@:2}")
+    # By default, only run tests once and only report failures
+    if [ -z "${FLAGS[*]}" ]; then
+      FLAGS=(--gtest_repeat=1 --gtest_brief=1)
+    fi
 
     prepare_for_build
     if [ "$UPDATE_LOK" = "true" ]; then rm -rf "$OUT_DIR/libreofficekit"; fi
     autoninja -C "$OUT_DIR" electron/office:office_unittests
     if [ "$IN_GDB" = "true" ]; then GDB_PREFIX="gdb --args"; fi
-    "$BASE_PATH/src/tools/clang/scripts/generate_compdb.py" -p "$OUT_DIR" > "$BASE_PATH/compile_commands.json"
-    $GDB_PREFIX "$OUT_DIR/office_unittests" "${@:2}"
+    if [ "$IN_LLDB" = "true" ]; then GDB_PREFIX="lldb --"; fi
+    $GDB_PREFIX "$OUT_DIR/office_unittests" "${FLAGS[@]}"
     ;;
   coverage)
     OUT_DIR="out/coverage"

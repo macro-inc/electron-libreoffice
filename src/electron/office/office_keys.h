@@ -2,8 +2,7 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
-#ifndef OFFICE_OFFICE_KEYS_H_
-#define OFFICE_OFFICE_KEYS_H_
+#pragma once
 
 #include <cstdint>
 namespace electron::office {
@@ -188,4 +187,4 @@ namespace DomCode {
 }  // namespace DomCode
 
 }  // namespace electron::office
-#endif  // OFFICE_OFFICE_KEYS_H_
+

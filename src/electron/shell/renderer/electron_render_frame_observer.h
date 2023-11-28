@@ -35,6 +35,10 @@ class ElectronRenderFrameObserver : public content::RenderFrameObserver {
                                 int world_id) override;
   void OnDestruct() override;
   void DidMeaningfulLayout(blink::WebMeaningfulLayout layout_type) override;
+	void DidCommitProvisionalLoad(ui::PageTransition transition) override;
+  void DidStartNavigation(
+      const GURL& url,
+      absl::optional<blink::WebNavigationType> navigation_type) override;
 
  private:
   bool ShouldNotifyClient(int world_id);

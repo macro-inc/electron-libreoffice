@@ -10,6 +10,7 @@
 #include "content/public/renderer/render_frame.h"
 #include "electron/buildflags/buildflags.h"
 #include "net/http/http_request_headers.h"
+#include "office/office_instance.h"
 #include "shell/common/api/electron_bindings.h"
 #include "shell/common/gin_helper/dictionary.h"
 #include "shell/common/gin_helper/event_emitter_caller.h"

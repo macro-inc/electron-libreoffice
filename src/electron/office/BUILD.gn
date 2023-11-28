@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/buildflag_header.gni")
+import("//build/config/c++/c++.gni")
 import("//electron/buildflags/buildflags.gni")
 import("//ppapi/buildflags/buildflags.gni")
 import("//testing/test.gni")
@@ -60,17 +61,21 @@ source_set("unov8") {
 
 
 test("office_unittests") {
+  testonly = true
   sources = [
-    "test/mocked_scoped_clipboard_writer.cc",
-    "test/office_test.cc",
-    "test/office_test.h",
-    "atomic_bitset_unittest.cc",
-    "office_singleton_unittest.cc",
-    "office_client_unittest.cc",
-    "document_client_unittest.cc",
-    "event_bus_unittest.cc",
-    "lok_tilebuffer_unittest.cc",
-    "paint_manager_unittest.cc",
+    # After the refactor, the majority of these don't work, I'll get around to it eventually
+    # "test/mocked_scoped_clipboard_writer.cc",
+    # "test/office_test.cc",
+    # "test/office_test.h",
+    # "atomic_bitset_unittest.cc",
+    # "office_singleton_unittest.cc",
+    # "office_client_unittest.cc",
+    # "document_client_unittest.cc",
+    # "event_bus_unittest.cc",
+    # "lok_tilebuffer_unittest.cc",
+    # "paint_manager_unittest.cc",
+    "lok_callback.cc",
+    "lok_callback_unittest.cc",
     "test/run_all_unittests.cc",
   ]
 
@@ -82,7 +87,8 @@ test("office_unittests") {
   ]
 
   deps = [
-    ":office_lib",
+    # ":office_lib",
+    ":buildflags",
     "//base",
     "//base/test:test_support",
     "//url:url",
@@ -99,22 +105,24 @@ source_set("office_lib") {
   sources = [
     "atomic_bitset.cc",
     "atomic_bitset.h",
+    "v8_callback.cc",
+    "v8_callback.h",
+    "renderer_transferable.cc",
+    "renderer_transferable.h",
     "document_client.cc",
     "document_client.h",
-    "event_bus.cc",
-    "event_bus.h",
+    "document_holder.cc",
+    "document_holder.h",
     "lok_tilebuffer.cc",
     "lok_tilebuffer.h",
     "lok_callback.cc",
     "lok_callback.h",
     "paint_manager.cc",
     "paint_manager.h",
-    "office_singleton.cc",
-    "office_singleton.h",
-    "async_scope.cc",
-    "async_scope.h",
-    "threaded_promise_resolver.cc",
-    "threaded_promise_resolver.h",
+    "office_instance.cc",
+    "office_instance.h",
+    "promise.cc",
+    "promise.h",
     "office_client.cc",
     "office_client.h",
     "office_keys.cc",

@@ -9,6 +9,8 @@
 #include <utility>
 #include <vector>
 
+#include "base/at_exit.h"
+#include "base/bind.h"
 #include "base/command_line.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
@@ -21,7 +23,9 @@
 #include "content/public/renderer/render_view.h"
 #include "electron/buildflags/buildflags.h"
 #include "electron/office/office_web_plugin.h"
+#include "office/office_instance.h"
 #include "printing/buildflags/buildflags.h"
+#include "sandbox/policy/switches.h"
 #include "shell/browser/api/electron_api_protocol.h"
 #include "shell/common/api/electron_api_native_image.h"
 #include "shell/common/color_util.h"
@@ -286,6 +290,14 @@ void RendererClientBase::RenderThreadStarted() {
       command_line->GetSwitchValueNative(switches::kAppUserModelId);
   if (!app_id.empty()) {
     SetCurrentProcessExplicitAppUserModelID(app_id.c_str());
+  }
+#endif
+
+#if BUILDFLAG(ENABLE_OFFICE)
+  // we only start LO in non-sandboxed processes
+  if (!command_line->HasSwitch(switches::kEnableSandbox) ||
+      command_line->HasSwitch(sandbox::policy::switches::kNoSandbox)) {
+    office::OfficeInstance::Create();
   }
 #endif
 }
@@ -588,11 +600,19 @@ bool RendererClientBase::IsWebViewFrame(
 #if BUILDFLAG(ENABLE_OFFICE)
 void RendererClientBase::WorkerScriptReadyForEvaluationOnWorkerThread(
     v8::Local<v8::Context> context) {
-  office::OfficeClient::GetCurrent()->InstallToContext(context);
+  // Uncomment to enable using LOK from workers
+  // By default it _will share the global lock_, so there's currently no benefit
+  // to this
+
+  // office::OfficeInstance::Create();
+  // office::OfficeClient::InstallToContext(context);
 }
 void RendererClientBase::WillDestroyWorkerContextOnWorkerThread(
     v8::Local<v8::Context> context) {
-  office::OfficeClient::GetCurrent()->RemoveFromContext(context);
+  // Uncomment to enable using LOK from workers. By default it _will share the
+  // global lock_, so there's currently no benefit to this
+
+  // office::OfficeClient::RemoveFromContext(context);
 }
 #endif
 

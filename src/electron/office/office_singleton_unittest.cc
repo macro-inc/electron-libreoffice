@@ -16,15 +16,15 @@ TEST(OfficeSingletonTest, Basic) {
 
   {
     base::ShadowingAtExitManager sem;
-    EXPECT_FALSE(OfficeSingleton::IsValid());
-    OfficeSingleton* instance = OfficeSingleton::GetInstance();
+    EXPECT_FALSE(OfficeInstance::IsValid());
+    OfficeInstance* instance = OfficeInstance::GetInstance();
     EXPECT_NE(nullptr, instance);
-    EXPECT_TRUE(OfficeSingleton::IsValid());
+    EXPECT_TRUE(OfficeInstance::IsValid());
 
     EXPECT_NE(nullptr, instance->GetOffice());
   }
 
-  EXPECT_FALSE(OfficeSingleton::IsValid());
+  EXPECT_FALSE(OfficeInstance::IsValid());
 }
 
 TEST(OfficeSingletonDeathTest, MissingFontConfig) {
@@ -33,13 +33,13 @@ TEST(OfficeSingletonDeathTest, MissingFontConfig) {
 
   {
     base::ShadowingAtExitManager sem;
-    EXPECT_FALSE(OfficeSingleton::IsValid());
-    OfficeSingleton* instance = nullptr;
-    EXPECT_DEATH({ instance = OfficeSingleton::GetInstance(); }, "Fontconfig error");
+    EXPECT_FALSE(OfficeInstance::IsValid());
+    OfficeInstance* instance = nullptr;
+    EXPECT_DEATH({ instance = OfficeInstance::GetInstance(); }, "Fontconfig error");
     EXPECT_EQ(nullptr, instance);
-    EXPECT_FALSE(OfficeSingleton::IsValid());
+    EXPECT_FALSE(OfficeInstance::IsValid());
   }
 
-  EXPECT_FALSE(OfficeSingleton::IsValid());
+  EXPECT_FALSE(OfficeInstance::IsValid());
 }
 }  // namespace electron::office

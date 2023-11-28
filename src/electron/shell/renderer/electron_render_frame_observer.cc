@@ -19,6 +19,7 @@
 #include "net/base/net_module.h"
 #include "net/grit/net_resources.h"
 #include "office/office_client.h"
+#include "office/office_instance.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "shell/common/gin_helper/microtasks_scope.h"
 #include "shell/common/options_switches.h"
@@ -128,8 +129,11 @@ void ElectronRenderFrameObserver::DidInstallConditionalFeatures(
   // DidCreateScriptContext();
   bool is_main_world = IsMainWorld(world_id);
   bool is_main_frame = render_frame_->IsMainFrame();
-  bool is_dev_tools = render_frame_->GetWebFrame()->GetDocument().Url().ProtocolIs("devtools");
-  bool is_dev_tools_extension = render_frame_->GetWebFrame()->GetDocument().Url().ProtocolIs("chrome-extension");
+  bool is_dev_tools =
+      render_frame_->GetWebFrame()->GetDocument().Url().ProtocolIs("devtools");
+  bool is_dev_tools_extension =
+      render_frame_->GetWebFrame()->GetDocument().Url().ProtocolIs(
+          "chrome-extension");
   bool allow_node_in_sub_frames = prefs.node_integration_in_sub_frames;
 
   bool should_create_isolated_context =
@@ -138,7 +142,16 @@ void ElectronRenderFrameObserver::DidInstallConditionalFeatures(
 
 #if BUILDFLAG(ENABLE_OFFICE)
   if (is_main_world && !is_dev_tools && !is_dev_tools_extension) {
-    office::OfficeClient::GetCurrent()->InstallToContext(context);
+    office::OfficeClient::InstallToContext(context);
+    // automatically add the "before close" hook
+    blink::WebScriptSource source(
+        "window.addEventListener('beforeunload', () => "
+        "{libreoffice.__handleBeforeUnload()});");
+    render_frame_->GetWebFrame()->RequestExecuteScript(
+        blink::DOMWrapperWorld::kMainWorldId, base::make_span(&source, 1),
+        false, blink::WebLocalFrame::kSynchronous, nullptr,
+        blink::BackForwardCacheAware::kAllow,
+        blink::WebLocalFrame::PromiseBehavior::kDontWait);
   }
 #endif
 
@@ -175,12 +188,13 @@ void ElectronRenderFrameObserver::WillReleaseScriptContext(
     renderer_client_->WillReleaseScriptContext(context, render_frame_);
 #if BUILDFLAG(ENABLE_OFFICE)
   if (IsMainWorld(world_id)) {
-    office::OfficeClient::GetCurrent()->RemoveFromContext(context);
+    office::OfficeClient::RemoveFromContext(context);
   }
 #endif
 }
 
 void ElectronRenderFrameObserver::OnDestruct() {
+  office::OfficeInstance::Unset();
   delete this;
 }
 
@@ -241,6 +255,22 @@ bool ElectronRenderFrameObserver::ShouldNotifyClient(int world_id) {
     return IsIsolatedWorld(world_id);
 
   return IsMainWorld(world_id);
+}
+
+void ElectronRenderFrameObserver::DidStartNavigation(
+      const GURL& url,
+      absl::optional<blink::WebNavigationType> navigation_type)
+{
+#if BUILDFLAG(ENABLE_OFFICE)
+	if (url.SchemeIs("devtools") || url.SchemeIs("chrome-extension")) {
+    office::OfficeInstance::Unset();
+	}
+#endif
+}
+void ElectronRenderFrameObserver::DidCommitProvisionalLoad(
+    ui::PageTransition transition) {
+#if BUILDFLAG(ENABLE_OFFICE)
+#endif
 }
 
 }  // namespace electron

@@ -2,8 +2,7 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
-#ifndef OFFICE_ATOMIC_BITSET_H_
-#define OFFICE_ATOMIC_BITSET_H_
+#pragma once
 
 #include <atomic>
 #include <cstddef>
@@ -70,4 +69,4 @@ class AtomicBitset {
 };
 
 }
-#endif  // OFFICE_ATOMIC_BITSET_H_
+
