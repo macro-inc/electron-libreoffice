@@ -74,6 +74,7 @@ bool OfficeInstance::IsValid() {
 }
 
 void OfficeInstance::Unset() {
+	if (!Get()) return;
   Get()->unset_ = true;
   Get()->instance_.reset();
 }

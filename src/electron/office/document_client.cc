@@ -785,13 +785,29 @@ v8::Local<v8::Promise> DocumentClient::GetCommandValues(
         if (!result) {
           return promise.Resolve();
         }
-        v8::Local<v8::String> res_json_str;
-        if (!v8::String::NewFromUtf8(promise.isolate(), result.get())
-                 .ToLocal(&res_json_str)) {
-          return promise.Resolve();
-        }
-        promise.Resolve(v8::JSON::Parse(promise.GetContext(), res_json_str)
-                            .FromMaybe(v8::Local<v8::Value>()));
+        promise.task_runner()->PostTask(
+            FROM_HERE,
+            base::BindOnce(
+                [](Promise<v8::Value> promise, LokStrPtr result,
+                   base::WeakPtr<OfficeClient> office) {
+                  if (!office.MaybeValid())
+                    return;
+                  v8::Isolate* isolate = promise.isolate();
+                  v8::HandleScope handle_scope(isolate);
+                  v8::MicrotasksScope microtasks_scope(
+                      isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
+                  v8::Context::Scope context_scope(promise.GetContext());
+
+                  v8::Local<v8::String> res_json_str;
+                  if (!v8::String::NewFromUtf8(promise.isolate(), result.get())
+                           .ToLocal(&res_json_str)) {
+                    return promise.Resolve();
+                  }
+                  promise.Resolve(
+                      v8::JSON::Parse(promise.GetContext(), res_json_str)
+                          .FromMaybe(v8::Local<v8::Value>()));
+                },
+                std::move(promise), std::move(result), std::move(office)));
       },
       std::move(promise), command, OfficeClient::GetWeakPtr()));
 

@@ -295,8 +295,7 @@ void RendererClientBase::RenderThreadStarted() {
 
 #if BUILDFLAG(ENABLE_OFFICE)
   // we only start LO in non-sandboxed processes
-  if (!command_line->HasSwitch(switches::kEnableSandbox) ||
-      command_line->HasSwitch(sandbox::policy::switches::kNoSandbox)) {
+  if (command_line->HasSwitch(sandbox::policy::switches::kNoSandbox)) {
     office::OfficeInstance::Create();
   }
 #endif
