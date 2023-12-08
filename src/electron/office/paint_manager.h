@@ -27,6 +27,7 @@ class PaintManager {
   };
 
   explicit PaintManager(Client* client);
+  PaintManager(Client* client, std::unique_ptr<PaintManager> other);
   ~PaintManager();
 
   PaintManager(const PaintManager& other) = delete;
@@ -45,6 +46,9 @@ class PaintManager {
 
   // should be used to prevent lingering tasks during zooms
   void ClearTasks();
+
+  // should be used to block invalidations while a client is being destroyed
+  void OnDestroy();
 
   void PausePaint();
   void ResumePaint(bool paint_next = true);
@@ -89,10 +93,6 @@ class PaintManager {
   };
 
   void PostCurrentTask();
-  void CurrentTaskComplete(Client* client,
-                           CancelFlagPtr cancel_flag,
-                           bool full_paint,
-                           float scale);
   static bool PaintTile(scoped_refptr<office::TileBuffer> tile_buffer,
                         CancelFlagPtr cancel_flag,
                         DocumentHolderWithView document,
@@ -113,7 +113,7 @@ class PaintManager {
   std::unique_ptr<Task> current_task_ = nullptr;
   std::unique_ptr<Task> next_task_ = nullptr;
   base::TimeTicks last_paint_time_ = {};
+  CancelFlagPtr cancel_invalidate_;
 };
 
 }  // namespace electron::office
-

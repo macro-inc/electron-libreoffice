@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/barrier_closure.h"
+#include "base/task/bind_post_task.h"
 #include "base/logging.h"
 #include "base/time/time.h"
 #include "office/cancellation_flag.h"
@@ -41,7 +42,18 @@ std::size_t PaintManager::Task::ContextHash() const noexcept {
 PaintManager::PaintManager(Client* client)
     : task_runner_(base::ThreadPool::CreateTaskRunner(
           {base::TaskPriority::USER_VISIBLE})),
-      client_(client) {}
+      client_(client),
+      current_task_(nullptr),
+      next_task_(nullptr),
+      cancel_invalidate_(CancelFlag::Create()) {}
+
+PaintManager::PaintManager(Client* client, std::unique_ptr<PaintManager> other)
+    : task_runner_(base::ThreadPool::CreateTaskRunner(
+          {base::TaskPriority::USER_VISIBLE})),
+      client_(client),
+      current_task_(std::move(other->current_task_)),
+      next_task_(std::move(other->next_task_)),
+      cancel_invalidate_(CancelFlag::Create()) {}
 
 PaintManager::PaintManager() = default;
 PaintManager::~PaintManager() {
@@ -181,16 +193,19 @@ bool PaintManager::ScheduleNextPaint(std::vector<TileRange> tile_ranges_) {
 }
 
 void PaintManager::PostCurrentTask() {
-  if (skip_render_)
+  if (skip_render_ || !current_task_ || CancelFlag::IsCancelled(cancel_invalidate_))
     return;
 
   std::size_t hash = 0;
   if (auto tile_buffer = client_->GetTileBuffer()) {
     hash = current_task_->ContextHash();
-
 #ifdef DEBUG_PAINT_MANAGER
     LOG(ERROR) << "PCT " << current_task_->scale_ << " @ " << std::hex << hash;
 #endif
+
+    if (tile_buffer->IsEmpty()) {
+      return;
+    }
 
     tile_buffer->SetActiveContext(hash);
   }
@@ -198,24 +213,18 @@ void PaintManager::PostCurrentTask() {
   auto tile_count = TileCount(simplified_ranges);
   base::RepeatingClosure completed = base::BarrierClosure(
       tile_count,
-      base::BindOnce(&PaintManager::CurrentTaskComplete, base::Unretained(this),
-                     client_, current_task_->skip_invalidation_flag_,
-                     current_task_->full_paint_, current_task_->scale_));
+      base::BindPostTask(task_runner_,
+      base::BindOnce([](CancelFlagPtr task_cancel_flag, CancelFlagPtr manager_cancel_flag, Client* client) {
+        if (!CancelFlag::IsCancelled(manager_cancel_flag) && !CancelFlag::IsCancelled(task_cancel_flag)) {
+          client->InvalidatePluginContainer();
+        }
+      }, current_task_->skip_invalidation_flag_, cancel_invalidate_, base::Unretained(client_))));
   for (auto& it : simplified_ranges) {
     task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&PaintManager::PaintTileRange, client_->GetTileBuffer(),
                        current_task_->skip_paint_flag_,
-                       current_task_->document_, it, hash, completed));
-  }
-}
-
-void PaintManager::CurrentTaskComplete(Client* client,
-                                       CancelFlagPtr cancel_flag,
-                                       bool full_paint,
-                                       float scale) {
-  if (!CancelFlag::IsCancelled(cancel_flag)) {
-    client->InvalidatePluginContainer();
+                       current_task_->document_, it, hash, std::move(completed)));
   }
 }
 
@@ -248,6 +257,11 @@ bool PaintManager::PaintTile(scoped_refptr<office::TileBuffer> tile_buffer,
       tile_buffer->PaintTile(cancel_flag, document, tile_index, context_hash);
   completed.Run();
   return res;
+}
+
+
+void PaintManager::OnDestroy() {
+  CancelFlag::CancelAndReset(cancel_invalidate_);
 }
 
 void PaintManager::ClearTasks() {

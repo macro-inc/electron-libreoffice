@@ -117,6 +117,7 @@ class TileBuffer : public base::RefCountedDeleteOnSequence<TileBuffer> {
 
   void SetActiveContext(std::size_t active_context_hash);
   TileBuffer();
+  bool IsEmpty();
 
  private:
   friend class base::RefCountedDeleteOnSequence<TileBuffer>;
@@ -167,24 +168,24 @@ class TileBuffer : public base::RefCountedDeleteOnSequence<TileBuffer> {
   }
 
   struct RowLimit {
-    unsigned int start;
-    unsigned int end;
+    unsigned int start = 0;
+    unsigned int end = 0;
   };
 
   RowLimit LimitRange(int y_pos, unsigned int view_height);
 
-  unsigned int columns_;
-  unsigned int rows_;
-  float scale_;
+  unsigned int columns_ = 0;
+  unsigned int rows_ = 0;
+  float scale_ = 1.0f;
 
-  long doc_width_twips_;
-  long doc_height_twips_;
-  float doc_width_scaled_px_;
-  float doc_height_scaled_px_;
+  long doc_width_twips_ = 0;
+  long doc_height_twips_ = 0;
+  float doc_width_scaled_px_ = 0.0f;
+  float doc_height_scaled_px_ = 0.0f;
 
-  AtomicBitset valid_tile_;
+  AtomicBitset valid_tile_{};
 
-  std::atomic<std::size_t> active_context_hash_;
+  std::atomic<std::size_t> active_context_hash_ = 0;
 
   // ring pool (in order to prevent OOM crash on invididual tile allocations)
 
@@ -213,4 +214,3 @@ class TileBuffer : public base::RefCountedDeleteOnSequence<TileBuffer> {
   bool in_paint_ = false;
 };
 }  // namespace electron::office
-

@@ -229,8 +229,8 @@ std::vector<TileRange> TileBuffer::InvalidRangesRemaining(
 
 TileBuffer::RowLimit TileBuffer::LimitRange(int y_pos,
                                             unsigned int view_height) {
-  unsigned int start_row = std::max(
-      std::floor((double)y_pos / (double)TileBuffer::kTileSizePx), 0.0);
+  unsigned int start_row = y_pos < 0 ? 0 :
+      std::floor((double)y_pos / (double)TileBuffer::kTileSizePx);
   unsigned int end_row = start_row + std::ceil((double)view_height /
                                                (double)TileBuffer::kTileSizePx);
   return {start_row, std::max(start_row, end_row)};
@@ -263,7 +263,8 @@ std::vector<TileRange> TileBuffer::ClipRanges(std::vector<TileRange> ranges,
 
 TileRange TileBuffer::NextScrollTileRange(int next_y_pos,
                                           unsigned int view_height) {
-  auto row_limit = LimitRange(next_y_pos - view_height, view_height * 3);
+  next_y_pos = std::max(0, next_y_pos - (int)view_height);
+  auto row_limit = LimitRange(next_y_pos, view_height * 3);
   unsigned int start_row = row_limit.start > 0 ? row_limit.start : 0;
   unsigned int end_row = row_limit.end;
 
@@ -523,6 +524,10 @@ size_t TileCount(std::vector<TileRange> tile_ranges_) {
     result += it.index_end - it.index_start + 1;
   }
   return result;
+}
+
+bool TileBuffer::IsEmpty() {
+  return rows_ == 0 || columns_ == 0;
 }
 
 Snapshot TileBuffer::MakeSnapshot(CancelFlagPtr cancel_flag,

@@ -4,8 +4,6 @@
 
 #pragma once
 
-#include <map>
-#include <set>
 #include <unordered_map>
 #include <atomic>
 #include "base/hash/hash.h"
@@ -25,8 +23,8 @@ struct DocumentEventId {
   const int event_id;
   const int view_id;
 
-  DocumentEventId(size_t doc_id, int evt_id, int view_id)
-      : document_id(doc_id), event_id(evt_id), view_id(view_id) {}
+  DocumentEventId(size_t doc_id, int evt_id, int view_id_)
+      : document_id(doc_id), event_id(evt_id), view_id(view_id_) {}
 
   bool operator==(const DocumentEventId& other) const {
     return (document_id == other.document_id && event_id == other.event_id &&
@@ -105,4 +103,3 @@ class OfficeInstance {
 };
 
 }  // namespace electron::office
-

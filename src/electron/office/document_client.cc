@@ -65,11 +65,15 @@ gin::WrapperInfo DocumentClient::kWrapperInfo = {gin::kEmbedderNativeGin};
 namespace {
 
 inline void lok_safe_free(void* ptr) {
+#if BUILDFLAG(IS_WIN)
+  free(ptr);
+#else
   base::UncheckedFree(ptr);
+#endif
 }
 
 struct LokSafeDeleter {
-  inline void operator()(void* ptr) const { base::UncheckedFree(ptr); }
+  inline void operator()(void* ptr) const { lok_safe_free(ptr); }
 };
 
 typedef std::unique_ptr<char[], LokSafeDeleter> LokStrPtr;
@@ -467,10 +471,18 @@ v8::Local<v8::Value> DocumentClient::GotoOutline(int idx,
 }
 
 namespace {
+#if BUILDFLAG(IS_WIN)
+extern "C" void* (*const malloc_unchecked)(size_t);
+#endif
+
 void* UncheckedAlloc(size_t size) {
+#if BUILDFLAG(IS_WIN)
+  return malloc_unchecked(size);
+#else
   void* ptr;
   std::ignore = base::UncheckedMalloc(size, &ptr);
   return ptr;
+#endif
 }
 
 }  // namespace

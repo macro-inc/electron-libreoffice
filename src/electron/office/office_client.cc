@@ -206,14 +206,15 @@ v8::Local<v8::Promise> OfficeClient::LoadDocumentAsync(
   auto promise_handle = promise.GetHandle();
 
   auto load_ = base::BindOnce(
-      [](const base::WeakPtr<OfficeClient>& client, const std::string& path) {
-        if (!client.MaybeValid())
-          return static_cast<lok::Document*>(nullptr);
-
-        return client->GetOffice()->documentLoad(path.c_str(),
+      [](OfficeClient* client, const std::string& path) {
+        if (client->GetOffice()) {
+          return client->GetOffice()->documentLoad(path.c_str(),
                                                  "Language=en-US,Batch=true");
+        } else {
+          return static_cast<lok::Document*>(nullptr);
+        }
       },
-      weak_factory_.GetWeakPtr(), std::string(path));
+      base::Unretained(this), std::string(path));
   auto complete_ =
       base::BindOnce(&ResolveLoadWithDocumentClient, weak_factory_.GetWeakPtr(),
                      std::move(promise), std::string(path));
@@ -307,11 +308,10 @@ v8::Local<v8::Promise> OfficeClient::SetDocumentPasswordAsync(
     auto async = base::BindOnce(
         [](const base::WeakPtr<OfficeClient>& client, Promise<void> promise,
            const std::string& url, const std::string& password) {
-          if (!client.MaybeValid())
-            return;
-
-          client->GetOffice()->setDocumentPassword(url.c_str(),
-                                                   password.c_str());
+          if (client.MaybeValid()) {
+            client->GetOffice()->setDocumentPassword(url.c_str(),
+                                                    password.c_str());
+          }
           promise.Resolve();
         },
         weak_factory_.GetWeakPtr(), std::move(promise), std::move(url),
