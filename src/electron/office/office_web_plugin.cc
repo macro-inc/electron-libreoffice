@@ -4,8 +4,6 @@
 
 #include "office/office_web_plugin.h"
 
-#include <chrono>
-#include <memory>
 #include <string_view>
 
 #include "LibreOfficeKit/LibreOfficeKit.hxx"
@@ -50,8 +48,6 @@
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
-#include "third_party/blink/public/common/input/web_pointer_properties.h"
-#include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
 #include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_plugin_params.h"
@@ -59,15 +55,11 @@
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
-#include "ui/base/cursor/platform_cursor.h"
 #include "ui/events/blink/blink_event_util.h"
-#include "ui/gfx/geometry/point3_f.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/gfx/geometry/size_conversions.h"
-#include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/native_widget_types.h"
 #include "v8/include/v8-isolate.h"
@@ -98,7 +90,7 @@ OfficeWebPlugin::OfficeWebPlugin(blink::WebPluginParams params,
   auto* inst = office::OfficeInstance::Get();
   if (inst)
     inst->AddDestroyedObserver(this);
-};
+}
 
 bool OfficeWebPlugin::Initialize(blink::WebPluginContainer* container) {
   container_ = container;
@@ -111,6 +103,7 @@ bool OfficeWebPlugin::Initialize(blink::WebPluginContainer* container) {
 }
 
 void OfficeWebPlugin::Destroy() {
+  paint_manager_->OnDestroy();
   if (document_client_.MaybeValid()) {
     document_client_->Unmount();
     document_client_->MarkRendererWillRemount(
@@ -924,6 +917,10 @@ void OfficeWebPlugin::UpdateIntersectingPages() {
 void OfficeWebPlugin::UpdateScroll(int y_position) {
   if (!document_ || !document_client_.MaybeValid() || stop_scrolling_)
     return;
+  if (!tile_buffer_ || tile_buffer_->IsEmpty()) {
+    LOG(ERROR) << "Tile buffer is empty during scroll";
+    return;
+  }
 
   float view_height =
       plugin_rect_.height() / device_scale_ / (float)viewport_zoom_;
@@ -982,7 +979,7 @@ std::string OfficeWebPlugin::RenderDocument(
   if (needs_reset && document_client_.MaybeValid()) {
     document_client_->Unmount();
   }
-  bool needs_restore = maybe_restore_key.has_value();
+  bool needs_restore = !needs_reset && document_ && document_ == client->GetDocument() && maybe_restore_key.has_value();
 
   document_ = client->GetDocument();
   document_client_ = client->GetWeakPtr();
@@ -993,20 +990,27 @@ std::string OfficeWebPlugin::RenderDocument(
   }
 
   if (needs_reset) {
+    first_paint_ = true;
     tile_buffer_->InvalidateAllTiles();
   }
 
   if (needs_restore) {
     auto transferable = client->GetRestoredRenderer(maybe_restore_key.value());
-    tile_buffer_ = std::move(transferable.tile_buffer);
+    if (transferable.tile_buffer && !transferable.tile_buffer->IsEmpty()) {
+      tile_buffer_ = std::move(transferable.tile_buffer);
+    }
     snapshot_ = std::move(transferable.snapshot);
-    paint_manager_ = std::move(transferable.paint_manager);
+    if (transferable.paint_manager) {
+      paint_manager_ = std::make_unique<office::PaintManager>(this, std::move(transferable.paint_manager));
+    }
     first_paint_ = false;
     page_rects_cached_ = std::move(transferable.page_rects);
     first_intersect_ = transferable.first_intersect;
     last_intersect_ = transferable.last_intersect;
     last_cursor_rect_ = std::move(transferable.last_cursor_rect);
+    if (transferable.zoom > 0) {
     zoom_ = transferable.zoom;
+    }
   }
 
   client->Mount(isolate);
@@ -1015,6 +1019,10 @@ std::string OfficeWebPlugin::RenderDocument(
   } else {
     auto size = document_client_->DocumentSizeTwips();
     scroll_y_position_ = 0;
+    // TODO: figure out why zoom_ can sometimes be set to NaN
+    if (zoom_ != zoom_ || zoom_ < 0) {
+      zoom_ = 1.0f;
+    }
     tile_buffer_->SetYPosition(0);
     tile_buffer_->Resize(size.width(), size.height(), TotalScale());
   }
@@ -1059,6 +1067,11 @@ void OfficeWebPlugin::ScheduleAvailableAreaPaint(bool invalidate) {
   gfx::RectF offset_area(available_area_);
   offset_area.Offset(0, scroll_y_position_);
   auto view_height = offset_area.height();
+  // this is a crash case that should not occur anymore
+  if (tile_buffer_->IsEmpty()) {
+    LOG(ERROR) << "Full area paint, but tile buffer is empty";
+    return;
+  }
   auto range = tile_buffer_->InvalidateTilesInRect(offset_area, !invalidate);
   auto limit = tile_buffer_->LimitIndex(scroll_y_position_, view_height);
 
