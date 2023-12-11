@@ -64,9 +64,18 @@ gin::WrapperInfo DocumentClient::kWrapperInfo = {gin::kEmbedderNativeGin};
 
 namespace {
 
+#if BUILDFLAG(IS_WIN)
+inline HANDLE get_heap_handle() {
+  return reinterpret_cast<HANDLE>(_get_heap_handle());
+}
+#endif
+
 inline void lok_safe_free(void* ptr) {
 #if BUILDFLAG(IS_WIN)
-  free(ptr);
+  if(!ptr) {
+    return;
+  }
+  HeapFree(get_heap_handle(), 0, ptr);
 #else
   base::UncheckedFree(ptr);
 #endif
