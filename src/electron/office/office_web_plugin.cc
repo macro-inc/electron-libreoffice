@@ -821,7 +821,7 @@ void OfficeWebPlugin::HandleInvalidateTiles(std::string payload) {
       return;
 
     gfx::RectF offset_area(available_area_);
-    offset_area.Offset(0, scroll_y_position_ * device_scale_);
+    offset_area.Offset(0, scroll_y_position_);
     auto view_height = offset_area.height();
     auto range = tile_buffer_->InvalidateTilesInTwipRect(dirty_rect);
     auto limit = tile_buffer_->LimitIndex(scroll_y_position_, view_height);
@@ -1057,7 +1057,7 @@ std::string OfficeWebPlugin::RenderDocument(
 
 void OfficeWebPlugin::ScheduleAvailableAreaPaint(bool invalidate) {
   gfx::RectF offset_area(available_area_);
-  offset_area.Offset(0, scroll_y_position_ * device_scale_);
+  offset_area.Offset(0, scroll_y_position_);
   auto view_height = offset_area.height();
   auto range = tile_buffer_->InvalidateTilesInRect(offset_area, !invalidate);
   auto limit = tile_buffer_->LimitIndex(scroll_y_position_, view_height);
