@@ -538,12 +538,12 @@ v8::Local<v8::Promise> DocumentClient::SaveToMemory(v8::Isolate* isolate,
                   auto backing_store = v8::ArrayBuffer::NewBackingStore(
                       data, size,
                       [](void* data, size_t, void*) {
-                        base::UncheckedFree(data);
+                        lok_safe_free(data);
                       },
                       nullptr);
                   v8::Local<v8::ArrayBuffer> array_buffer =
                       v8::ArrayBuffer::New(isolate, std::move(backing_store));
-                  promise.Resolve(array_buffer);
+                  promise.Resolve(std::move(array_buffer));
                 },
                 std::move(promise), pOutput, size, std::move(office)));
       },

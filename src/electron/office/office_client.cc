@@ -120,15 +120,15 @@ void OfficeClient::RemoveFromContext(v8::Local<v8::Context> /*context*/) {
 
 OfficeClient::OfficeClient()
     : task_runner_(base::SequencedTaskRunnerHandle::Get()) {
-	auto* inst = OfficeInstance::Get();
-	if (inst)
-		inst->AddLoadObserver(this);
+  auto* inst = OfficeInstance::Get();
+  if (inst)
+    inst->AddLoadObserver(this);
 }
 
 OfficeClient::~OfficeClient() {
-	auto* inst = OfficeInstance::Get();
-	if (inst)
-		inst->RemoveLoadObserver(this);
+  auto* inst = OfficeInstance::Get();
+  if (inst)
+    inst->RemoveLoadObserver(this);
 };
 
 gin::ObjectTemplateBuilder OfficeClient::GetObjectTemplateBuilder(
@@ -150,8 +150,7 @@ gin::ObjectTemplateBuilder OfficeClient::GetObjectTemplateBuilder(
       .SetMethod("loadDocument", &OfficeClient::LoadDocumentAsync)
       .SetMethod("loadDocumentFromArrayBuffer",
                  &OfficeClient::LoadDocumentFromArrayBuffer)
-      .SetMethod("__handleBeforeUnload",
-                 &OfficeClient::HandleBeforeUnload);
+      .SetMethod("__handleBeforeUnload", &OfficeClient::HandleBeforeUnload);
 }
 
 const char* OfficeClient::GetTypeName() {
@@ -178,7 +177,7 @@ void ResolveLoadWithDocumentClient(const base::WeakPtr<OfficeClient>& client,
                                    const std::string& path,
                                    lok::Document* doc) {
   if (!client.MaybeValid())
-    return; // don't resolve the promise, the v8 context probably doesn't exist
+    return;  // don't resolve the promise, the v8 context probably doesn't exist
   if (!doc) {
     promise.Resolve();
     return;
@@ -209,7 +208,7 @@ v8::Local<v8::Promise> OfficeClient::LoadDocumentAsync(
       [](OfficeClient* client, const std::string& path) {
         if (client->GetOffice()) {
           return client->GetOffice()->documentLoad(path.c_str(),
-                                                 "Language=en-US,Batch=true");
+                                                   "Language=en-US,Batch=true");
         } else {
           return static_cast<lok::Document*>(nullptr);
         }
@@ -244,28 +243,18 @@ v8::Local<v8::Promise> OfficeClient::LoadDocumentFromArrayBuffer(
     promise.Resolve();
     return promise_handle;
   }
-
+  std::shared_ptr<v8::BackingStore> backing_store =
+      array_buffer->GetBackingStore();
   const std::string path = "memory://" + base::Token::CreateRandom().ToString();
 
   auto load_ = base::BindOnce(
       [](const base::WeakPtr<OfficeClient>& office_client, v8::Isolate* isolate,
-         v8::Global<v8::ArrayBuffer> global, v8::Global<v8::Context> context) {
-        v8::HandleScope handle_scope(isolate);
-        v8::MicrotasksScope microtasks_scope(
-            isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
-        v8::Context::Scope context_scope(
-            v8::Local<v8::Context>::New(isolate, context));
-
-        v8::Local<v8::ArrayBuffer> array_buffer = global.Get(isolate);
-        array_buffer->GetBackingStore()->Data();
-
+         std::shared_ptr<v8::BackingStore> backing_store) {
         return office_client->GetOffice()->loadFromMemory(
-            static_cast<char*>(array_buffer->GetBackingStore()->Data()),
-            array_buffer->ByteLength());
+            static_cast<char*>(backing_store->Data()),
+            backing_store->ByteLength());
       },
-      weak_factory_.GetWeakPtr(), isolate,
-      v8::Global<v8::ArrayBuffer>(isolate, array_buffer),
-      v8::Global<v8::Context>(isolate, promise.GetContext()));
+      weak_factory_.GetWeakPtr(), isolate, backing_store);
 
   auto complete_ =
       base::BindOnce(&ResolveLoadWithDocumentClient, weak_factory_.GetWeakPtr(),
@@ -310,7 +299,7 @@ v8::Local<v8::Promise> OfficeClient::SetDocumentPasswordAsync(
            const std::string& url, const std::string& password) {
           if (client.MaybeValid()) {
             client->GetOffice()->setDocumentPassword(url.c_str(),
-                                                    password.c_str());
+                                                     password.c_str());
           }
           promise.Resolve();
         },
@@ -330,11 +319,10 @@ base::WeakPtr<OfficeClient> OfficeClient::GetWeakPtr() {
 }
 
 // This is the only place where the OfficeInstance should be used directly
-void OfficeClient::HandleBeforeUnload()
-{
-	auto* inst = OfficeInstance::Get();
-	if (inst)
-		inst->HandleClientDestroyed();
+void OfficeClient::HandleBeforeUnload() {
+  auto* inst = OfficeInstance::Get();
+  if (inst)
+    inst->HandleClientDestroyed();
 }
 
 }  // namespace electron::office
