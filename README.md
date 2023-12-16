@@ -105,6 +105,30 @@ scripts/e vs_devenv
 
 Run `scripts/pull-upstream-changes.sh`
 
-# Fixing CI Failing
+## Testing and coverage
 
-- In the event the mac CI fails you will need to manually run "Clean Mac Runner" job available in the actions tab of this github repo
+There are two kinds of tests:
+- C++
+  - Use [GTest](https://google.github.io/googletest/primer.html)
+  - Located in `src/electron/office/*test.cc`
+  - Unit tests for `something.cc` are located in the same location and named `something_unittest.cc`
+- JavaScript
+  - Use a simple test harness using `assert(condition: boolean)` for tests
+  - Located in `src/electron/office/js_test/*.js`
+
+``` bash
+# run all tests
+scripts/e test
+
+# run tests and get test coverage
+scripts/e coverage
+
+# get usage for test command
+scripts/e test --help
+
+# list all available tests
+scripts/e test --gtest_list_tests
+
+# only run tests starting with Foo
+scripts/e test --gtest_filter=Foo*
+```

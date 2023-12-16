@@ -293,7 +293,7 @@ case "$1" in
     cd "$BASE_PATH"
     echo "Building so that buildflag headers exist"
     scripts/e build
-    "$BASE_PATH/src/tools/clang/scripts/generate_compdb.py" -p "src/$OUT_DIR" > "$BASE_PATH/compile_commands.json"
+    "$BASE_PATH/src/tools/clang/scripts/generate_compdb.py" -p "src/$OUT_DIR" > "$BASE_PATH/src/compile_commands.json"
     ;;
   gen_vs)
     cd "$BASE_PATH/src"
@@ -321,17 +321,17 @@ case "$1" in
   test)
     GDB_PREFIX=""
     OUT_DIR="out/$ELECTRON_OUT_DIR"
-    FLAGS=("${@:2}")
-    # By default, only run tests once and only report failures
-    if [ -z "${FLAGS[*]}" ]; then
-      FLAGS=(--gtest_repeat=1 --gtest_brief=1)
-    fi
+    FLAGS=("${@:2}" --gtest_repeat=1)
 
+    RUN_GN_ONCE=true
     prepare_for_build
     if [ "$UPDATE_LOK" = "true" ]; then rm -rf "$OUT_DIR/libreofficekit"; fi
     autoninja -C "$OUT_DIR" electron/office:office_unittests
     if [ "$IN_GDB" = "true" ]; then GDB_PREFIX="gdb --args"; fi
     if [ "$IN_LLDB" = "true" ]; then GDB_PREFIX="lldb --"; fi
+    if [ "$GEN_CLANGD" = "true" ]; then
+      (cd "$BASE_PATH" && "$BASE_PATH/src/tools/clang/scripts/generate_compdb.py" -p "src/$OUT_DIR" > "$BASE_PATH/src/compile_commands.json")
+    fi
     $GDB_PREFIX "$OUT_DIR/office_unittests" "${FLAGS[@]}"
     ;;
   coverage)

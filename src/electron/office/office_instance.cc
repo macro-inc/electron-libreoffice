@@ -27,24 +27,30 @@
 namespace electron::office {
 
 namespace {
-static base::NoDestructor<base::ThreadLocalOwnedPointer<OfficeInstance>>
-    lazy_tls;
+// this doesn't work well because LOK has a per-process global lock, otherwise it would be ideal
+// static base::NoDestructor<base::ThreadLocalOwnedPointer<OfficeInstance>> lazy_tls;
+// instead we use a function-local static that's shared across all threads
+OfficeInstance& get_instance() {
+  static base::NoDestructor<OfficeInstance> instance;
+  return *instance;
+}
 }  // namespace
 
 void OfficeInstance::Create() {
-  lazy_tls->Set(std::make_unique<OfficeInstance>());
+	if (get_instance().IsValid()) return;
+
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::TaskPriority::USER_BLOCKING},
+      base::BindOnce(&OfficeInstance::Initialize, get_instance().weak_factory_.GetWeakPtr()));
 }
 
 OfficeInstance* OfficeInstance::Get() {
-  return lazy_tls->Get();
+  return &get_instance();
 }
 
 OfficeInstance::OfficeInstance()
     : loaded_observers_(base::MakeRefCounted<OfficeLoadObserverList>()),
       destroyed_observers_(base::MakeRefCounted<DestroyedObserverList>()) {
-  base::ThreadPool::PostTask(
-      FROM_HERE, {base::TaskPriority::USER_BLOCKING},
-      base::BindOnce(&OfficeInstance::Initialize, weak_factory_.GetWeakPtr()));
 }
 
 OfficeInstance::~OfficeInstance() = default;

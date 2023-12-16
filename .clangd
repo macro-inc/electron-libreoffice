@@ -22,4 +22,5 @@ CompileFlags:
     - '-Wstring-conversion'
     - '-Wtautological-overlap-compare'
     - '-Wno-deprecated-builtins' # parts of //base flag incorrectly
+    - '-Isrc'
   Compiler: clang++

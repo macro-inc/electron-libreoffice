@@ -68,7 +68,7 @@ test("office_unittests") {
     # "test/office_test.cc",
     # "test/office_test.h",
     # "atomic_bitset_unittest.cc",
-    # "office_singleton_unittest.cc",
+    "office_instance_unittest.cc",
     # "office_client_unittest.cc",
     # "document_client_unittest.cc",
     # "event_bus_unittest.cc",
@@ -87,7 +87,7 @@ test("office_unittests") {
   ]
 
   deps = [
-    # ":office_lib",
+    ":office_lib",
     ":buildflags",
     "//base",
     "//base/test:test_support",
