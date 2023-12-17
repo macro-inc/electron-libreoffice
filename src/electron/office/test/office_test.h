@@ -52,6 +52,7 @@ class OfficeTest : public gin::V8Test, public gin::ShellRunnerDelegate {
   std::unique_ptr<base::ShadowingAtExitManager> exit_manager_;
   std::unique_ptr<gin::ShellRunner> runner_;
   std::unique_ptr<gin::Runner::Scope> scope_;
+  std::unique_ptr<base::RunLoop> run_loop_;
 };
 
 class JSTest : public OfficeTest {
@@ -64,7 +65,6 @@ class JSTest : public OfficeTest {
 
  private:
   const base::FilePath path_;
-  base::RunLoop loop_;
 };
 
 }  // namespace electron::office

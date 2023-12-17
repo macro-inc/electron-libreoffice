@@ -7,12 +7,13 @@
 #include <memory>
 #include "base/at_exit.h"
 #include "base/files/file_util.h"
-#include "base/logging.h"
+#include "base/run_loop.h"
 #include "gin/converter.h"
 #include "gin/public/isolate_holder.h"
 #include "gin/try_catch.h"
 #include "gtest/gtest.h"
 #include "office/office_client.h"
+#include "office/office_instance.h"
 #include "v8/include/v8-exception.h"
 
 namespace electron::office {
@@ -22,16 +23,17 @@ OfficeTest::~OfficeTest() = default;
 void OfficeTest::SetUp() {
   exit_manager_ = std::make_unique<base::ShadowingAtExitManager>();
   gin::V8Test::SetUp();
+  run_loop_ = std::make_unique<base::RunLoop>();
   runner_ = std::make_unique<gin::ShellRunner>(this, instance_->isolate());
   environment_ = base::Environment::Create();
   environment_->SetVar("FONTCONFIG_FILE", "/etc/fonts/fonts.conf");
-  environment_->SetVar("SAL_LOG", "-WARN.configmgr-WARN.i18nlangtag-WARN.vcl");
 }
+
 void OfficeTest::TearDown() {
-  if (OfficeClient::IsValid()) {
+  run_loop_.reset();
+  {
     RunScope scope(runner_.get());
-    OfficeClient::GetCurrent()->RemoveFromContext(
-        GetContextHolder()->context());
+    OfficeClient::RemoveFromContext(GetContextHolder()->context());
   }
   environment_.reset();
   runner_.reset();
@@ -40,9 +42,8 @@ void OfficeTest::TearDown() {
 }
 
 void OfficeTest::DidCreateContext(gin::ShellRunner* runner) {
-  auto* client = OfficeClient::GetCurrent();
-  if (client)
-    client->InstallToContext(runner->GetContextHolder()->context());
+  OfficeInstance::Create();
+  OfficeClient::InstallToContext(runner->GetContextHolder()->context());
 }
 
 gin::ContextHolder* OfficeTest::GetContextHolder() {
@@ -58,7 +59,7 @@ void JSTest::UnhandledException(gin::ShellRunner* runner,
                                 gin::TryCatch& try_catch) {
   RunScope scope(runner);
   ADD_FAILURE() << try_catch.GetStackTrace();
-  loop_.Quit();
+  run_loop_->Quit();
 }
 
 namespace {
@@ -92,10 +93,14 @@ std::string GetStacktrace(v8::Isolate* isolate,
 
 }  // namespace
 
+constexpr base::TimeDelta kTestTimeout = base::Seconds(3);
+
 void JSTest::TestBody() {
+  base::test::ScopedRunLoopTimeout loop_timeout(FROM_HERE, kTestTimeout);
+
   int64_t file_size = 0;
   if (!base::GetFileSize(path_, &file_size)) {
-    FAIL() << "Unable to get file size";
+    FAIL() << "Unable to get file size" << path_;
   }
   // test is larger than 10 MB, something is probably wrong
   if (file_size > 1024 * 1024 * 10) {
@@ -107,26 +112,27 @@ void JSTest::TestBody() {
     FAIL() << "Unable to read file";
   }
   std::string assert_script = R"(
-    function assert(cond, message = "Assertion failed") {
+		globalThis.assert = function assert(cond, message = "Assertion failed") {
       if(cond) return;
       const err = new Error(message);
       // ignore the assert() itself
-      Error.captureStackTrace(err, assert);
+      Error.captureStackTrace(err, globalThis.assert);
       throw err;
     };
   )";
 
   RunScope scope(runner_.get());
+  runner_->Run(assert_script, "assert");
   GetContextHolder()->isolate()->SetCaptureStackTraceForUncaughtExceptions(
       true);
-  v8::MaybeLocal<v8::Value> maybe_result =
-      runner_->Run(assert_script + script, path_.value());
+
+  v8::MaybeLocal<v8::Value> maybe_result = runner_->Run(script, path_.value());
 
   v8::Local<v8::Value> result;
   if (maybe_result.ToLocal(&result) && result->IsPromise()) {
     v8::Local<v8::Promise> promise = result.As<v8::Promise>();
 
-    auto quit_loop = loop_.QuitClosure();
+    auto quit_loop = run_loop_->QuitClosure();
 
     v8::Local<v8::Function> fulfilled =
         CreateFunction(GetContextHolder(), [&](gin::Arguments* args) {
@@ -152,7 +158,7 @@ void JSTest::TestBody() {
         promise->Then(promise->GetCreationContextChecked(), fulfilled, rejected)
             .IsEmpty());
 
-    loop_.Run();
+    run_loop_->Run();
   }
 }
 

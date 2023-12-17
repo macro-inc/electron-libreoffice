@@ -37,7 +37,8 @@ OfficeInstance& get_instance() {
 }  // namespace
 
 void OfficeInstance::Create() {
-	if (get_instance().IsValid()) return;
+	static std::atomic<bool> once = false;
+	if (once || get_instance().IsValid()) return;
 
   base::ThreadPool::PostTask(
       FROM_HERE, {base::TaskPriority::USER_BLOCKING},

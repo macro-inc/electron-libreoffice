@@ -63,10 +63,10 @@ source_set("unov8") {
 test("office_unittests") {
   testonly = true
   sources = [
-    # After the refactor, the majority of these don't work, I'll get around to it eventually
-    # "test/mocked_scoped_clipboard_writer.cc",
-    # "test/office_test.cc",
-    # "test/office_test.h",
+    "test/mocked_paint_image.cc",
+    "test/mocked_scoped_clipboard_writer.cc",
+    "test/office_test.cc",
+    "test/office_test.h",
     # "atomic_bitset_unittest.cc",
     "office_instance_unittest.cc",
     # "office_client_unittest.cc",
@@ -74,10 +74,17 @@ test("office_unittests") {
     # "event_bus_unittest.cc",
     # "lok_tilebuffer_unittest.cc",
     # "paint_manager_unittest.cc",
-    "lok_callback.cc",
-    "lok_callback_unittest.cc",
+    # "lok_callback.cc",
+    # "lok_callback_unittest.cc",
     "test/run_all_unittests.cc",
   ]
+
+  if (is_mac) {
+    sources += [
+      "test/run_all_unittests_mac.mm",
+      "test/mocked_scoped_clipboard_writer_mac.mm",
+    ]
+  }
 
   configs += [ lok_sdk_dir + ":libreoffice_lib_config" ]
   configs += [ ":electron_config" ]

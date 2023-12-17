@@ -10,6 +10,10 @@
 #include "base/test/test_suite.h"
 #include "office/test/office_test.h"
 
+#if BUILDFLAG(IS_APPLE)
+#include "office/test/run_all_unittests_mac.h"
+#endif
+
 namespace {
 // nothing special here yet
 class OfficeTestSuite : public base::TestSuite {
@@ -43,12 +47,14 @@ void RegisterJSTests() {
 }
 
 int main(int argc, char** argv) {
+#if BUILDFLAG(IS_APPLE)
+  mac_quirks::main(argc, argv);
+#endif
   OfficeTestSuite test_suite(argc, argv);
   // TODO: why is foreground process priority necessary? not required to run on
   // macOS and it just crashes tests if the scheduler de-prioritizes
   test_suite.DisableCheckForThreadAndProcessPriority();
-	// TODO: re-enable after fixing things
-  // RegisterJSTests();
+  RegisterJSTests();
 
   return base::LaunchUnitTests(
       argc, argv,
