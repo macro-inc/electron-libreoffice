@@ -354,12 +354,24 @@ case "$1" in
     if [ "$UPDATE_LOK" = "true" ]; then rm -rf "$OUT_DIR/libreofficekit"; fi
     autoninja -C "$OUT_DIR" electron/office:office_unittests
     export LLVM_PROFILE_FILE="$COVERAGE_OUT_DIR/office_unittests.%4m.profraw"
-    "$TEST_COVERED" "${@:2}"
+    "$TEST_COVERED" "${@:2}" --gtest_repeat=1
 
     cd "$BASE_PATH/src"
     find "$COVERAGE_OUT_DIR/" -name '*.profraw' -print0 | xargs -0 llvm-profdata merge -o "$COVERAGE_OUT_DIR/coverage.profdata"
-    llvm-cov show -show-branches=count -show-regions -output-dir="$COVERAGE_OUT_DIR" -format=html -instr-profile="$COVERAGE_OUT_FILE" -compilation-dir="$OUT_DIR" -path-equivalence="../..,$(realpath "$BASE_PATH/src")" -ignore-filename-regex='^.*electron[/\\]office[/\\]test[/\\].*$' -ignore-filename-regex='.*_unittests?\.cc$' -ignore-filename-regex='.*\.h$' -ignore-filename-regex=".*[/\\]($COVERAGE_IGNORE)[/\\].*" -object="$TEST_COVERED" "$TEST_COVERED"
-    if [ "$OPEN_AFTER" = true ] && [ "$OS" = "mac" ]; then open "$COVERAGE_OUT_DIR/index.html"; fi
-    if [ "$OPEN_AFTER" = true ] && [ "$OS" = "linux" ]; then xdg-open "$COVERAGE_OUT_DIR/index.html"; fi
+    llvm-cov show \
+      -show-branches=count \
+      -show-regions \
+      -output-dir="$COVERAGE_OUT_DIR" \
+      -format=html \
+      -instr-profile="$COVERAGE_OUT_FILE" \
+      -compilation-dir="$OUT_DIR" \
+      -path-equivalence="../..,$(cd "$BASE_PATH/src" && pwd -P)" \
+      -ignore-filename-regex='^.*electron[/\\]office[/\\]test[/\\].*$' \
+      -ignore-filename-regex='.*_unittests?\.cc$' \
+      -ignore-filename-regex='.*\.h$' \
+      -ignore-filename-regex=".*[/\\]($COVERAGE_IGNORE)[/\\].*" \
+      -object="$TEST_COVERED" "$TEST_COVERED"
+    if [ -z "$CI" ] && [ "$OS" = "mac" ]; then open "$COVERAGE_OUT_DIR/index.html"; fi
+    if [ -z "$CI" ] && [ "$OS" = "linux" ]; then xdg-open "$COVERAGE_OUT_DIR/index.html"; fi
     ;;
 esac

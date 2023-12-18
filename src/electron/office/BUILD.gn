@@ -67,15 +67,12 @@ test("office_unittests") {
     "test/mocked_scoped_clipboard_writer.cc",
     "test/office_test.cc",
     "test/office_test.h",
-    # "atomic_bitset_unittest.cc",
+    "atomic_bitset_unittest.cc",
     "office_instance_unittest.cc",
-    # "office_client_unittest.cc",
-    # "document_client_unittest.cc",
-    # "event_bus_unittest.cc",
+    "office_client_unittest.cc",
     # "lok_tilebuffer_unittest.cc",
     # "paint_manager_unittest.cc",
-    # "lok_callback.cc",
-    # "lok_callback_unittest.cc",
+    "lok_callback_unittest.cc",
     "test/run_all_unittests.cc",
   ]
 

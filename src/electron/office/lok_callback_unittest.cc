@@ -2,9 +2,8 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
+#include "gtest/gtest.h"
 #include "office/lok_callback.h"
-
-#include "testing/gtest/include/gtest/gtest.h"
 
 namespace electron::office::lok_callback {
 
