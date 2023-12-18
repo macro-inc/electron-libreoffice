@@ -13,11 +13,8 @@
 #include "gin/shell_runner.h"
 #include "gin/test/v8_test.h"
 #include "v8/include/v8-context.h"
-#include "v8/include/v8-isolate.h"
 #include "v8/include/v8-local-handle.h"
-#include "v8/include/v8-microtask-queue.h"
 #include "v8/include/v8-persistent-handle.h"
-#include "v8/include/v8-promise.h"
 
 namespace electron::office {
 

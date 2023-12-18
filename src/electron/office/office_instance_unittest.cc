@@ -3,21 +3,17 @@
 // found in the LICENSE file.
 
 #include "office_instance.h"
-#include "base/at_exit.h"
 #include "base/barrier_closure.h"
 #include "base/callback_forward.h"
 #include "base/process/process.h"
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/thread_pool.h"
-#include "base/test/gtest_util.h"
 #include "base/test/task_environment.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "office/document_holder.h"
 #include "office/office_load_observer.h"
-#include "office/test/office_unittest_utils.h"
-#include "testing/gtest/include/gtest/gtest.h"
 
 namespace electron::office {
 

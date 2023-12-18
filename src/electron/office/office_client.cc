@@ -4,24 +4,19 @@
 
 #include "office/office_client.h"
 
-#include <algorithm>
 #include <memory>
 #include <string>
-#include <unordered_map>
 
 #include "LibreOfficeKit/LibreOfficeKit.hxx"
 #include "base/bind.h"
 #include "base/callback_forward.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/native_library.h"
 #include "base/notreached.h"
-#include "base/stl_util.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/sequenced_task_runner_handle.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/token.h"
 #include "gin/converter.h"
 #include "gin/handle.h"
@@ -29,7 +24,6 @@
 #include "gin/per_isolate_data.h"
 #include "office/document_client.h"
 #include "office/document_holder.h"
-#include "office/lok_callback.h"
 #include "office/office_instance.h"
 #include "office/promise.h"
 #include "unov8.hxx"

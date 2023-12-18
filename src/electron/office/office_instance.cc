@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/memory/singleton.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/path_service.h"
@@ -17,9 +16,7 @@
 #include "base/task/thread_pool.h"
 
 #include "base/logging.h"
-#include "base/threading/thread_local.h"
 #include "office/document_holder.h"
-#include "office/lok_callback.h"
 
 // Uncomment to log all document events
 // #define DEBUG_EVENTS
