@@ -55,6 +55,15 @@ v8::Local<v8::Value> OfficeTest::Run(const std::string& source) {
       .FromMaybe(v8::Local<v8::Value>());
 }
 
+void JSTest::TearDown() {
+  {
+    RunScope scope(runner_.get());
+		runner_->Run("libreoffice.__handleBeforeUnload();", "before_unload");
+	}
+
+	OfficeTest::TearDown();
+}
+
 void JSTest::UnhandledException(gin::ShellRunner* runner,
                                 gin::TryCatch& try_catch) {
   RunScope scope(runner);

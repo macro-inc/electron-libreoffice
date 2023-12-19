@@ -24,8 +24,9 @@
 namespace electron::office {
 
 namespace {
-// this doesn't work well because LOK has a per-process global lock, otherwise it would be ideal
-// static base::NoDestructor<base::ThreadLocalOwnedPointer<OfficeInstance>> lazy_tls;
+// this doesn't work well because LOK has a per-process global lock, otherwise
+// it would be ideal static
+// base::NoDestructor<base::ThreadLocalOwnedPointer<OfficeInstance>> lazy_tls;
 // instead we use a function-local static that's shared across all threads
 OfficeInstance& get_instance() {
   static base::NoDestructor<OfficeInstance> instance;
@@ -34,12 +35,15 @@ OfficeInstance& get_instance() {
 }  // namespace
 
 void OfficeInstance::Create() {
-	static std::atomic<bool> once = false;
-	if (once || get_instance().IsValid()) return;
+  static std::atomic<bool> once = false;
+  if (once)
+    return;
+  once = true;
 
   base::ThreadPool::PostTask(
       FROM_HERE, {base::TaskPriority::USER_BLOCKING},
-      base::BindOnce(&OfficeInstance::Initialize, get_instance().weak_factory_.GetWeakPtr()));
+      base::BindOnce(&OfficeInstance::Initialize,
+                     get_instance().weak_factory_.GetWeakPtr()));
 }
 
 OfficeInstance* OfficeInstance::Get() {
@@ -48,9 +52,10 @@ OfficeInstance* OfficeInstance::Get() {
 
 OfficeInstance::OfficeInstance()
     : loaded_observers_(base::MakeRefCounted<OfficeLoadObserverList>()),
-      destroyed_observers_(base::MakeRefCounted<DestroyedObserverList>()) {
-}
+      destroyed_observers_(base::MakeRefCounted<DestroyedObserverList>()) {}
 
+// this is required by Chromium's code conventions, but will never be called due
+// to base::NoDestructor
 OfficeInstance::~OfficeInstance() = default;
 
 void OfficeInstance::Initialize() {
@@ -74,11 +79,10 @@ void OfficeInstance::Initialize() {
 }
 
 bool OfficeInstance::IsValid() {
-  return Get() && Get()->instance_;
+  return static_cast<bool>(Get()->instance_);
 }
 
 void OfficeInstance::Unset() {
-	if (!Get()) return;
   Get()->unset_ = true;
   Get()->instance_.reset();
 }
@@ -173,9 +177,8 @@ void OfficeInstance::RemoveDestroyedObserver(DestroyedObserver* observer) {
   destroyed_observers_->RemoveObserver(observer);
 }
 
-void OfficeInstance::HandleClientDestroyed()
-{
-	destroyed_observers_->Notify(FROM_HERE, &DestroyedObserver::OnDestroyed);
+void OfficeInstance::HandleClientDestroyed() {
+  destroyed_observers_->Notify(FROM_HERE, &DestroyedObserver::OnDestroyed);
 }
 
 }  // namespace electron::office

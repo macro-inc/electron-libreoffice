@@ -57,6 +57,7 @@ class JSTest : public OfficeTest {
   explicit JSTest(const base::FilePath& path)
       : path_(path) {}
 
+  void TearDown() override;
   void TestBody() override;
   void UnhandledException(gin::ShellRunner* runner, gin::TryCatch& try_catch) override;
 
