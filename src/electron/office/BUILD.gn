@@ -113,6 +113,8 @@ source_set("office_lib") {
     "v8_callback.h",
     "renderer_transferable.cc",
     "renderer_transferable.h",
+    "v8_stringify.cc",
+    "v8_stringify.h",
     "document_client.cc",
     "document_client.h",
     "document_holder.cc",

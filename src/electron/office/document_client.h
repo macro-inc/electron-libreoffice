@@ -2,8 +2,7 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
-#ifndef OFFICE_DOCUMENT_CLIENT_H_
-#define OFFICE_DOCUMENT_CLIENT_H_
+#pragma once
 
 #include <map>
 #include <string>
@@ -224,5 +223,3 @@ struct Converter<EventPayload> {
   }
 };
 }  // namespace gin
-
-#endif  // OFFICE_DOCUMENT_CLIENT_H_

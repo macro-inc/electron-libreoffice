@@ -5,22 +5,15 @@
 #include "office/document_client.h"
 #include <sys/types.h>
 
-#include <iterator>
 #include <memory>
 #include <string_view>
 #include <vector>
 #include "LibreOfficeKit/LibreOfficeKit.hxx"
 #include "base/bind.h"
-#include "base/containers/contains.h"
-#include "base/containers/span.h"
-#include "base/files/file_util.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/pickle.h"
 #include "base/process/memory.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/task_runner_util.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "gin/converter.h"
@@ -28,7 +21,6 @@
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
 #include "gin/per_isolate_data.h"
-#include "net/base/filename_util.h"
 #include "office/document_holder.h"
 #include "office/lok_callback.h"
 #include "office/office_client.h"
@@ -37,20 +29,13 @@
 #include "shell/common/gin_converters/gfx_converter.h"
 #include "shell/common/gin_converters/std_converter.h"
 #include "third_party/skia/include/core/SkCanvas.h"
-#include "third_party/skia/include/core/SkImageInfo.h"
 #include "ui/base/clipboard/clipboard.h"
-#include "ui/base/clipboard/clipboard_format_type.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/gfx/codec/png_codec.h"
-#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/gfx/geometry/size_conversions.h"
-#include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "unov8.hxx"
-#include "url/gurl.h"
 #include "v8/include/v8-array-buffer.h"
 #include "v8/include/v8-container.h"
 #include "v8/include/v8-context.h"
@@ -58,6 +43,7 @@
 #include "v8/include/v8-json.h"
 #include "v8/include/v8-local-handle.h"
 #include "v8/include/v8-primitive.h"
+#include "v8_stringify.h"
 
 namespace electron::office {
 gin::WrapperInfo DocumentClient::kWrapperInfo = {gin::kEmbedderNativeGin};
@@ -87,28 +73,6 @@ struct LokSafeDeleter {
 
 typedef std::unique_ptr<char[], LokSafeDeleter> LokStrPtr;
 
-std::unique_ptr<char[]> stringify(const v8::Local<v8::Context>& context,
-                                  const v8::Local<v8::Value>& val) {
-  v8::Isolate* isolate = context->GetIsolate();
-  v8::Context::Scope context_scope(context);
-  v8::HandleScope scope(isolate);
-  v8::TryCatch try_catch(isolate);
-
-  v8::Local<v8::String> str;
-  if (!val->ToString(context).ToLocal(&str))
-    return {};
-
-  uint32_t len = str->Utf8Length(isolate);
-  char* buf = new (std::nothrow) char[len + 1];
-  if (!buf)
-    return {};
-  std::unique_ptr<char[]> ptr(buf);
-  str->WriteUtf8(isolate, buf);
-  buf[len] = '\0';
-
-  return ptr;
-}
-
 std::unique_ptr<char[]> jsonStringify(const v8::Local<v8::Context>& context,
                                       const v8::Local<v8::Value>& val) {
   if (val->IsUndefined())
@@ -116,7 +80,7 @@ std::unique_ptr<char[]> jsonStringify(const v8::Local<v8::Context>& context,
   v8::Local<v8::String> str_object;
   if (!v8::JSON::Stringify(context, val).ToLocal(&str_object))
     return {};
-  return stringify(context, str_object);
+  return v8_stringify(context, str_object);
 }
 
 }  // namespace
@@ -503,7 +467,7 @@ v8::Local<v8::Promise> DocumentClient::SaveToMemory(v8::Isolate* isolate,
   v8::Local<v8::Value> arguments;
   std::unique_ptr<char[]> format;
   if (args->GetNext(&arguments)) {
-    format = stringify(isolate->GetCurrentContext(), arguments);
+    format = v8_stringify(isolate->GetCurrentContext(), arguments);
   }
 
   document_holder_.PostBlocking(base::BindOnce(
@@ -947,12 +911,12 @@ v8::Local<v8::Promise> DocumentClient::SaveAs(v8::Isolate* isolate,
     args->ThrowTypeError("missing path");
     return {};
   }
-  path = stringify(isolate->GetCurrentContext(), arguments);
+  path = v8_stringify(isolate->GetCurrentContext(), arguments);
   if (args->GetNext(&arguments)) {
-    format = stringify(isolate->GetCurrentContext(), arguments);
+    format = v8_stringify(isolate->GetCurrentContext(), arguments);
   }
   if (args->GetNext(&arguments)) {
-    options = stringify(isolate->GetCurrentContext(), arguments);
+    options = v8_stringify(isolate->GetCurrentContext(), arguments);
   }
   Promise<bool> promise(isolate);
   auto holder = promise.GetHandle();

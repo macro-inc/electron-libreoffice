@@ -420,9 +420,20 @@ declare namespace LibreOffice {
     /**
      * set password required for loading or editing a document
      * @param url - the URL of the document, as sent to the callback
-     * @param password - the password, undefined indicates no password
-     */
-    setDocumentPassword(url: string, password?: string): Promise<void>;
+     * @param password - the password, null indicates no password
+     *
+     * In response to a `document_password` request event:
+     * - a valid password will continue loading the document
+     * - an invalid password will result in another 'document_password' request event,  
+     * - a `null` password will abort loading the document.  
+     *
+     * In response to `document_password_to_modify`:
+     * - a valid password will continue loading the document
+     * - an invalid password will result in another `document_password_to_modify` request
+     * - a `null` password will continue loading the document in read-only mode
+    */
+    // TODO: [MACRO-1899] fix setDocumentPassword in LOK, then re-enable
+    // setDocumentPassword(url: string, password: string | null): Promise<void>;
 
     /**
      * loads a given document

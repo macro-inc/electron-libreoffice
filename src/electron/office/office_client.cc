@@ -34,6 +34,7 @@
 #include "v8/include/v8-object.h"
 #include "v8/include/v8-persistent-handle.h"
 #include "v8/include/v8-primitive.h"
+#include "v8_stringify.h"
 
 namespace electron::office {
 
@@ -140,7 +141,8 @@ gin::ObjectTemplateBuilder OfficeClient::GetObjectTemplateBuilder(
 
   return gin::ObjectTemplateBuilder(isolate, GetTypeName(),
                                     constructor->InstanceTemplate())
-      .SetMethod("setDocumentPassword", &OfficeClient::SetDocumentPasswordAsync)
+			// TODO: [MACRO-1899] fix setDocumentPassword in LOK, then re-enable
+      // .SetMethod("setDocumentPassword", &OfficeClient::SetDocumentPasswordAsync)
       .SetMethod("loadDocument", &OfficeClient::LoadDocumentAsync)
       .SetMethod("loadDocumentFromArrayBuffer",
                  &OfficeClient::LoadDocumentFromArrayBuffer)
@@ -194,23 +196,30 @@ void PostBlockingAsync(base::OnceClosure closure,
 
 v8::Local<v8::Promise> OfficeClient::LoadDocumentAsync(
     v8::Isolate* isolate,
-    const std::string& path) {
+    v8::Local<v8::Value> url) {
   Promise<DocumentClient> promise(isolate);
   auto promise_handle = promise.GetHandle();
+	std::unique_ptr<char[]> sUrl = v8_stringify(isolate->GetCurrentContext(), url);
+	if (!sUrl) {
+		isolate->ThrowError(gin::StringToV8(isolate, "Invalid URL"));
+		promise.Reject();
+		return promise_handle;
+	}
 
+	std::string url_copy = std::string(sUrl.get());
   auto load_ = base::BindOnce(
-      [](OfficeClient* client, const std::string& path) {
+      [](OfficeClient* client, std::unique_ptr<char[]> url) {
         if (client->GetOffice()) {
-          return client->GetOffice()->documentLoad(path.c_str(),
+          return client->GetOffice()->documentLoad(url.get(),
                                                    "Language=en-US,Batch=true");
         } else {
           return static_cast<lok::Document*>(nullptr);
         }
       },
-      base::Unretained(this), std::string(path));
+      base::Unretained(this), std::move(sUrl));
   auto complete_ =
       base::BindOnce(&ResolveLoadWithDocumentClient, weak_factory_.GetWeakPtr(),
-                     std::move(promise), std::string(path));
+                     std::move(promise), std::move(url_copy));
   auto async_ = std::move(load_).Then(
       base::BindPostTask(task_runner_, std::move(complete_)));
 
@@ -277,27 +286,39 @@ v8::Local<v8::Promise> OfficeClient::LoadDocumentFromArrayBuffer(
   return promise_handle;
 }
 
+/*
 v8::Local<v8::Promise> OfficeClient::SetDocumentPasswordAsync(
     v8::Isolate* isolate,
-    const std::string& url,
-    const std::string& password) {
+    v8::Local<v8::Value> url,
+    v8::Local<v8::Value> maybePassword) {
   Promise<void> promise(isolate);
   auto handle = promise.GetHandle();
+	v8::Local<v8::Context> context = isolate->GetCurrentContext();
+  std::unique_ptr<char[]> sUrl = v8_stringify(context, url);
+
+	if (!sUrl) {
+		isolate->ThrowError(gin::StringToV8(isolate, "Invalid URL"));
+		promise.Reject();
+		return handle;
+	}
+
+  std::unique_ptr<char[]> password = v8_stringify(context, maybePassword);
 
   if (loaded_.is_signaled()) {
-    GetOffice()->setDocumentPassword(url.c_str(), password.c_str());
+    GetOffice()->setDocumentPassword(sUrl.get(),
+                                     password ? password.get() : nullptr);
     promise.Resolve();
   } else {
     auto async = base::BindOnce(
         [](const base::WeakPtr<OfficeClient>& client, Promise<void> promise,
-           const std::string& url, const std::string& password) {
+           std::unique_ptr<char[]> url, std::unique_ptr<char[]> password) {
           if (client.MaybeValid()) {
-            client->GetOffice()->setDocumentPassword(url.c_str(),
-                                                     password.c_str());
+            client->GetOffice()->setDocumentPassword(
+                url.get(), password ? password.get() : nullptr);
           }
           promise.Resolve();
         },
-        weak_factory_.GetWeakPtr(), std::move(promise), std::move(url),
+        weak_factory_.GetWeakPtr(), std::move(promise), std::move(sUrl),
         std::move(password));
 
     loaded_.Post(FROM_HERE, base::BindPostTask(task_runner_, std::move(async)));
@@ -305,6 +326,7 @@ v8::Local<v8::Promise> OfficeClient::SetDocumentPasswordAsync(
 
   return handle;
 }
+*/
 
 base::WeakPtr<OfficeClient> OfficeClient::GetWeakPtr() {
   if (!lazy_tls->Get())

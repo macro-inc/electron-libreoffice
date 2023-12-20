@@ -57,11 +57,14 @@ class OfficeClient : public gin::Wrappable<OfficeClient>,
  protected:
   // Exposed to v8 {
   std::string GetLastError();
+	// TODO: [MACRO-1899] fix setDocumentPassword in LOK, then re-enable
+	/*
   v8::Local<v8::Promise> SetDocumentPasswordAsync(v8::Isolate* isolate,
-                                                  const std::string& url,
-                                                  const std::string& password);
+                                                  v8::Local<v8::Value> url,
+                                                  v8::Local<v8::Value> maybePassword);
+	*/
   v8::Local<v8::Promise> LoadDocumentAsync(v8::Isolate* isolate,
-                                           const std::string& path);
+                                           v8::Local<v8::Value> url);
   v8::Local<v8::Promise> LoadDocumentFromArrayBuffer(
       v8::Isolate* isolate,
       v8::Local<v8::ArrayBuffer> array_buffer);
