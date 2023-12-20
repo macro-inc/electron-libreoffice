@@ -23,26 +23,51 @@ class OfficeTestSuite : public base::TestSuite {
   OfficeTestSuite(const OfficeTestSuite&) = delete;
   OfficeTestSuite& operator=(const OfficeTestSuite&) = delete;
 };
-}  // namespace
+
+base::FilePath TestRootDir() {
+  static bool set = false;
+  static base::FilePath source_root_dir;
+  if (!set) {
+    base::PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, &source_root_dir);
+    source_root_dir =
+        source_root_dir.AppendASCII("electron").AppendASCII("office");
+    set = true;
+  }
+
+  return source_root_dir;
+}
 
 void RegisterJSTest(const base::FilePath& path) {
   testing::RegisterTest("JSTest", path.BaseName().value().c_str(), nullptr,
                         nullptr, __FILE__, __LINE__,
-                        [=]() -> electron::office::OfficeTest* {
+                        [path]() -> electron::office::OfficeTest* {
                           return new electron::office::JSTest(path);
                         });
 }
 
+void RegisterPluginTest(const base::FilePath& path) {
+  testing::RegisterTest("PluginTest", path.BaseName().value().c_str(), nullptr,
+                        nullptr, __FILE__, __LINE__,
+                        [path]() -> electron::office::OfficeTest* {
+                          return new electron::office::PluginTest(path);
+                        });
+}
+
+}  // namespace
+
 void RegisterJSTests() {
-  base::FilePath source_root_dir;
-  base::PathService::Get(base::DIR_SRC_TEST_DATA_ROOT, &source_root_dir);
-  base::FilePath js_test_path = source_root_dir.AppendASCII("electron")
-                                    .AppendASCII("office")
-                                    .AppendASCII("js_test");
+  base::FilePath js_test_path = TestRootDir().AppendASCII("js_test");
   base::FileEnumerator e(js_test_path, false, base::FileEnumerator::FILES,
                          FILE_PATH_LITERAL("*.js"));
   for (base::FilePath name = e.Next(); !name.empty(); name = e.Next()) {
     RegisterJSTest(name);
+  }
+
+  base::FilePath plugin_test_path = TestRootDir().AppendASCII("plugin_test");
+  base::FileEnumerator e2(plugin_test_path, false, base::FileEnumerator::FILES,
+                         FILE_PATH_LITERAL("*.js"));
+  for (base::FilePath name = e2.Next(); !name.empty(); name = e2.Next()) {
+    RegisterPluginTest(name);
   }
 }
 

@@ -4,6 +4,7 @@
 
 #include "office/office_web_plugin.h"
 
+#include <algorithm>
 #include <string_view>
 
 #include "LibreOfficeKit/LibreOfficeKit.hxx"
@@ -12,18 +13,10 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
-#include "base/notreached.h"
-#include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
-#include "base/task/thread_pool.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "cc/paint/paint_canvas.h"
-#include "cc/paint/paint_flags.h"
-#include "cc/paint/paint_image.h"
-#include "cc/paint/paint_image_builder.h"
-#include "components/plugins/renderer/plugin_placeholder.h"
 #include "content/public/renderer/render_frame.h"
 #include "gin/arguments.h"
 #include "gin/converter.h"
@@ -31,8 +24,6 @@
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
 #include "include/core/SkColor.h"
-#include "include/core/SkFontStyle.h"
-#include "include/core/SkTextBlob.h"
 #include "office/cancellation_flag.h"
 #include "office/document_client.h"
 #include "office/lok_callback.h"
@@ -42,17 +33,12 @@
 #include "office/office_keys.h"
 #include "office/paint_manager.h"
 #include "shell/common/gin_converters/gfx_converter.h"
-#include "shell/common/gin_helper/dictionary.h"
-#include "shell/common/gin_helper/function_template_extensions.h"
 #include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
-#include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
-#include "third_party/blink/public/web/web_frame_widget.h"
 #include "third_party/blink/public/web/web_plugin_params.h"
 #include "third_party/blink/public/web/web_widget.h"
-#include "ui/base/clipboard/clipboard.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/events/blink/blink_event_util.h"
@@ -61,10 +47,10 @@
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/skia_conversions.h"
-#include "ui/gfx/native_widget_types.h"
 #include "v8/include/v8-isolate.h"
 #include "v8/include/v8-local-handle.h"
 #include "v8/include/v8-object.h"
+#include "web_plugin_utils.h"
 
 namespace electron {
 
@@ -79,7 +65,7 @@ blink::WebPlugin* CreateInternalPlugin(blink::WebPluginParams params,
 }  // namespace office
 
 using namespace office;
-OfficeWebPlugin::OfficeWebPlugin(blink::WebPluginParams params,
+OfficeWebPlugin::OfficeWebPlugin(blink::WebPluginParams /*params*/,
                                  content::RenderFrame* render_frame)
     : render_frame_(render_frame),
       tile_buffer_(base::MakeRefCounted<TileBuffer>()),
@@ -94,12 +80,7 @@ OfficeWebPlugin::OfficeWebPlugin(blink::WebPluginParams params,
 
 bool OfficeWebPlugin::Initialize(blink::WebPluginContainer* container) {
   container_ = container;
-  // This prevents the wheel event hit test data from causing a crash, wheel
-  // events are handled by the scroll container anyway
-  container->SetWantsWheelEvents(false);
-
-  // TODO: figure out what false means?
-  return true;
+  return container::Initialize(container);
 }
 
 void OfficeWebPlugin::Destroy() {
@@ -251,12 +232,7 @@ void OfficeWebPlugin::UpdateGeometry(const gfx::Rect& window_rect,
   if (window_rect.IsEmpty())
     return;
 
-  // get the document root frame's scale factor so that any widget scaling does
-  // not affect the device scale
-  blink::WebWidget* widget =
-      container_->GetDocument().GetFrame()->LocalRoot()->FrameWidget();
-  OnViewportChanged(window_rect,
-                    widget->GetOriginalScreenInfo().device_scale_factor);
+  OnViewportChanged(window_rect, container::DeviceScale(container_));
 }
 
 void OfficeWebPlugin::UpdateFocus(bool focused,
@@ -346,8 +322,7 @@ blink::WebInputEventResult OfficeWebPlugin::HandleInputEvent(
   if (last_css_cursor_time_.is_null() ||
       (now - last_css_cursor_time_) > base::Milliseconds(10)) {
     last_css_cursor_time_ = now;
-    cursor_type_ = cssCursorToMojom(
-        container_->GetElement().GetComputedValue("cursor").Ascii());
+    cursor_type_ = cssCursorToMojom(container::CSSCursor(container_));
   }
   *cursor = cursor_type_;
   if (disable_input_)
@@ -364,13 +339,6 @@ blink::WebInputEventResult OfficeWebPlugin::HandleInputEvent(
         std::move(static_cast<const blink::WebKeyboardEvent&>(event.Event())),
         cursor);
 
-  std::unique_ptr<blink::WebInputEvent> transformed_event =
-      ui::TranslateAndScaleWebInputEvent(
-          event.Event(), gfx::Vector2dF(-available_area_.x(), 0), 1.0);
-
-  const blink::WebInputEvent& event_to_handle =
-      transformed_event ? *transformed_event : event.Event();
-
   switch (event_type) {
     case blink::WebInputEvent::Type::kMouseDown:
     case blink::WebInputEvent::Type::kMouseUp:
@@ -380,12 +348,13 @@ blink::WebInputEventResult OfficeWebPlugin::HandleInputEvent(
       return blink::WebInputEventResult::kNotHandled;
   }
 
-  blink::WebMouseEvent mouse_event =
-      static_cast<const blink::WebMouseEvent&>(event_to_handle);
+  int modifiers = event.Event().GetModifiers();
 
-  int modifiers = mouse_event.GetModifiers();
-  return HandleMouseEvent(event_type, mouse_event.PositionInWidget(), modifiers,
-                          mouse_event.ClickCount(), cursor)
+  return HandleMouseEvent(
+             event_type,
+             input::GetRelativeMousePosition(
+                 event.Event(), gfx::Vector2dF(-available_area_.x(), 0)),
+             modifiers, input::GetClickCount(event.Event()), cursor)
              ? blink::WebInputEventResult::kHandledApplication
              : blink::WebInputEventResult::kNotHandled;
 }
@@ -473,17 +442,12 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
 
 namespace {
 bool OnPasteEvent(ui::Clipboard* clipboard,
-                  std::string clipboard_type,
+                  const std::string& clipboard_type,
                   DocumentHolderWithView document_holder) {
   bool result = false;
 
   if (clipboard_type == "text/plain;charset=utf-8") {
-    std::u16string system_clipboard_data;
-
-    clipboard->ReadText(ui::ClipboardBuffer::kCopyPaste, nullptr,
-                        &system_clipboard_data);
-
-    std::string converted_data = base::UTF16ToUTF8(system_clipboard_data);
+    std::string converted_data = clipboard::ReadTextUtf8(clipboard);
 
     const char* value =
         strcpy(new char[converted_data.length() + 1], converted_data.c_str());
@@ -492,14 +456,7 @@ bool OnPasteEvent(ui::Clipboard* clipboard,
                                     converted_data.size());
     delete value;
   } else if (clipboard_type == "image/png") {
-    std::vector<uint8_t> image;
-    clipboard->ReadPng(ui::ClipboardBuffer::kCopyPaste, nullptr,
-                       base::BindOnce(
-                           [](std::vector<uint8_t>* image,
-                              const std::vector<uint8_t>& result) {
-                             *image = std::move(result);
-                           },
-                           &image));
+    std::vector<uint8_t> image = clipboard::ReadPng(clipboard);
 
     if (image.empty()) {
       LOG(ERROR) << "Unable to get image value";
@@ -543,19 +500,16 @@ blink::WebInputEventResult OfficeWebPlugin::HandleCutCopyEvent(
 }
 
 blink::WebInputEventResult OfficeWebPlugin::HandlePasteEvent() {
-  ui::Clipboard* clipboard = ui::Clipboard::GetForCurrentThread();
-  std::vector<std::u16string> res =
-      clipboard->ReadAvailableStandardAndCustomFormatNames(
-          ui::ClipboardBuffer::kCopyPaste, nullptr);
-
   std::string clipboard_type = "";
 
-  for (std::u16string r : res) {
-    if (r == u"text/plain") {
-      clipboard_type = "text/plain;charset=utf-8";
-      break;
-    } else if (r == u"image/png") {
+  ui::Clipboard* clipboard = clipboard::GetCurrent();
+  std::vector<std::u16string> types = clipboard::GetAvailableTypes(clipboard);
+  for (std::u16string& r : types) {
+    if (r == u"image/png") {
       clipboard_type = "image/png";
+      break;
+		} else if (r == u"text/plain") {
+      clipboard_type = "text/plain;charset=utf-8";
       break;
     }
   }
@@ -658,7 +612,7 @@ OfficeWebPlugin::~OfficeWebPlugin() = default;
 
 void OfficeWebPlugin::InvalidateWeakContainer() {
   if (!in_paint_) {
-    container_->Invalidate();
+    container::Invalidate(container_);
   }
 }
 
@@ -928,7 +882,7 @@ void OfficeWebPlugin::UpdateScroll(int y_position) {
       TwipToPx(document_client_->DocumentSizeTwips().height()) - view_height,
       0.0f);
 
-  float scaled_y = base::clamp((float)y_position, 0.0f, max_y) * device_scale_;
+  float scaled_y = std::clamp((float)y_position, 0.0f, max_y) * device_scale_;
   scroll_y_position_ = scaled_y;
 
   // TODO: paint PRIOR not ahead for scroll up
@@ -979,7 +933,9 @@ std::string OfficeWebPlugin::RenderDocument(
   if (needs_reset && document_client_.MaybeValid()) {
     document_client_->Unmount();
   }
-  bool needs_restore = !needs_reset && document_ && document_ == client->GetDocument() && maybe_restore_key.has_value();
+  bool needs_restore = !needs_reset && document_ &&
+                       document_ == client->GetDocument() &&
+                       maybe_restore_key.has_value();
 
   document_ = client->GetDocument();
   document_client_ = client->GetWeakPtr();
@@ -1001,7 +957,8 @@ std::string OfficeWebPlugin::RenderDocument(
     }
     snapshot_ = std::move(transferable.snapshot);
     if (transferable.paint_manager) {
-      paint_manager_ = std::make_unique<office::PaintManager>(this, std::move(transferable.paint_manager));
+      paint_manager_ = std::make_unique<office::PaintManager>(
+          this, std::move(transferable.paint_manager));
     }
     first_paint_ = false;
     page_rects_cached_ = std::move(transferable.page_rects);
@@ -1009,7 +966,7 @@ std::string OfficeWebPlugin::RenderDocument(
     last_intersect_ = transferable.last_intersect;
     last_cursor_rect_ = std::move(transferable.last_cursor_rect);
     if (transferable.zoom > 0) {
-    zoom_ = transferable.zoom;
+      zoom_ = transferable.zoom;
     }
   }
 

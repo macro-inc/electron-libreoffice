@@ -63,8 +63,20 @@ source_set("unov8") {
 test("office_unittests") {
   testonly = true
   sources = [
+    "//ui/gfx/geometry/skia_conversions.cc",
+    "//ui/base/cursor/cursor.cc",
+    "//ui/base/cursor/cursor.h",
+    "//electron/shell/common/gin_converters/gfx_converter.cc",
+    "test/fake_ui_clipboard.cc",
+    "test/fake_ui_clipboard.h",
+    "test/fake_web_plugin_utils.cc",
+    "test/fake_web_plugin_utils.h",
     "test/mocked_paint_image.cc",
+    "test/blink_shims.cc",
+    "test/fake_render_frame.cc",
+    "test/fake_render_frame.h",
     "test/mocked_scoped_clipboard_writer.cc",
+    "test/mocked_scoped_clipboard_writer.h",
     "test/office_test.cc",
     "test/office_test.h",
     "atomic_bitset_unittest.cc",
@@ -73,6 +85,7 @@ test("office_unittests") {
     # "lok_tilebuffer_unittest.cc",
     # "paint_manager_unittest.cc",
     "lok_callback_unittest.cc",
+    "office_web_plugin.cc",
     "test/run_all_unittests.cc",
   ]
 
@@ -162,7 +175,12 @@ static_library("office_web_plugin") {
   assert(enable_plugins,
          "The LibreOffice viewer relies on plugin infrastructure")
 
-  sources = [ "office_web_plugin.cc", "office_web_plugin.h" ]
+  sources = [
+    "web_plugin_utils.cc",
+    "web_plugin_utils.h",
+    "office_web_plugin.cc",
+    "office_web_plugin.h",
+  ]
 
   configs += [ ":electron_config" ]
   configs += [ lok_sdk_dir + ":libreoffice_lib_config" ]

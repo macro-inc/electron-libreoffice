@@ -5,8 +5,15 @@
 // This exists to support lok_tilebuffer
 
 #include "cc/paint/paint_image_builder.h"
+#include "cc/paint/paint_flags.h"
+
+// these are necessary to compile PaintImage, since they heavily use code in the header itself
+#include "cc/paint/paint_shader.h"
+#include "cc/paint/paint_filter.h"
 
 namespace cc {
+
+const PaintImage::ContentId PaintImage::kInvalidContentId = -1;
 
 // Mock PaintImage class
 
@@ -14,6 +21,8 @@ PaintImage::PaintImage() = default;
 PaintImage::PaintImage(const PaintImage& other) = default;
 PaintImage::PaintImage(PaintImage&& other) = default;
 PaintImage::~PaintImage() = default;
+PaintImage& PaintImage::operator=(const PaintImage& other) = default;
+PaintImage& PaintImage::operator=(PaintImage&& other) = default;
 
 int PaintImage::GetNextId() {
   static int next_id = 1;
@@ -37,5 +46,12 @@ PaintImageBuilder PaintImageBuilder::WithDefault() {
 PaintImage PaintImageBuilder::TakePaintImage() {
   return PaintImage();
 }
+
+PaintFlags::PaintFlags() = default;
+PaintFlags::PaintFlags(const PaintFlags& flags) = default;
+PaintFlags::PaintFlags(PaintFlags&& other) = default;
+PaintFlags::~PaintFlags() = default;
+PaintFlags& PaintFlags::operator=(const PaintFlags& other) = default;
+PaintFlags& PaintFlags::operator=(PaintFlags&& other) = default;
 
 }  // namespace cc

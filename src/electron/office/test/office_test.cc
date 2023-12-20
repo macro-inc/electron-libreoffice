@@ -14,6 +14,8 @@
 #include "gtest/gtest.h"
 #include "office/office_client.h"
 #include "office/office_instance.h"
+#include "office/office_web_plugin.h"
+#include "office/test/fake_render_frame.h"
 #include "v8/include/v8-exception.h"
 
 namespace electron::office {
@@ -58,10 +60,10 @@ v8::Local<v8::Value> OfficeTest::Run(const std::string& source) {
 void JSTest::TearDown() {
   {
     RunScope scope(runner_.get());
-		runner_->Run("libreoffice.__handleBeforeUnload();", "before_unload");
-	}
+    runner_->Run("libreoffice.__handleBeforeUnload();", "before_unload");
+  }
 
-	OfficeTest::TearDown();
+  OfficeTest::TearDown();
 }
 
 void JSTest::UnhandledException(gin::ShellRunner* runner,
@@ -175,6 +177,21 @@ std::string OfficeTest::ToString(v8::Local<v8::Value> val) {
   return gin::V8ToString(
       GetContextHolder()->isolate(),
       val->ToString(GetContextHolder()->context()).ToLocalChecked());
+}
+
+PluginTest::PluginTest(const base::FilePath& path) : JSTest(path) {}
+PluginTest::~PluginTest() = default;
+
+void PluginTest::SetUp() {
+  render_frame_ = std::make_unique<content::RenderFrameImpl>(false);
+  blink::WebPluginParams dummy_params;
+  plugin_ = new OfficeWebPlugin(dummy_params, render_frame_.get());
+  JSTest::SetUp();
+}
+
+void PluginTest::TearDown() {
+  JSTest::TearDown();
+  plugin_->Destroy();
 }
 
 }  // namespace electron::office

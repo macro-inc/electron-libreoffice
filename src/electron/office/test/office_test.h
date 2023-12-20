@@ -8,10 +8,13 @@
 #include "base/at_exit.h"
 #include "base/environment.h"
 #include "base/files/file_path.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/bind.h"
 #include "gin/function_template.h"
 #include "gin/shell_runner.h"
 #include "gin/test/v8_test.h"
+#include "office/office_web_plugin.h"
+#include "office/test/fake_render_frame.h"
 #include "v8/include/v8-context.h"
 #include "v8/include/v8-local-handle.h"
 #include "v8/include/v8-persistent-handle.h"
@@ -54,15 +57,28 @@ class OfficeTest : public gin::V8Test, public gin::ShellRunnerDelegate {
 
 class JSTest : public OfficeTest {
  public:
-  explicit JSTest(const base::FilePath& path)
-      : path_(path) {}
+  explicit JSTest(const base::FilePath& path) : path_(path) {}
 
   void TearDown() override;
   void TestBody() override;
-  void UnhandledException(gin::ShellRunner* runner, gin::TryCatch& try_catch) override;
+  void UnhandledException(gin::ShellRunner* runner,
+                          gin::TryCatch& try_catch) override;
 
  private:
   const base::FilePath path_;
+};
+
+class PluginTest : public JSTest {
+ public:
+  explicit PluginTest(const base::FilePath& path);
+	~PluginTest() override;
+
+  void SetUp() override;
+  void TearDown() override;
+
+ private:
+  raw_ptr<OfficeWebPlugin> plugin_;
+  std::unique_ptr<content::RenderFrameImpl> render_frame_;
 };
 
 }  // namespace electron::office
