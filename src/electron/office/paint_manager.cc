@@ -224,7 +224,7 @@ void PaintManager::PostCurrentTask() {
         FROM_HERE,
         base::BindOnce(&PaintManager::PaintTileRange, client_->GetTileBuffer(),
                        current_task_->skip_paint_flag_,
-                       current_task_->document_, it, hash, std::move(completed)));
+                       current_task_->document_, it, hash, completed));
   }
 }
 
@@ -233,7 +233,7 @@ void PaintManager::PaintTileRange(scoped_refptr<office::TileBuffer> tile_buffer,
                                   DocumentHolderWithView document,
                                   TileRange it,
                                   std::size_t context_hash,
-                                  base::RepeatingClosure completed) {
+                                  const base::RepeatingClosure& completed) {
 #ifdef DEBUG_PAINT_MANAGER
   LOG(ERROR) << "PTR " << it.index_start << " - " << it.index_end
              << " CH: " << std::hex << context_hash;
@@ -252,7 +252,7 @@ bool PaintManager::PaintTile(scoped_refptr<office::TileBuffer> tile_buffer,
                              DocumentHolderWithView document,
                              unsigned int tile_index,
                              std::size_t context_hash,
-                             base::RepeatingClosure completed) {
+                             const base::RepeatingClosure& completed) {
   bool res =
       tile_buffer->PaintTile(cancel_flag, document, tile_index, context_hash);
   completed.Run();
