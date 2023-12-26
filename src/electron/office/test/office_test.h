@@ -18,6 +18,7 @@
 #include "v8/include/v8-context.h"
 #include "v8/include/v8-local-handle.h"
 #include "v8/include/v8-persistent-handle.h"
+#include "fake_web_plugin_container.h"
 
 namespace electron::office {
 
@@ -71,13 +72,18 @@ class JSTest : public OfficeTest {
 class PluginTest : public JSTest {
  public:
   explicit PluginTest(const base::FilePath& path);
-	~PluginTest() override;
+  ~PluginTest() override;
 
   void SetUp() override;
   void TearDown() override;
+  v8::Local<v8::ObjectTemplate> GetGlobalTemplate(
+      gin::ShellRunner* runner,
+      v8::Isolate* isolate) override;
 
  private:
+	static thread_local PluginTest* self_;
   raw_ptr<OfficeWebPlugin> plugin_;
+	std::unique_ptr<blink::WebPluginContainer> container_;
   std::unique_ptr<content::RenderFrameImpl> render_frame_;
 };
 

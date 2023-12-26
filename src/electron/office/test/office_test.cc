@@ -8,15 +8,30 @@
 #include "base/at_exit.h"
 #include "base/files/file_util.h"
 #include "base/run_loop.h"
+#include "gin/arguments.h"
 #include "gin/converter.h"
+#include "gin/object_template_builder.h"
 #include "gin/public/isolate_holder.h"
 #include "gin/try_catch.h"
 #include "gtest/gtest.h"
 #include "office/office_client.h"
 #include "office/office_instance.h"
 #include "office/office_web_plugin.h"
+#include "office/promise.h"
 #include "office/test/fake_render_frame.h"
+#include "office/test/simulated_input.h"
 #include "v8/include/v8-exception.h"
+
+namespace blink {
+class WebCoalescedInputEvent {
+ public:
+  explicit WebCoalescedInputEvent(std::unique_ptr<blink::WebInputEvent> event)
+      : event_(std::move(event)) {}
+  const blink::WebInputEvent& Event() const { return *event_.get(); }
+
+  std::unique_ptr<blink::WebInputEvent> event_;
+};
+}  // namespace blink
 
 namespace electron::office {
 
@@ -25,6 +40,13 @@ OfficeTest::~OfficeTest() = default;
 void OfficeTest::SetUp() {
   exit_manager_ = std::make_unique<base::ShadowingAtExitManager>();
   gin::V8Test::SetUp();
+  // this is a workaround because we only want the shell runner to own a context
+  {
+    v8::HandleScope handle_scope(instance_->isolate());
+    v8::Local<v8::Context>::New(instance_->isolate(), context_)->Exit();
+    context_.Reset();
+  }
+
   run_loop_ = std::make_unique<base::RunLoop>();
   runner_ = std::make_unique<gin::ShellRunner>(this, instance_->isolate());
   environment_ = base::Environment::Create();
@@ -32,14 +54,15 @@ void OfficeTest::SetUp() {
 }
 
 void OfficeTest::TearDown() {
-  run_loop_.reset();
   {
     RunScope scope(runner_.get());
     OfficeClient::RemoveFromContext(GetContextHolder()->context());
   }
-  environment_.reset();
   runner_.reset();
-  gin::V8Test::TearDown();
+  run_loop_.reset();
+  instance_->isolate()->Exit();
+  instance_.reset();
+  environment_.reset();
   exit_manager_.reset();
 }
 
@@ -59,8 +82,10 @@ v8::Local<v8::Value> OfficeTest::Run(const std::string& source) {
 
 void JSTest::TearDown() {
   {
+    base::RunLoop run_loop_;
     RunScope scope(runner_.get());
     runner_->Run("libreoffice.__handleBeforeUnload();", "before_unload");
+    run_loop_.RunUntilIdle();
   }
 
   OfficeTest::TearDown();
@@ -182,16 +207,107 @@ std::string OfficeTest::ToString(v8::Local<v8::Value> val) {
 PluginTest::PluginTest(const base::FilePath& path) : JSTest(path) {}
 PluginTest::~PluginTest() = default;
 
+thread_local PluginTest* PluginTest::self_ = nullptr;
+
 void PluginTest::SetUp() {
+  self_ = this;
   render_frame_ = std::make_unique<content::RenderFrameImpl>(false);
   blink::WebPluginParams dummy_params;
   plugin_ = new OfficeWebPlugin(dummy_params, render_frame_.get());
+  container_ = std::make_unique<blink::WebPluginContainer>();
   JSTest::SetUp();
+
+  std::string assert_script = R"(
+		globalThis.loadEmptyDoc = function loadEmptyDoc() {
+			return libreoffice.loadDocument('private:factory/swriter');
+    };
+  )";
+
+  RunScope scope(runner_.get());
+  runner_->Run(assert_script, "assert");
 }
 
 void PluginTest::TearDown() {
+  self_ = nullptr;
+  {
+    RunScope scope(runner_.get());
+    plugin_->Destroy();
+    render_frame_.reset();
+    plugin_ = nullptr;
+    container_.reset();
+  }
   JSTest::TearDown();
-  plugin_->Destroy();
 }
 
+v8::Local<v8::ObjectTemplate> PluginTest::GetGlobalTemplate(
+    gin::ShellRunner* runner,
+    v8::Isolate* isolate) {
+  return gin::ObjectTemplateBuilder(isolate)
+      .SetMethod("waitForInvalidate",
+                 [](v8::Isolate* isolate) {
+                   DCHECK(self_);
+                   if (self_->container_->invalidate_promise_) {
+                     LOG(ERROR) << "invalidate promise";
+                     self_->container_->invalidate_promise_->Resolve();
+                   }
+                   self_->container_->invalidate_promise_ =
+                       std::make_unique<office::Promise<void>>(isolate);
+                   return self_->container_->invalidate_promise_->GetHandle();
+                 })
+      .SetMethod("getEmbed",
+                 [](v8::Isolate* isolate) {
+                   return self_->plugin_->V8ScriptableObject(isolate);
+                 })
+      .SetMethod("setDeviceScale",
+                 [](float scale) {
+                   DCHECK(self_);
+                   self_->container_->device_scale_factor_ = scale;
+                 })
+      .SetMethod(
+          "sendMouseEvent",
+          [](int event_type, int button, float x, float y,
+             gin::Arguments* args) {
+            DCHECK(self_);
+            std::string maybe_modifiers{};
+            args->GetNext(&maybe_modifiers);
+            ui::Cursor cursor;
+            if (event_type == simulated_input::kMouseClick) {
+              self_->plugin_->HandleInputEvent(
+                  blink::WebCoalescedInputEvent(
+                      simulated_input::CreateMouseEvent(
+                          simulated_input::kMouseDown, button, x, y,
+                          maybe_modifiers)),
+                  &cursor);
+              event_type = simulated_input::kMouseUp;
+            }
+            DCHECK(self_);
+            self_->plugin_->HandleInputEvent(
+                blink::WebCoalescedInputEvent(simulated_input::CreateMouseEvent(
+                    event_type, button, x, y, maybe_modifiers)),
+                &cursor);
+          })
+      .SetMethod("sendKeyEvent",
+                 [](int event_type, const std::string& key) {
+                   DCHECK(self_);
+                   ui::Cursor cursor;
+                   if (event_type == simulated_input::kKeyPress) {
+                     self_->plugin_->HandleInputEvent(
+                         blink::WebCoalescedInputEvent(
+                             simulated_input::TranslateKeyEvent(
+                                 simulated_input::kKeyDown, key)),
+                         &cursor);
+                     event_type = simulated_input::kKeyUp;
+                   }
+                   self_->plugin_->HandleInputEvent(
+                       blink::WebCoalescedInputEvent(
+                           simulated_input::TranslateKeyEvent(event_type, key)),
+                       &cursor);
+                 })
+      .SetMethod("setAvailableClipboardTypes",
+                 []() {
+                   LOG(ERROR)
+                       << "SET AVAILABLE CLIPBOARD TYPES NOT IMPLEMENTED";
+                 })
+      .Build();
+}
 }  // namespace electron::office

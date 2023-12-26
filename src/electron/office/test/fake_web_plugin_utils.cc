@@ -6,6 +6,7 @@
 #include "fake_web_plugin_container.h"
 #include "fake_ui_clipboard.h"
 #include "ui/gfx/geometry/point_f.h"
+#include "simulated_input.h"
 
 namespace electron::office {
 
@@ -24,18 +25,20 @@ std::string CSSCursor(blink::WebPluginContainer* container) {
 
 void Invalidate(blink::WebPluginContainer* container) {
 	container->invalidate_count_++;
+	if (container->invalidate_promise_) {
+		container->invalidate_promise_->Resolve();
+	}
 }
 }  // namespace container
 
 namespace input {
-// TODO: make fake mouse utils for coords/clicks
 gfx::PointF GetRelativeMousePosition(const blink::WebInputEvent& event,
                                 gfx::Vector2dF /* delta */) {
-	return {};
+	return simulated_input::GetMousePosition(event);
 }
 
 int GetClickCount(const blink::WebInputEvent& event) {
-	return 1;
+	return simulated_input::GetClickCount(event);
 }
 }  // namespace input
 

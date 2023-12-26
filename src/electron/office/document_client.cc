@@ -106,9 +106,9 @@ DocumentClient::DocumentClient(DocumentHolderWithView holder)
 }
 
 DocumentClient::~DocumentClient() {
-  if (!document_holder_)
-    return;
-  document_holder_.RemoveDocumentObservers();
+  if (!document_holder_) {
+		document_holder_.RemoveDocumentObservers();
+	}
   OfficeInstance::Get()->RemoveDestroyedObserver(this);
 }
 
