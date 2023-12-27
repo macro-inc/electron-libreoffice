@@ -6,6 +6,7 @@ import("//build/buildflag_header.gni")
 import("//build/config/c++/c++.gni")
 import("//electron/buildflags/buildflags.gni")
 import("//ppapi/buildflags/buildflags.gni")
+import("//build/config/ozone.gni")
 import("//testing/test.gni")
 import("//v8/gni/v8.gni")
 
@@ -121,8 +122,17 @@ test("office_unittests") {
     "//testing/gmock",
     "//testing/gtest",
     "//gin:gin_test",
-    "//mojo/public/cpp/base:base"
+    "//mojo/public/cpp/base:base",
+    "//ui/display/mojom:mojom_headers",
+    "//ui/accessibility/mojom:mojom_headers",
+    "//third_party/blink/public/mojom:mojom_platform_headers",
+    "//third_party/blink/public/mojom:mojom_core_headers",
+    "//ppapi/buildflags:buildflags",
   ]
+
+  if (use_ozone) {
+    deps += ["//ui/ozone:buildflags"]
+  }
 }
 
 source_set("office_lib") {
