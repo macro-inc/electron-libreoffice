@@ -340,7 +340,7 @@ case "$1" in
     COVERAGE_OUT_FILE="$COVERAGE_OUT_DIR/coverage.profdata"
     TEST_COVERED="$OUT_DIR/office_unittests"
     GN_EXTRA_ARGS="use_clang_coverage=true"
-    COVERAGE_IGNORE='base|gin|skia|third_party|gen|v8|testing|net|crypto|url|ui|mojo|ipc'
+    COVERAGE_IGNORE='base|gin|skia|third_party|gen|v8|testing|net|crypto|url|ui|mojo|ipc|shell'
 
     2>/dev/null mkdir -p "src/$OUT_DIR" || true
     2>/dev/null rm -rf "src/${COVERAGE_OUT_DIR:?}" || true
