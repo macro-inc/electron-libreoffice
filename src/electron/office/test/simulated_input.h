@@ -25,9 +25,16 @@ constexpr int kBack = blink::WebInputEvent::Modifiers::kBackButtonDown;
 constexpr int kForward = blink::WebInputEvent::Modifiers::kForwardButtonDown;
 
 std::pair<int, std::string> ExtractModifiers(const std::string& input);
-std::unique_ptr<blink::WebKeyboardEvent> TranslateKeyEvent(int type, const std::string& keys);
-std::unique_ptr<blink::WebInputEvent> CreateMouseEvent(int type, int buttons, float x, float y, const std::string& modifiers);
+std::unique_ptr<blink::WebKeyboardEvent> TranslateKeyEvent(
+    int type,
+    const std::string& keys);
+std::unique_ptr<blink::WebInputEvent> CreateMouseEvent(
+    int type,
+    int buttons,
+    float x,
+    float y,
+    const std::string& modifiers);
 gfx::PointF GetMousePosition(const blink::WebInputEvent& event);
 int GetClickCount(const blink::WebInputEvent& event);
 
-}
+}  // namespace electron::office::simulated_input
