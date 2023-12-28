@@ -16,8 +16,8 @@ std::unique_ptr<char[]> v8_stringify(const v8::Local<v8::Context>& context,
   v8::TryCatch try_catch(isolate);
 
   v8::Local<v8::String> str;
-	if (val->IsNullOrUndefined())
-		return {};
+  if (val->IsNullOrUndefined())
+    return {};
 
   if (!val->ToString(context).ToLocal(&str))
     return {};
