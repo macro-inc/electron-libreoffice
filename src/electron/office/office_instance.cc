@@ -84,7 +84,7 @@ bool OfficeInstance::IsValid() {
 
 void OfficeInstance::Unset() {
   Get()->unset_ = true;
-  Get()->instance_.reset();
+  Get()->instance_.reset(nullptr);
 }
 
 void OfficeInstance::AddLoadObserver(OfficeLoadObserver* observer) {
@@ -111,6 +111,10 @@ void OfficeInstance::HandleDocumentCallback(int type,
     LOG(ERROR) << "Uninitialized for doc callback";
     return;
   }
+	if (office_instance->destroying_) {
+		return;
+	}
+
   auto& observers = office_instance->document_event_observers_;
   auto it =
       observers.find(DocumentEventId(context->id, type, context->view_id));
@@ -178,6 +182,7 @@ void OfficeInstance::RemoveDestroyedObserver(DestroyedObserver* observer) {
 }
 
 void OfficeInstance::HandleClientDestroyed() {
+	destroying_ = true;
   destroyed_observers_->Notify(FROM_HERE, &DestroyedObserver::OnDestroyed);
 }
 

@@ -12,6 +12,7 @@
 #include "base/callback_forward.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/task_traits.h"
