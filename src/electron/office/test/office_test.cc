@@ -84,6 +84,7 @@ void JSTest::TearDown() {
   {
     base::RunLoop run_loop_;
     RunScope scope(runner_.get());
+    run_loop_.RunUntilIdle();
     runner_->Run("libreoffice.__handleBeforeUnload();", "before_unload");
     run_loop_.RunUntilIdle();
   }
@@ -196,6 +197,7 @@ void JSTest::TestBody() {
 
     run_loop_->Run();
   }
+	base::RunLoop().RunUntilIdle();
 }
 
 std::string OfficeTest::ToString(v8::Local<v8::Value> val) {

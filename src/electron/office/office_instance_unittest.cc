@@ -3,9 +3,12 @@
 // found in the LICENSE file.
 
 #include "office_instance.h"
+#include <memory>
+
 #include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/callback_forward.h"
+#include "base/environment.h"
 #include "base/process/process.h"
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
@@ -20,6 +23,13 @@ namespace electron::office {
 
 constexpr base::TimeDelta kLoadTimeout = base::Seconds(3);
 
+// mostly only necessary on Linux to prevent "No fonts could be found on the system."
+std::unique_ptr<base::Environment> SetupEnvironment() {
+  auto result = base::Environment::Create();
+  result->SetVar("FONTCONFIG_FILE", "/etc/fonts/fonts.conf");
+	return result;
+}
+
 class OfficeInstanceTest : public ::testing::Test, public OfficeLoadObserver {
  public:
   bool WaitLoad() { return loaded_.TimedWait(kLoadTimeout) && office_; }
@@ -29,8 +39,10 @@ class OfficeInstanceTest : public ::testing::Test, public OfficeLoadObserver {
   base::WaitableEvent loaded_;
   base::WaitableEvent destroyed_;
   base::test::TaskEnvironment task_environment_;
+	std::unique_ptr<base::Environment> environment_;
 
   void SetUp() override {
+		environment_ = SetupEnvironment();
     OfficeInstance::Create();
     ASSERT_NE(OfficeInstance::Get(), nullptr);
     OfficeInstance::Get()->AddLoadObserver(this);
@@ -39,6 +51,7 @@ class OfficeInstanceTest : public ::testing::Test, public OfficeLoadObserver {
   void TearDown() override {
     ASSERT_NE(OfficeInstance::Get(), nullptr);
     OfficeInstance::Get()->RemoveLoadObserver(this);
+		environment_.reset();
   }
 
   void OnLoaded(lok::Office* office) override {
@@ -70,6 +83,7 @@ TEST(OfficeInstanceProcessTest, WithCreate) {
   // use a "death" test to run an out-of-process test
   EXPECT_EXIT(
       {
+				auto env = SetupEnvironment();
         base::test::TaskEnvironment task_environment;
         base::test::ScopedRunLoopTimeout loop_timeout(FROM_HERE, kLoadTimeout);
         WaitedLoadObserver waited;
@@ -96,6 +110,7 @@ TEST(OfficeInstanceProcessTest, WithoutCreate) {
   // tied to the process by LOK's global lock, but has a thread-local pointer
   EXPECT_EXIT(
       {
+				auto env = SetupEnvironment();
         base::test::TaskEnvironment task_environment;
         base::RunLoop().RunUntilIdle();
 
@@ -112,6 +127,7 @@ TEST(OfficeInstanceProcessTest, UnsetsCleanly) {
   // use a "death" test to run an out-of-process test
   EXPECT_EXIT(
       {
+				auto env = SetupEnvironment();
         base::test::TaskEnvironment task_environment;
         base::test::ScopedRunLoopTimeout loop_timeout(FROM_HERE, kLoadTimeout);
         WaitedLoadObserver waited;

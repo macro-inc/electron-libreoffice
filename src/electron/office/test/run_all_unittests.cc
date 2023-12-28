@@ -9,6 +9,7 @@
 #include "base/test/launcher/unit_test_launcher.h"
 #include "base/test/test_suite.h"
 #include "office/test/office_test.h"
+#include "office/office_instance.h"
 
 #if BUILDFLAG(IS_APPLE)
 #include "office/test/run_all_unittests_mac.h"
@@ -19,6 +20,11 @@ namespace {
 class OfficeTestSuite : public base::TestSuite {
  public:
   OfficeTestSuite(int argc, char** argv) : base::TestSuite(argc, argv) {}
+
+	void Shutdown() override {
+		electron::office::OfficeInstance::Unset();
+		base::TestSuite::Shutdown();
+	}
 
   OfficeTestSuite(const OfficeTestSuite&) = delete;
   OfficeTestSuite& operator=(const OfficeTestSuite&) = delete;
