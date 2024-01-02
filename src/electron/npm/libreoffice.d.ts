@@ -109,7 +109,7 @@ declare namespace LibreOffice {
 
   interface DocumentEvents<
     Commands extends string | number = keyof UnoCommands
-  > {
+    > {
     document_size_changed: EventPayload<TwipsRect>;
     invalidate_visible_cursor: EventPayload<TwipsRect>;
     cursor_visible: EventPayload<boolean>;
@@ -133,7 +133,7 @@ declare namespace LibreOffice {
   type DocumentEventHandler<
     Events extends DocumentEvents = DocumentEvents,
     Event extends keyof Events = keyof Events
-  > = (arg: Events[Event]) => void;
+    > = (arg: Events[Event]) => void;
 
   export type NumberString<T extends number = number> = `${T}`;
 
@@ -154,6 +154,12 @@ declare namespace LibreOffice {
 
   interface GetCommands {
     '.uno:PageColor': string;
+    '.uno:TrackedChangeAuthors': {
+      authors: Array<{
+        index: number,
+        name: string
+      }>
+    }
   }
 
   interface DocumentClient<
@@ -161,7 +167,7 @@ declare namespace LibreOffice {
     Commands extends string | number = keyof UnoCommands,
     CommandMap extends { [K in Commands]?: any } = UnoCommands,
     GCV extends GetCommands = GetCommands
-  > {
+    > {
     /**
      * add an event listener
      * @param eventName - the name of the event
@@ -420,9 +426,20 @@ declare namespace LibreOffice {
     /**
      * set password required for loading or editing a document
      * @param url - the URL of the document, as sent to the callback
-     * @param password - the password, undefined indicates no password
-     */
-    setDocumentPassword(url: string, password?: string): Promise<void>;
+     * @param password - the password, null indicates no password
+     *
+     * In response to a `document_password` request event:
+     * - a valid password will continue loading the document
+     * - an invalid password will result in another 'document_password' request event,  
+     * - a `null` password will abort loading the document.  
+     *
+     * In response to `document_password_to_modify`:
+     * - a valid password will continue loading the document
+     * - an invalid password will result in another `document_password_to_modify` request
+     * - a `null` password will continue loading the document in read-only mode
+    */
+    // TODO: [MACRO-1899] fix setDocumentPassword in LOK, then re-enable
+    // setDocumentPassword(url: string, password: string | null): Promise<void>;
 
     /**
      * loads a given document

@@ -8,16 +8,17 @@
 #include "base/at_exit.h"
 #include "base/environment.h"
 #include "base/files/file_path.h"
+#include "base/memory/raw_ptr.h"
 #include "base/test/bind.h"
 #include "gin/function_template.h"
 #include "gin/shell_runner.h"
 #include "gin/test/v8_test.h"
+#include "office/office_web_plugin.h"
+#include "office/test/fake_render_frame.h"
 #include "v8/include/v8-context.h"
-#include "v8/include/v8-isolate.h"
 #include "v8/include/v8-local-handle.h"
-#include "v8/include/v8-microtask-queue.h"
 #include "v8/include/v8-persistent-handle.h"
-#include "v8/include/v8-promise.h"
+#include "fake_web_plugin_container.h"
 
 namespace electron::office {
 
@@ -52,19 +53,38 @@ class OfficeTest : public gin::V8Test, public gin::ShellRunnerDelegate {
   std::unique_ptr<base::ShadowingAtExitManager> exit_manager_;
   std::unique_ptr<gin::ShellRunner> runner_;
   std::unique_ptr<gin::Runner::Scope> scope_;
+  std::unique_ptr<base::RunLoop> run_loop_;
 };
 
 class JSTest : public OfficeTest {
  public:
-  explicit JSTest(const base::FilePath& path)
-      : path_(path) {}
+  explicit JSTest(const base::FilePath& path) : path_(path) {}
 
+  void TearDown() override;
   void TestBody() override;
-  void UnhandledException(gin::ShellRunner* runner, gin::TryCatch& try_catch) override;
+  void UnhandledException(gin::ShellRunner* runner,
+                          gin::TryCatch& try_catch) override;
 
  private:
   const base::FilePath path_;
-  base::RunLoop loop_;
+};
+
+class PluginTest : public JSTest {
+ public:
+  explicit PluginTest(const base::FilePath& path);
+  ~PluginTest() override;
+
+  void SetUp() override;
+  void TearDown() override;
+  v8::Local<v8::ObjectTemplate> GetGlobalTemplate(
+      gin::ShellRunner* runner,
+      v8::Isolate* isolate) override;
+
+ private:
+	static thread_local PluginTest* self_;
+  raw_ptr<OfficeWebPlugin> plugin_;
+	std::unique_ptr<blink::WebPluginContainer> container_;
+  std::unique_ptr<content::RenderFrameImpl> render_frame_;
 };
 
 }  // namespace electron::office

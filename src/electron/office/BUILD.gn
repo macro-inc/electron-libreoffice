@@ -6,6 +6,7 @@ import("//build/buildflag_header.gni")
 import("//build/config/c++/c++.gni")
 import("//electron/buildflags/buildflags.gni")
 import("//ppapi/buildflags/buildflags.gni")
+import("//build/config/ozone.gni")
 import("//testing/test.gni")
 import("//v8/gni/v8.gni")
 
@@ -63,21 +64,47 @@ source_set("unov8") {
 test("office_unittests") {
   testonly = true
   sources = [
-    # After the refactor, the majority of these don't work, I'll get around to it eventually
-    # "test/mocked_scoped_clipboard_writer.cc",
-    # "test/office_test.cc",
-    # "test/office_test.h",
-    # "atomic_bitset_unittest.cc",
-    # "office_singleton_unittest.cc",
-    # "office_client_unittest.cc",
-    # "document_client_unittest.cc",
-    # "event_bus_unittest.cc",
+    "//ui/gfx/geometry/skia_conversions.cc",
+    "//ui/base/cursor/cursor.cc",
+    "//ui/base/cursor/cursor.h",
+    "//ui/events/keycodes/keyboard_code_conversion.cc",
+    "//ui/events/keycodes/keyboard_code_conversion.h",
+    "//ui/base/cursor/cursor.h",
+    "//electron/shell/common/gin_converters/gfx_converter.cc",
+    "//electron/shell/common/keyboard_util.cc",
+    "//electron/shell/common/keyboard_util.h",
+    "test/fake_ui_clipboard.cc",
+    "test/fake_ui_clipboard.h",
+    "test/fake_web_plugin_container.cc",
+    "test/fake_web_plugin_container.h",
+    "test/fake_web_plugin_utils.cc",
+    "test/fake_web_plugin_utils.h",
+    "test/mocked_paint_image.cc",
+    "test/blink_shims.cc",
+    "test/fake_render_frame.cc",
+    "test/fake_render_frame.h",
+    "test/mocked_scoped_clipboard_writer.cc",
+    "test/mocked_scoped_clipboard_writer.h",
+    "test/simulated_input.cc",
+    "test/simulated_input.h",
+    "test/office_test.cc",
+    "test/office_test.h",
+    "atomic_bitset_unittest.cc",
+    "office_instance_unittest.cc",
+    "office_client_unittest.cc",
     # "lok_tilebuffer_unittest.cc",
     # "paint_manager_unittest.cc",
-    "lok_callback.cc",
     "lok_callback_unittest.cc",
+    "office_web_plugin.cc",
     "test/run_all_unittests.cc",
   ]
+
+  if (is_mac) {
+    sources += [
+      "test/run_all_unittests_mac.mm",
+      "test/mocked_scoped_clipboard_writer_mac.mm",
+    ]
+  }
 
   configs += [ lok_sdk_dir + ":libreoffice_lib_config" ]
   configs += [ ":electron_config" ]
@@ -87,7 +114,7 @@ test("office_unittests") {
   ]
 
   deps = [
-    # ":office_lib",
+    ":office_lib",
     ":buildflags",
     "//base",
     "//base/test:test_support",
@@ -95,8 +122,17 @@ test("office_unittests") {
     "//testing/gmock",
     "//testing/gtest",
     "//gin:gin_test",
-    "//mojo/public/cpp/base:base"
+    "//mojo/public/cpp/base:base",
+    "//ui/display/mojom:mojom_headers",
+    "//ui/accessibility/mojom:mojom_headers",
+    "//third_party/blink/public/mojom:mojom_platform_headers",
+    "//third_party/blink/public/mojom:mojom_core_headers",
+    "//ppapi/buildflags:buildflags",
   ]
+
+  if (use_ozone) {
+    deps += ["//ui/ozone:buildflags"]
+  }
 }
 
 source_set("office_lib") {
@@ -109,6 +145,8 @@ source_set("office_lib") {
     "v8_callback.h",
     "renderer_transferable.cc",
     "renderer_transferable.h",
+    "v8_stringify.cc",
+    "v8_stringify.h",
     "document_client.cc",
     "document_client.h",
     "document_holder.cc",
@@ -156,7 +194,12 @@ static_library("office_web_plugin") {
   assert(enable_plugins,
          "The LibreOffice viewer relies on plugin infrastructure")
 
-  sources = [ "office_web_plugin.cc", "office_web_plugin.h" ]
+  sources = [
+    "web_plugin_utils.cc",
+    "web_plugin_utils.h",
+    "office_web_plugin.cc",
+    "office_web_plugin.h",
+  ]
 
   configs += [ ":electron_config" ]
   configs += [ lok_sdk_dir + ":libreoffice_lib_config" ]

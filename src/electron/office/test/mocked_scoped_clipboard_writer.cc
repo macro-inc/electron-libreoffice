@@ -13,17 +13,26 @@
 namespace ui {
 
 ClipboardFormatType::ClipboardFormatType() = default;
+
+#if BUILDFLAG(IS_LINUX)
 ClipboardFormatType::ClipboardFormatType(const std::string& native_format)
     : data_(native_format) {}
+#endif
 
 ClipboardFormatType::~ClipboardFormatType() = default;
 
-const char kMimeTypePNG[] = "image/png";
-
+#if BUILDFLAG(IS_LINUX)
 const ClipboardFormatType& ClipboardFormatType::PngType() {
-  static base::NoDestructor<ClipboardFormatType> type(kMimeTypePNG);
+  static base::NoDestructor<ClipboardFormatType> type("image/png");
   return *type;
 }
+#elif BUILDFLAG(IS_WIN)
+const ClipboardFormatType& ClipboardFormatType::PngType() {
+  static base::NoDestructor<ClipboardFormatType> format(
+      ::RegisterClipboardFormat(L"PNG"));
+  return *format;
+}
+#endif
 
 DataTransferEndpoint::~DataTransferEndpoint() = default;
 
@@ -32,11 +41,9 @@ ScopedClipboardWriter::ScopedClipboardWriter(
     std::unique_ptr<DataTransferEndpoint> data_src)
     : buffer_(buffer), data_src_(std::move(data_src)) {}
 
-void ScopedClipboardWriter::WritePickledData(
-    const base::Pickle& pickle,
-    const ClipboardFormatType& format) {}
-
 void ScopedClipboardWriter::WriteText(const std::u16string& text) {}
+
+void ScopedClipboardWriter::WriteImage(const SkBitmap& bitmap) {}
 
 ScopedClipboardWriter::~ScopedClipboardWriter() = default;
 

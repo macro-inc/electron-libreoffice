@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/memory/singleton.h"
 #include "base/no_destructor.h"
 #include "base/notreached.h"
 #include "base/path_service.h"
@@ -17,9 +16,7 @@
 #include "base/task/thread_pool.h"
 
 #include "base/logging.h"
-#include "base/threading/thread_local.h"
 #include "office/document_holder.h"
-#include "office/lok_callback.h"
 
 // Uncomment to log all document events
 // #define DEBUG_EVENTS
@@ -27,26 +24,38 @@
 namespace electron::office {
 
 namespace {
-static base::NoDestructor<base::ThreadLocalOwnedPointer<OfficeInstance>>
-    lazy_tls;
+// this doesn't work well because LOK has a per-process global lock, otherwise
+// it would be ideal static
+// base::NoDestructor<base::ThreadLocalOwnedPointer<OfficeInstance>> lazy_tls;
+// instead we use a function-local static that's shared across all threads
+OfficeInstance& get_instance() {
+  static base::NoDestructor<OfficeInstance> instance;
+  return *instance;
+}
 }  // namespace
 
 void OfficeInstance::Create() {
-  lazy_tls->Set(std::make_unique<OfficeInstance>());
+  static std::atomic<bool> once = false;
+  if (once)
+    return;
+  once = true;
+
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::TaskPriority::USER_BLOCKING},
+      base::BindOnce(&OfficeInstance::Initialize,
+                     get_instance().weak_factory_.GetWeakPtr()));
 }
 
 OfficeInstance* OfficeInstance::Get() {
-  return lazy_tls->Get();
+  return &get_instance();
 }
 
 OfficeInstance::OfficeInstance()
     : loaded_observers_(base::MakeRefCounted<OfficeLoadObserverList>()),
-      destroyed_observers_(base::MakeRefCounted<DestroyedObserverList>()) {
-  base::ThreadPool::PostTask(
-      FROM_HERE, {base::TaskPriority::USER_BLOCKING},
-      base::BindOnce(&OfficeInstance::Initialize, weak_factory_.GetWeakPtr()));
-}
+      destroyed_observers_(base::MakeRefCounted<DestroyedObserverList>()) {}
 
+// this is required by Chromium's code conventions, but will never be called due
+// to base::NoDestructor
 OfficeInstance::~OfficeInstance() = default;
 
 void OfficeInstance::Initialize() {
@@ -70,13 +79,12 @@ void OfficeInstance::Initialize() {
 }
 
 bool OfficeInstance::IsValid() {
-  return Get() && Get()->instance_;
+  return static_cast<bool>(Get()->instance_);
 }
 
 void OfficeInstance::Unset() {
-	if (!Get()) return;
   Get()->unset_ = true;
-  Get()->instance_.reset();
+  Get()->instance_.reset(nullptr);
 }
 
 void OfficeInstance::AddLoadObserver(OfficeLoadObserver* observer) {
@@ -103,6 +111,10 @@ void OfficeInstance::HandleDocumentCallback(int type,
     LOG(ERROR) << "Uninitialized for doc callback";
     return;
   }
+	if (office_instance->destroying_) {
+		return;
+	}
+
   auto& observers = office_instance->document_event_observers_;
   auto it =
       observers.find(DocumentEventId(context->id, type, context->view_id));
@@ -169,9 +181,9 @@ void OfficeInstance::RemoveDestroyedObserver(DestroyedObserver* observer) {
   destroyed_observers_->RemoveObserver(observer);
 }
 
-void OfficeInstance::HandleClientDestroyed()
-{
-	destroyed_observers_->Notify(FROM_HERE, &DestroyedObserver::OnDestroyed);
+void OfficeInstance::HandleClientDestroyed() {
+	destroying_ = true;
+  destroyed_observers_->Notify(FROM_HERE, &DestroyedObserver::OnDestroyed);
 }
 
 }  // namespace electron::office

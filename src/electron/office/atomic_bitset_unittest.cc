@@ -5,13 +5,11 @@
 #include "atomic_bitset.h"
 #include "base/barrier_closure.h"
 #include "base/callback_forward.h"
-#include "base/logging.h"
 #include "base/run_loop.h"
 #include "base/task/thread_pool.h"
 #include "base/test/bind.h"
 #include "base/test/gtest_util.h"
 #include "base/test/task_environment.h"
-#include "testing/gtest/include/gtest/gtest.h"
 
 namespace electron::office {
 

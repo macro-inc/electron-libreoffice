@@ -2,40 +2,25 @@
 // Use of this source code is governed by the MIT license that can be
 // found in the LICENSE file.
 
-#ifndef OFFICE_DOCUMENT_CLIENT_H_
-#define OFFICE_DOCUMENT_CLIENT_H_
+#pragma once
 
-#include <map>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 
 #include "base/atomic_ref_count.h"
-#include "base/files/file_path.h"
-#include "base/memory/scoped_refptr.h"
-#include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
-#include "base/task/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/token.h"
 #include "gin/arguments.h"
 #include "gin/converter.h"
-#include "gin/handle.h"
 #include "gin/wrappable.h"
 #include "office/destroyed_observer.h"
 #include "office/document_event_observer.h"
 #include "office/document_holder.h"
-#include "office/lok_tilebuffer.h"
 #include "office/renderer_transferable.h"
 #include "office/v8_callback.h"
-#include "third_party/skia/include/core/SkBitmap.h"
-#include "third_party/skia/include/core/SkImage.h"
-#include "ui/base/clipboard/clipboard.h"
-#include "ui/base/clipboard/clipboard_format_type.h"
-#include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/gfx/geometry/size_f.h"
 #include "v8/include/v8-persistent-handle.h"
 
 namespace lok {
@@ -224,5 +209,3 @@ struct Converter<EventPayload> {
   }
 };
 }  // namespace gin
-
-#endif  // OFFICE_DOCUMENT_CLIENT_H_

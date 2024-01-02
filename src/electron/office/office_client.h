@@ -4,24 +4,13 @@
 
 #pragma once
 
-#include <atomic>
-#include <memory>
-#include <unordered_map>
-#include <unordered_set>
-
-#include "base/files/file_path.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/one_shot_event.h"
-#include "base/synchronization/atomic_flag.h"
 #include "base/task/sequenced_task_runner.h"
-#include "base/threading/thread_local.h"
 #include "gin/handle.h"
 #include "gin/wrappable.h"
-#include "office/document_holder.h"
 #include "office_load_observer.h"
-#include "shell/common/gin_helper/cleaned_up_at_exit.h"
-#include "shell/common/gin_helper/pinnable.h"
 #include "v8/include/v8-isolate.h"
 #include "v8/include/v8-local-handle.h"
 
@@ -68,11 +57,14 @@ class OfficeClient : public gin::Wrappable<OfficeClient>,
  protected:
   // Exposed to v8 {
   std::string GetLastError();
+	// TODO: [MACRO-1899] fix setDocumentPassword in LOK, then re-enable
+	/*
   v8::Local<v8::Promise> SetDocumentPasswordAsync(v8::Isolate* isolate,
-                                                  const std::string& url,
-                                                  const std::string& password);
+                                                  v8::Local<v8::Value> url,
+                                                  v8::Local<v8::Value> maybePassword);
+	*/
   v8::Local<v8::Promise> LoadDocumentAsync(v8::Isolate* isolate,
-                                           const std::string& path);
+                                           v8::Local<v8::Value> url);
   v8::Local<v8::Promise> LoadDocumentFromArrayBuffer(
       v8::Isolate* isolate,
       v8::Local<v8::ArrayBuffer> array_buffer);

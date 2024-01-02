@@ -8,8 +8,6 @@
 
 #pragma once
 
-#include <stdint.h>
-
 #include <memory>
 #include <string>
 #include <vector>
@@ -17,10 +15,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "cc/paint/paint_image.h"
-#include "cc/paint/paint_image_builder.h"
 #include "gin/handle.h"
-#include "include/core/SkImage.h"
 #include "office/destroyed_observer.h"
 #include "office/document_client.h"
 #include "office/document_event_observer.h"
@@ -29,18 +24,11 @@
 #include "office/office_client.h"
 #include "office/paint_manager.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
-#include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/platform/web_input_event_result.h"
-#include "third_party/blink/public/platform/web_string.h"
-#include "third_party/blink/public/platform/web_text_input_type.h"
 #include "third_party/blink/public/web/web_plugin.h"
-#include "third_party/blink/public/web/web_plugin_container.h"
 #include "third_party/blink/public/web/web_plugin_params.h"
-#include "third_party/blink/public/web/web_print_params.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/geometry/size_f.h"
-#include "ui/gfx/geometry/vector2d_f.h"
 #include "v8/include/v8-template.h"
 #include "v8/include/v8-value.h"
 
@@ -51,6 +39,10 @@ class Document;
 namespace content {
 class RenderFrame;
 }  // namespace content
+
+namespace blink {
+class WebPluginContainer;
+}
 
 namespace electron {
 
@@ -72,7 +64,7 @@ class OfficeWebPlugin : public blink::WebPlugin,
                         public office::DocumentEventObserver,
                         public office::DestroyedObserver {
  public:
-  OfficeWebPlugin(blink::WebPluginParams params,
+  OfficeWebPlugin(blink::WebPluginParams /*params*/,
                   content::RenderFrame* render_frame);
 
   // disable copy
@@ -84,9 +76,7 @@ class OfficeWebPlugin : public blink::WebPlugin,
   void Destroy() override;
   blink::WebPluginContainer* Container() const override;
   v8::Local<v8::Object> V8ScriptableObject(v8::Isolate* isolate) override;
-  bool SupportsKeyboardFocus() const override;
 
-  void UpdateAllLifecyclePhases(blink::DocumentUpdateReason reason) override;
   void Paint(cc::PaintCanvas* canvas, const gfx::Rect& rect) override;
 
   void UpdateGeometry(const gfx::Rect& window_rect,
@@ -99,7 +89,11 @@ class OfficeWebPlugin : public blink::WebPlugin,
       const blink::WebCoalescedInputEvent& event,
       ui::Cursor* cursor) override;
 
+	// constant
+  bool SupportsKeyboardFocus() const override;
+
   // no-op
+  void UpdateAllLifecyclePhases(blink::DocumentUpdateReason reason) override;
   void DidReceiveResponse(const blink::WebURLResponse& response) override;
   void DidReceiveData(const char* data, size_t data_length) override;
   void DidFinishLoading() override;
