@@ -1,3 +1,4 @@
+/// <reference path="../src/electron/npm/libreoffice.d.ts" />
 'use strict';
 
 function css(x) {
@@ -156,8 +157,53 @@ class OfficeDoc extends HTMLElement {
     this.embed.debounceUpdates(interval);
   }
 
+  /** @param {LibreOffice.DocumentClient} doc */
+  async setClipboard(doc) {
+    const items = await navigator.clipboard.read();
+    const blobs = {};
+    let typesAvailable = 0;
+
+    for (const clipboardItem of items) {
+      for (const type of clipboardItem.types) {
+        if (
+          ![
+            'text/plain',
+            'text/html',
+            'image/png',
+            'web text/x-macro-lastupdate',
+          ].includes(type)
+        )
+          continue;
+        const blob = await clipboardItem.getType(type);
+        blobs[type] = blob;
+
+        if (!type.startsWith('web ')) typesAvailable++;
+      }
+    }
+    const lastUpdate = blobs['web text/x-macro-lastupdate'];
+    // setting the clipboard if theres a newer update, or no update metadata
+    // ensures that both internal and external clipboard data is handled as expected
+    if (
+      !this.lastClipboardUpdate ||
+      !lastUpdate ||
+      (await lastUpdate.text()) > this.lastClipboardUpdate
+    ) {
+      const items = [];
+      for (const blobType in blobs) {
+        if (blobType.startsWith('web ')) continue;
+        if (blobType.startsWith('text/plain') && typesAvailable > 1) continue;
+
+        items.push({
+          mimeType: blobType,
+          buffer: await blobs[blobType].arrayBuffer(),
+        });
+      }
+      doc.setClipboard(items);
+    }
+  }
+
   /**
-   * @param {any} doc DocumentClient object to render
+   * @param {LibreOffice.DocumentClient} doc DocumentClient object to render
    */
   renderDocument(doc, options) {
     const embed = this.embed;
@@ -196,7 +242,42 @@ class OfficeDoc extends HTMLElement {
     doc.on('mouse_pointer', ({ payload }) => {
       embed.style.cursor = payload;
     });
-    // doc.on('comment', logit);
+
+    doc.on('clipboard_changed', async () => {
+      const clip = doc.getClipboard(['image/png', 'text/plain', 'text/html']);
+      // empty clipboard is likely an accidental clear from LOK
+      if (!clip.some((x) => x)) return;
+
+      const blobs = {};
+      for (const type of clip) {
+        if (!type) continue;
+
+        blobs[type.mimeType] = new Blob(
+          [type.mimeType === 'image/png' ? type.buffer : type.text],
+          { type: type.mimeType }
+        );
+      }
+      this.lastClipboardUpdate = Date.now().toString();
+      blobs['web text/x-macro-lastupdate'] = new Blob(
+        [this.lastClipboardUpdate],
+        {
+          type: 'web text/x-macro-lastupdate',
+        }
+      );
+      await navigator.clipboard.write([new ClipboardItem(blobs)]);
+    });
+
+    embed.addEventListener('keypress', async (e) => {
+      if ((e.code === 'KeyV' && e.ctrlKey) || e.metaKey) {
+        if (e.shiftKey) {
+          const plainText = await navigator.clipboard.readText();
+          doc.paste('text/plain;charset=utf-8', plainText);
+        } else {
+          await this.setClipboard(doc);
+          doc.postUnoCommand('.uno:Paste');
+        }
+      }
+    });
   }
 
   remount() {

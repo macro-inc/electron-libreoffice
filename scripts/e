@@ -282,11 +282,11 @@ case "$1" in
     fi
 
     # By default, open the QA file
-    ARGS=("qa/index.html")
+    ARGS=("qa/shell.js")
     if [ ${#@} -gt 1 ]; then
       ARGS=("${@:2}")
     fi
-    "$BASE_PATH/src/$OUT_DIR/electron$MAC_SUFFIX$EXE_SUFFIX" --no-sandbox "${ARGS[@]}"
+    "$BASE_PATH/src/$OUT_DIR/electron$MAC_SUFFIX$EXE_SUFFIX" "${ARGS[@]}"
     ;;
   gen_clangd)
     OUT_DIR="out/$ELECTRON_OUT_DIR"
