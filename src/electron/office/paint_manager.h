@@ -98,13 +98,13 @@ class PaintManager {
                         DocumentHolderWithView document,
                         unsigned int tile_index,
                         std::size_t context_hash,
-                        base::RepeatingClosure completed);
+                        const base::RepeatingClosure& completed);
   static void PaintTileRange(scoped_refptr<office::TileBuffer> tile_buffer,
                              CancelFlagPtr cancel_flag,
                              DocumentHolderWithView document,
                              TileRange range,
                              std::size_t context_hash,
-                             base::RepeatingClosure completed);
+                             const base::RepeatingClosure& completed);
 
   const scoped_refptr<base::TaskRunner> task_runner_;
   Client* client_;
