@@ -67,6 +67,7 @@ std::unique_ptr<blink::WebInputEvent> CreateMouseEvent(
   modifiers |= type;
   modifiers |= buttons;
   res->point_ = {x, y};
+  res->SetType((blink::WebInputEvent::Type)type);
   return res;
 }
 
@@ -118,6 +119,7 @@ std::unique_ptr<blink::WebKeyboardEvent> TranslateKeyEvent(
     }
   }
   result->SetModifiers(modifiers);
+  result->SetType((blink::WebInputEvent::Type)type);
 
   return result;
 }

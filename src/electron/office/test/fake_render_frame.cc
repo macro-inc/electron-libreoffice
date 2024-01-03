@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "fake_render_frame.h"
+#include "base/threading/thread_task_runner_handle.h"
 
 namespace blink::scheduler {
 class WebAgentGroupScheduler {};
@@ -123,7 +124,7 @@ void RenderFrameImpl::LoadHTMLStringForTesting(const std::string& html,
 
 scoped_refptr<base::SingleThreadTaskRunner> RenderFrameImpl::GetTaskRunner(
     blink::TaskType task_type) {
-  return nullptr;
+  return base::ThreadTaskRunnerHandle::Get();
 }
 
 int RenderFrameImpl::GetEnabledBindings() {

@@ -122,6 +122,7 @@ declare namespace LibreOffice {
     ready: StateChangedValue[];
     state_changed: EventPayload<StateChangedValue>;
     context_menu: EventPayload<ContextMenu<Commands>>;
+    clipboard_changed: void;
 
     // TODO: document these types
     hyperlink_clicked: any;

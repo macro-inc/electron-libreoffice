@@ -197,7 +197,7 @@ void JSTest::TestBody() {
 
     run_loop_->Run();
   }
-	base::RunLoop().RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 std::string OfficeTest::ToString(v8::Local<v8::Value> val) {
@@ -217,6 +217,7 @@ void PluginTest::SetUp() {
   blink::WebPluginParams dummy_params;
   plugin_ = new OfficeWebPlugin(dummy_params, render_frame_.get());
   container_ = std::make_unique<blink::WebPluginContainer>();
+  plugin_->Initialize(container_.get());
   JSTest::SetUp();
 
   std::string assert_script = R"(
@@ -227,6 +228,29 @@ void PluginTest::SetUp() {
 
   RunScope scope(runner_.get());
   runner_->Run(assert_script, "assert");
+
+  v8::Isolate* isolate = runner_->GetContextHolder()->isolate();
+  gin::Dictionary global(isolate,
+                         runner_->GetContextHolder()->context()->Global());
+  auto keyEventType = gin::Dictionary::CreateEmpty(isolate);
+  keyEventType.Set("Down", simulated_input::kKeyDown);
+  keyEventType.Set("Up", simulated_input::kKeyUp);
+  keyEventType.Set("Press", simulated_input::kKeyPress);
+  auto mouseEventType = gin::Dictionary::CreateEmpty(isolate);
+  mouseEventType.Set("Down", simulated_input::kMouseDown);
+  mouseEventType.Set("Move", simulated_input::kMouseMove);
+  mouseEventType.Set("Up", simulated_input::kMouseUp);
+  mouseEventType.Set("Click", simulated_input::kMouseClick);
+  auto mouseButton = gin::Dictionary::CreateEmpty(isolate);
+  mouseButton.Set("Left", simulated_input::kLeft);
+  mouseButton.Set("Middle", simulated_input::kMiddle);
+  mouseButton.Set("Right", simulated_input::kRight);
+  mouseButton.Set("Back", simulated_input::kBack);
+  mouseButton.Set("Forward", simulated_input::kForward);
+
+  global.Set("KeyEventType", keyEventType);
+  global.Set("MouseEventType", mouseEventType);
+  global.Set("MouseButton", mouseButton);
 }
 
 void PluginTest::TearDown() {

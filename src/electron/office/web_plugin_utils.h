@@ -39,11 +39,4 @@ gfx::PointF GetRelativeMousePosition(const blink::WebInputEvent& event,
                                 gfx::Vector2dF delta);
 int GetClickCount(const blink::WebInputEvent& event);
 }
-
-namespace clipboard {
-ui::Clipboard* GetCurrent();
-const std::vector<std::u16string> GetAvailableTypes(ui::Clipboard* clipboard);
-std::string ReadTextUtf8(ui::Clipboard* clipboard);
-std::vector<uint8_t> ReadPng(ui::Clipboard* clipboard);
-}
 }  // namespace electron::office

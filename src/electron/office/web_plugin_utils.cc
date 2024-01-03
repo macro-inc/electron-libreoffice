@@ -1,5 +1,4 @@
 #include "web_plugin_utils.h"
-#include "base/strings/utf_string_conversions.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/web/web_document.h"
@@ -8,7 +7,6 @@
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_plugin_container.h"
 #include "third_party/blink/public/web/web_widget.h"
-#include "ui/base/clipboard/clipboard.h"
 #include "ui/display/screen_info.h"
 #include "ui/events/blink/blink_event_util.h"
 
@@ -61,36 +59,4 @@ int GetClickCount(const blink::WebInputEvent& event) {
 	return static_cast<const blink::WebMouseEvent&>(event).ClickCount();
 }
 }  // namespace input
-
-namespace clipboard {
-ui::Clipboard* GetCurrent() {
-  return ui::Clipboard::GetForCurrentThread();
-}
-
-const std::vector<std::u16string> GetAvailableTypes(ui::Clipboard* clipboard) {
-  return clipboard->ReadAvailableStandardAndCustomFormatNames(
-      ui::ClipboardBuffer::kCopyPaste, nullptr);
-}
-
-std::string ReadTextUtf8(ui::Clipboard* clipboard) {
-  std::u16string system_clipboard_data;
-  clipboard->ReadText(ui::ClipboardBuffer::kCopyPaste, nullptr,
-                      &system_clipboard_data);
-  return base::UTF16ToUTF8(system_clipboard_data);
-}
-
-std::vector<uint8_t> ReadPng(ui::Clipboard* clipboard) {
-  std::vector<uint8_t> image;
-  clipboard->ReadPng(
-      ui::ClipboardBuffer::kCopyPaste, nullptr,
-      base::BindOnce(
-          [](std::vector<uint8_t>* image, const std::vector<uint8_t>& result) {
-            *image = std::move(result);
-          },
-          &image));
-
-  return image;
-}
-
-}  // namespace clipboard
 }  // namespace electron::office

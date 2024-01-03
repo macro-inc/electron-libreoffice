@@ -73,8 +73,6 @@ test("office_unittests") {
     "//electron/shell/common/gin_converters/gfx_converter.cc",
     "//electron/shell/common/keyboard_util.cc",
     "//electron/shell/common/keyboard_util.h",
-    "test/fake_ui_clipboard.cc",
-    "test/fake_ui_clipboard.h",
     "test/fake_web_plugin_container.cc",
     "test/fake_web_plugin_container.h",
     "test/fake_web_plugin_utils.cc",

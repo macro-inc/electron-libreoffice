@@ -14,8 +14,8 @@ public:
 	WebPluginContainer();
 	~WebPluginContainer();
 	float device_scale_factor_;
-	std::string css_cursor_;
-	std::atomic<int> invalidate_count_;
-	std::unique_ptr<electron::office::Promise<void>> invalidate_promise_;
+	std::string css_cursor_ = "default";
+	std::atomic<int> invalidate_count_ = 0;
+	std::unique_ptr<electron::office::Promise<void>> invalidate_promise_ = nullptr;
 };
 }
