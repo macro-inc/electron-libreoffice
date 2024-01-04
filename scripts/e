@@ -327,7 +327,7 @@ case "$1" in
     prepare_for_build
     if [ "$UPDATE_LOK" = "true" ]; then rm -rf "$OUT_DIR/libreofficekit"; fi
     autoninja -C "$OUT_DIR" electron/office:office_unittests
-    if [ "$IN_GDB" = "true" ]; then GDB_PREFIX=('gdb --args'); fi
+    if [ "$IN_GDB" = "true" ]; then GDB_PREFIX=('gdb' '--args'); fi
     if [ "$IN_LLDB" = "true" ]; then
       GDB_PREFIX=(
         'lldb'
