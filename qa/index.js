@@ -22,11 +22,19 @@ picker.onchange = async () => {
     restoreKey = embed.renderDocument(doc);
     const thumbDoc = doc.newView();
     thumb.silenceLogIt();
-    thumb.renderDocument(thumbDoc, { disableInput: true, zoom: 0.2});
+    thumb.renderDocument(thumbDoc, { disableInput: true, zoom: 0.2 });
     thumb.debounceUpdates(300);
     embed.focus();
   }
 };
+
+async function loadEmpty() {
+  const doc = await libreoffice.loadDocument('private:factory/swriter');
+  await doc.initializeForRendering();
+  globalDoc = doc;
+  restoreKey = embed.renderDocument(doc);
+  // embed.focus();
+}
 
 function zoomIn() {
   zoom += 0.1;
@@ -96,9 +104,7 @@ function deleteFirstComment() {
     });
   }
   if (tcEnabled)
-    globalDoc
-      .as('beans.XPropertySet')
-      .setPropertyValue('RecordChanges', true);
+    globalDoc.as('beans.XPropertySet').setPropertyValue('RecordChanges', true);
   console.log(
     'after',
     globalDoc.getCommandValues('.uno:ViewAnnotations').comments
