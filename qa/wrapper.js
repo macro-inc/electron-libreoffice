@@ -243,7 +243,12 @@ class OfficeDoc extends HTMLElement {
       embed.style.cursor = payload;
     });
 
-    doc.on('clipboard_changed', async () => {
+    doc.on('clipboard_changed', async (response) => {
+      if (!response?.payload?.sw) {
+        return;
+      }
+      console.log('clipboard changed');
+
       const clip = doc.getClipboard(['image/png', 'text/plain', 'text/html']);
       // empty clipboard is likely an accidental clear from LOK
       if (!clip.some((x) => x)) return;
