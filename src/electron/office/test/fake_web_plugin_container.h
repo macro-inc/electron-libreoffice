@@ -6,16 +6,14 @@
 
 #include <string>
 #include <atomic>
-#include "office/promise.h"
 
 namespace blink {
 class WebPluginContainer {
 public:
 	WebPluginContainer();
 	~WebPluginContainer();
-	float device_scale_factor_;
+	float device_scale_factor_ = 1.0f;
 	std::string css_cursor_ = "default";
 	std::atomic<int> invalidate_count_ = 0;
-	std::unique_ptr<electron::office::Promise<void>> invalidate_promise_ = nullptr;
 };
 }

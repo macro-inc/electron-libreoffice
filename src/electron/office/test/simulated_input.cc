@@ -68,6 +68,7 @@ std::unique_ptr<blink::WebInputEvent> CreateMouseEvent(
   modifiers |= buttons;
   res->point_ = {x, y};
   res->SetType((blink::WebInputEvent::Type)type);
+	res->click_count_ = 1;
   return res;
 }
 
@@ -108,11 +109,19 @@ std::unique_ptr<blink::WebKeyboardEvent> TranslateKeyEvent(
                                   &dummy_code))
     result->dom_key = static_cast<int>(domKey);
 
-  if (type == kKeyDown) {
-    size_t text_length_cap = blink::WebKeyboardEvent::kTextLengthCap;
-    std::u16string text16 = base::UTF8ToUTF16(key);
-    std::fill_n(result->text, text_length_cap, 0);
-    std::fill_n(result->unmodified_text, text_length_cap, 0);
+  size_t text_length_cap = blink::WebKeyboardEvent::kTextLengthCap;
+  std::u16string text16 = base::UTF8ToUTF16(key);
+  std::fill_n(result->text, text_length_cap, 0);
+  std::fill_n(result->unmodified_text, text_length_cap, 0);
+  if (modifiers & blink::WebInputEvent::Modifiers::kControlKey) {
+		// key events with Control are passed as control characters starting with A/a as 1
+		if (text16[0] >= 'a' && text16[0] <= 'z') {
+			result->text[0] = text16[0] - 'a' + 1;
+		}
+		if (text16[0] >= 'A' && text16[0] <= 'Z') {
+			result->text[0] = text16[0] - 'A' + 1;
+		}
+  } else {
     for (size_t i = 0; i < std::min(text_length_cap - 1, text16.size()); ++i) {
       result->text[i] = text16[i];
       result->unmodified_text[i] = text16[i];

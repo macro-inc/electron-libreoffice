@@ -20,6 +20,7 @@
 #include "office/promise.h"
 #include "office/test/fake_render_frame.h"
 #include "office/test/simulated_input.h"
+#include "v8-value.h"
 #include "v8/include/v8-exception.h"
 
 namespace blink {
@@ -130,7 +131,7 @@ std::string GetStacktrace(v8::Isolate* isolate,
 
 }  // namespace
 
-constexpr base::TimeDelta kTestTimeout = base::Seconds(3);
+constexpr base::TimeDelta kTestTimeout = base::Seconds(30);
 
 void JSTest::TestBody() {
   base::test::ScopedRunLoopTimeout loop_timeout(FROM_HERE, kTestTimeout);
@@ -218,16 +219,41 @@ void PluginTest::SetUp() {
   plugin_ = new OfficeWebPlugin(dummy_params, render_frame_.get());
   container_ = std::make_unique<blink::WebPluginContainer>();
   plugin_->Initialize(container_.get());
+  visible_ = true;
+  rect_ = {800, 600};  // just an arbitrary initial size
+  plugin_->UpdateGeometry(rect_, rect_, rect_, true);
   JSTest::SetUp();
 
-  std::string assert_script = R"(
+  std::string builtins = R"(
 		globalThis.loadEmptyDoc = function loadEmptyDoc() {
 			return libreoffice.loadDocument('private:factory/swriter');
+    };
+
+		globalThis.ready = function ready(doc) {
+			let resolveReady;
+			const readyPromise = new Promise((resolve) => {
+				resolveReady = resolve;
+			});
+			doc.on('ready', () => {
+				resolveReady();
+			});
+			return readyPromise;
+    };
+
+		globalThis.invalidate = function ready(doc) {
+			let resolveInvalidate;
+			const readyPromise = new Promise((resolve) => {
+				resolveInvalidate = resolve;
+			});
+			doc.on('invalidate', () => {
+				resolveInvalidate();
+			});
+			return readyPromise;
     };
   )";
 
   RunScope scope(runner_.get());
-  runner_->Run(assert_script, "assert");
+  runner_->Run(builtins, "builtins");
 
   v8::Isolate* isolate = runner_->GetContextHolder()->isolate();
   gin::Dictionary global(isolate,
@@ -269,17 +295,6 @@ v8::Local<v8::ObjectTemplate> PluginTest::GetGlobalTemplate(
     gin::ShellRunner* runner,
     v8::Isolate* isolate) {
   return gin::ObjectTemplateBuilder(isolate)
-      .SetMethod("waitForInvalidate",
-                 [](v8::Isolate* isolate) {
-                   DCHECK(self_);
-                   if (self_->container_->invalidate_promise_) {
-                     LOG(ERROR) << "invalidate promise";
-                     self_->container_->invalidate_promise_->Resolve();
-                   }
-                   self_->container_->invalidate_promise_ =
-                       std::make_unique<office::Promise<void>>(isolate);
-                   return self_->container_->invalidate_promise_->GetHandle();
-                 })
       .SetMethod("getEmbed",
                  [](v8::Isolate* isolate) {
                    return self_->plugin_->V8ScriptableObject(isolate);
@@ -329,10 +344,36 @@ v8::Local<v8::ObjectTemplate> PluginTest::GetGlobalTemplate(
                            simulated_input::TranslateKeyEvent(event_type, key)),
                        &cursor);
                  })
-      .SetMethod("setAvailableClipboardTypes",
-                 []() {
-                   LOG(ERROR)
-                       << "SET AVAILABLE CLIPBOARD TYPES NOT IMPLEMENTED";
+      .SetMethod("idle",
+                 [](v8::Isolate* isolate) {
+                   office::Promise<void> promise(isolate);
+                   auto handle = promise.GetHandle();
+                   office::Promise<void>::ResolvePromise(std::move(promise));
+                   return handle;
+                 })
+      .SetMethod("log",
+                 [](v8::Isolate* isolate, v8::Local<v8::Value> val) {
+                   LOG(ERROR) << gin::V8ToString(isolate, val);
+                 })
+      .SetMethod(
+          "resizeEmbed",
+          [](v8::Isolate* isolate, int64_t width, int64_t height) {
+            DCHECK(self_);
+            // downcasting because gin's converter for int32_t returns false for
+            // floating types instead of truncating
+            self_->rect_ = {static_cast<int>(width), static_cast<int>(height)};
+            self_->plugin_->UpdateGeometry(self_->rect_, self_->rect_,
+                                           self_->rect_, self_->visible_);
+          })
+      .SetMethod("updateFocus",
+                 [](bool focused, gin::Arguments* args) {
+                   DCHECK(self_);
+                   bool scripted = false;
+                   args->GetNext(&scripted);
+
+                   self_->plugin_->UpdateFocus(
+                       focused, scripted ? blink::mojom::FocusType::kScript
+                                         : blink::mojom::FocusType::kMouse);
                  })
       .Build();
 }

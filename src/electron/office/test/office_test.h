@@ -85,6 +85,8 @@ class PluginTest : public JSTest {
   raw_ptr<OfficeWebPlugin> plugin_;
 	std::unique_ptr<blink::WebPluginContainer> container_;
   std::unique_ptr<content::RenderFrameImpl> render_frame_;
+	bool visible_;
+	gfx::Rect rect_;
 };
 
 }  // namespace electron::office
