@@ -772,7 +772,7 @@ void OfficeWebPlugin::UpdateIntersectingPages() {
   }
 }
 
-void OfficeWebPlugin::UpdateScroll(int y_position) {
+void OfficeWebPlugin::UpdateScroll(int64_t y_position) {
   if (!document_ || !document_client_.MaybeValid() || stop_scrolling_)
     return;
   if (!tile_buffer_ || tile_buffer_->IsEmpty()) {

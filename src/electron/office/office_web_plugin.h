@@ -196,7 +196,7 @@ class OfficeWebPlugin : public blink::WebPlugin,
   void OnViewportChanged(const gfx::Rect& plugin_rect_in_css_pixel,
                          float new_device_scale);
 
-  void UpdateScroll(int y_position);
+  void UpdateScroll(int64_t y_position);
 
   float TwipToPx(float in);
   float TotalScale();
