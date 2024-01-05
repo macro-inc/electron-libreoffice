@@ -100,7 +100,7 @@ DocumentClient::DocumentClient(DocumentHolderWithView holder)
 }
 
 DocumentClient::~DocumentClient() {
-  if (!document_holder_) {
+  if (document_holder_) {
     document_holder_.RemoveDocumentObservers();
   }
   OfficeInstance::Get()->RemoveDestroyedObserver(this);
@@ -956,6 +956,7 @@ void DocumentClient::DocumentCallback(int type, std::string payload) {
 }
 
 void DocumentClient::OnDestroyed() {
+
   delete this;
 }
 
