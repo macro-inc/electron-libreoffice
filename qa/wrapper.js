@@ -273,7 +273,7 @@ class OfficeDoc extends HTMLElement {
     });
 
     embed.addEventListener('keypress', async (e) => {
-      if ((e.code === 'KeyV' && e.ctrlKey) || e.metaKey) {
+      if (e.code === 'KeyV' && (e.ctrlKey || e.metaKey)) {
         if (e.shiftKey) {
           const plainText = await navigator.clipboard.readText();
           doc.paste('text/plain;charset=utf-8', plainText);
