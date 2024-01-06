@@ -111,9 +111,6 @@ void OfficeInstance::HandleDocumentCallback(int type,
     LOG(ERROR) << "Uninitialized for doc callback";
     return;
   }
-	if (office_instance->destroying_) {
-		return;
-	}
 
   auto& observers = office_instance->document_event_observers_;
   auto it =

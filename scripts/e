@@ -282,11 +282,11 @@ case "$1" in
     fi
 
     # By default, open the QA file
-    ARGS=("qa/index.html")
+    ARGS=("qa/shell.js")
     if [ ${#@} -gt 1 ]; then
       ARGS=("${@:2}")
     fi
-    "$BASE_PATH/src/$OUT_DIR/electron$MAC_SUFFIX$EXE_SUFFIX" --no-sandbox "${ARGS[@]}"
+    "$BASE_PATH/src/$OUT_DIR/electron$MAC_SUFFIX$EXE_SUFFIX" "${ARGS[@]}"
     ;;
   gen_clangd)
     OUT_DIR="out/$ELECTRON_OUT_DIR"
@@ -319,7 +319,7 @@ case "$1" in
     "$DEV_ENV" "$OUT_DIR/all.sln"
     ;;
   test)
-    GDB_PREFIX=""
+    GDB_PREFIX=()
     OUT_DIR="out/$ELECTRON_OUT_DIR"
     FLAGS=("${@:2}" --gtest_repeat=1)
 
@@ -327,12 +327,21 @@ case "$1" in
     prepare_for_build
     if [ "$UPDATE_LOK" = "true" ]; then rm -rf "$OUT_DIR/libreofficekit"; fi
     autoninja -C "$OUT_DIR" electron/office:office_unittests
-    if [ "$IN_GDB" = "true" ]; then GDB_PREFIX="gdb --args"; fi
-    if [ "$IN_LLDB" = "true" ]; then GDB_PREFIX="lldb --"; fi
+    if [ "$IN_GDB" = "true" ]; then GDB_PREFIX=('gdb' '--args'); fi
+    if [ "$IN_LLDB" = "true" ]; then
+      GDB_PREFIX=(
+        'lldb'
+        '-o'
+        "settings set target.exec-search-paths '$(pwd)/$OUT_DIR' '$(pwd)/third_party/libreofficekit/instdir'"
+        '-o'
+        "settings set target.source-map ../.. '$(pwd)'"
+        '--'
+      )
+    fi
     if [ "$GEN_CLANGD" = "true" ]; then
       (cd "$BASE_PATH" && "$BASE_PATH/src/tools/clang/scripts/generate_compdb.py" -p "src/$OUT_DIR" > "$BASE_PATH/src/compile_commands.json")
     fi
-    $GDB_PREFIX "$OUT_DIR/office_unittests" "${FLAGS[@]}"
+    "${GDB_PREFIX[@]}" "$OUT_DIR/office_unittests" "${FLAGS[@]}"
     ;;
   coverage)
     OUT_DIR="out/coverage"

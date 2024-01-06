@@ -181,9 +181,6 @@ class OfficeWebPlugin : public blink::WebPlugin,
   ~OfficeWebPlugin() override;
   blink::WebInputEventResult HandleKeyEvent(const blink::WebKeyboardEvent event,
                                             ui::Cursor* cursor);
-  blink::WebInputEventResult HandleCutCopyEvent(std::string event);
-  blink::WebInputEventResult HandlePasteEvent();
-  blink::WebInputEventResult HandleUndoRedoEvent(std::string event);
   bool HandleMouseEvent(blink::WebInputEvent::Type type,
                         gfx::PointF position,
                         int modifiers,
@@ -199,7 +196,7 @@ class OfficeWebPlugin : public blink::WebPlugin,
   void OnViewportChanged(const gfx::Rect& plugin_rect_in_css_pixel,
                          float new_device_scale);
 
-  void UpdateScroll(int y_position);
+  void UpdateScroll(int64_t y_position);
 
   float TwipToPx(float in);
   float TotalScale();

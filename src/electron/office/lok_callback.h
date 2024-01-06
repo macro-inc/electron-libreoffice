@@ -9,7 +9,6 @@
 #include "v8/include/v8-isolate.h"
 #include "v8/include/v8-json.h"
 #include "v8/include/v8-local-handle.h"
-#include "v8/include/v8-object.h"
 
 namespace electron::office::lok_callback {
 

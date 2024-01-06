@@ -396,24 +396,9 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
       // don't close the internal LO window
       case office::DomCode::US_W:
         return blink::WebInputEventResult::kNotHandled;
-      case office::DomCode::US_C:
-        return type == blink::WebInputEvent::Type::kKeyUp
-                   ? blink::WebInputEventResult::kHandledApplication
-                   : HandleCutCopyEvent(".uno:Copy");
+      // prevent paste, paste unformatted (handle the events in JS instead)
       case office::DomCode::US_V:
-        return type == blink::WebInputEvent::Type::kKeyUp
-                   ? blink::WebInputEventResult::kHandledApplication
-                   : HandlePasteEvent();
-      case office::DomCode::US_X:
-        return type == blink::WebInputEvent::Type::kKeyUp
-                   ? blink::WebInputEventResult::kHandledApplication
-                   : HandleCutCopyEvent(".uno:Cut");
-      case office::DomCode::US_Z:
-        return type == blink::WebInputEvent::Type::kKeyUp
-                   ? blink::WebInputEventResult::kHandledApplication
-               : event.GetModifiers() & office::Modifiers::kShiftKey
-                   ? HandleUndoRedoEvent(".uno:Redo")
-                   : HandleUndoRedoEvent(".uno:Undo");
+        return blink::WebInputEventResult::kNotHandled;
     }
   }
 
@@ -437,88 +422,6 @@ blink::WebInputEventResult OfficeWebPlugin::HandleKeyEvent(
       type == blink::WebInputEvent::Type::kKeyUp ? LOK_KEYEVENT_KEYUP
                                                  : LOK_KEYEVENT_KEYINPUT,
       event.text[0], lok_key_code));
-
-  return blink::WebInputEventResult::kHandledApplication;
-}
-
-namespace {
-bool OnPasteEvent(ui::Clipboard* clipboard,
-                  const std::string& clipboard_type,
-                  DocumentHolderWithView document_holder) {
-  bool result = false;
-
-  if (clipboard_type == "text/plain;charset=utf-8") {
-    std::string converted_data = clipboard::ReadTextUtf8(clipboard);
-
-    const char* value =
-        strcpy(new char[converted_data.length() + 1], converted_data.c_str());
-
-    result = document_holder->paste(clipboard_type.c_str(), value,
-                                    converted_data.size());
-    delete value;
-  } else if (clipboard_type == "image/png") {
-    std::vector<uint8_t> image = clipboard::ReadPng(clipboard);
-
-    if (image.empty()) {
-      LOG(ERROR) << "Unable to get image value";
-      return false;
-    }
-
-    result = document_holder->paste(
-        clipboard_type.c_str(),
-        static_cast<char*>(reinterpret_cast<char*>(image.data())),
-        image.size());
-  } else {
-    LOG(ERROR) << "Unsupported clipboard_type: " << clipboard_type;
-  }
-
-  return result;
-}
-}  // namespace
-
-blink::WebInputEventResult OfficeWebPlugin::HandleUndoRedoEvent(
-    std::string event) {
-  if (!tile_buffer_)
-    return blink::WebInputEventResult::kNotHandled;
-  document_.Post(base::BindOnce(
-      [](std::string event, scoped_refptr<TileBuffer> tile_buffer,
-         DocumentHolderWithView holder) {
-        holder->postUnoCommand(event.c_str(), nullptr, true);
-        tile_buffer->InvalidateAllTiles();
-      },
-      std::move(event), tile_buffer_));
-  return blink::WebInputEventResult::kHandledApplication;
-}
-
-blink::WebInputEventResult OfficeWebPlugin::HandleCutCopyEvent(
-    std::string event) {
-  document_.Post(base::BindOnce(
-      [](std::string event, DocumentHolderWithView holder) {
-        holder->postUnoCommand(event.c_str(), nullptr, true);
-      },
-      std::move(event)));
-  return blink::WebInputEventResult::kHandledApplication;
-}
-
-blink::WebInputEventResult OfficeWebPlugin::HandlePasteEvent() {
-  std::string clipboard_type = "";
-
-  ui::Clipboard* clipboard = clipboard::GetCurrent();
-  std::vector<std::u16string> types = clipboard::GetAvailableTypes(clipboard);
-  for (std::u16string& r : types) {
-    if (r == u"image/png") {
-      clipboard_type = "image/png";
-      break;
-		} else if (r == u"text/plain") {
-      clipboard_type = "text/plain;charset=utf-8";
-      break;
-    }
-  }
-
-  if (!OnPasteEvent(clipboard, clipboard_type, document_)) {
-    LOG(ERROR) << "Failed to set lok clipboard";
-    return blink::WebInputEventResult::kNotHandled;
-  }
 
   return blink::WebInputEventResult::kHandledApplication;
 }
@@ -869,7 +772,7 @@ void OfficeWebPlugin::UpdateIntersectingPages() {
   }
 }
 
-void OfficeWebPlugin::UpdateScroll(int y_position) {
+void OfficeWebPlugin::UpdateScroll(int64_t y_position) {
   if (!document_ || !document_client_.MaybeValid() || stop_scrolling_)
     return;
   if (!tile_buffer_ || tile_buffer_->IsEmpty()) {

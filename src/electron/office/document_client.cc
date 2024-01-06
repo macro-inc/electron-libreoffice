@@ -13,7 +13,6 @@
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/process/memory.h"
-#include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "gin/converter.h"
@@ -28,10 +27,6 @@
 #include "office/promise.h"
 #include "shell/common/gin_converters/gfx_converter.h"
 #include "shell/common/gin_converters/std_converter.h"
-#include "third_party/skia/include/core/SkCanvas.h"
-#include "ui/base/clipboard/clipboard.h"
-#include "ui/base/clipboard/scoped_clipboard_writer.h"
-#include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/skia_conversions.h"
@@ -58,7 +53,7 @@ inline HANDLE get_heap_handle() {
 
 inline void lok_safe_free(void* ptr) {
 #if BUILDFLAG(IS_WIN)
-  if(!ptr) {
+  if (!ptr) {
     return;
   }
   HeapFree(get_heap_handle(), 0, ptr);
@@ -96,7 +91,6 @@ DocumentClient::DocumentClient(DocumentHolderWithView holder)
       LOK_CALLBACK_DOCUMENT_SIZE_CHANGED,
       LOK_CALLBACK_INVALIDATE_TILES,
       LOK_CALLBACK_STATE_CHANGED,
-      LOK_CALLBACK_UNO_COMMAND_RESULT,
   };
   for (auto event_type : internal_monitors) {
     document_holder_.AddDocumentObserver(event_type, this);
@@ -106,9 +100,9 @@ DocumentClient::DocumentClient(DocumentHolderWithView holder)
 }
 
 DocumentClient::~DocumentClient() {
-  if (!document_holder_) {
-		document_holder_.RemoveDocumentObservers();
-	}
+  if (document_holder_) {
+    document_holder_.RemoveDocumentObservers();
+  }
   OfficeInstance::Get()->RemoveDestroyedObserver(this);
 }
 
@@ -282,72 +276,6 @@ void DocumentClient::HandleStateChange(const std::string& payload) {
     state_change_buffer_.emplace_back(payload);
   }
 }
-
-void DocumentClient::OnClipboardChanged() {
-  std::vector<std::string> mime_types;
-
-  mime_types.push_back("text/plain;charset=utf-8");
-  mime_types.push_back("image/png");
-
-  std::vector<const char*> mime_c_str;
-
-  for (const std::string& mime_type : mime_types) {
-    mime_c_str.push_back(mime_type.c_str());
-  }
-  mime_c_str.push_back(nullptr);
-
-  size_t out_count;
-  char** out_mime_types = nullptr;
-  size_t* out_sizes = nullptr;
-  char** out_streams = nullptr;
-
-  bool success = document_holder_->getClipboard(
-      mime_types.size() ? mime_c_str.data() : nullptr, &out_count,
-      &out_mime_types, &out_sizes, &out_streams);
-
-  if (!success) {
-    LOG(ERROR) << "Unable to get document clipboard";
-    return;
-  }
-
-  ui::ScopedClipboardWriter writer(ui::ClipboardBuffer::kCopyPaste);
-
-  for (size_t i = 0; i < mime_types.size(); ++i) {
-    size_t buffer_size = out_sizes[i];
-    std::string_view mime_type = out_mime_types[i];
-    if (buffer_size <= 0) {
-      continue;
-    }
-    if (mime_type == "text/plain;charset=utf-8") {
-      std::u16string converted_data = base::UTF8ToUTF16(out_streams[i]);
-
-      writer.WriteText(converted_data);
-    } else if (mime_type == "image/png") {
-      SkBitmap bitmap;
-      gfx::PNGCodec::Decode(reinterpret_cast<unsigned char*>(out_streams[i]),
-                            buffer_size, &bitmap);
-      writer.WriteImage(std::move(bitmap));
-    }
-
-    // free the clipboard item, can't use std::unique_ptr without a
-    // wrapper class since it needs to be size aware
-    lok_safe_free(out_streams[i]);
-    lok_safe_free(out_mime_types[i]);
-  }
-  // free the clipboard item containers
-  lok_safe_free(out_sizes);
-  lok_safe_free(out_streams);
-  lok_safe_free(out_mime_types);
-}
-
-void DocumentClient::HandleUnoCommandResult(const std::string& payload) {
-  using namespace std::literals::string_view_literals;
-  if (lok_callback::IsUnoCommandResultSuccessful(".uno:Copy"sv, payload) ||
-      lok_callback::IsUnoCommandResultSuccessful(".uno:Cut"sv, payload)) {
-    OnClipboardChanged();
-  }
-}
-
 void DocumentClient::HandleDocSizeChanged() {
   RefreshSize();
 }
@@ -501,9 +429,7 @@ v8::Local<v8::Promise> DocumentClient::SaveToMemory(v8::Isolate* isolate,
                   // free(...) deleter
                   auto backing_store = v8::ArrayBuffer::NewBackingStore(
                       data, size,
-                      [](void* data, size_t, void*) {
-                        lok_safe_free(data);
-                      },
+                      [](void* data, size_t, void*) { lok_safe_free(data); },
                       nullptr);
                   v8::Local<v8::ArrayBuffer> array_buffer =
                       v8::ArrayBuffer::New(isolate, std::move(backing_store));
@@ -631,14 +557,53 @@ v8::Local<v8::Value> DocumentClient::GetSelectionTypeAndText(
   return v8::Object::New(isolate, v8::Null(isolate), names, values, 2);
 }
 
+namespace {
+
+v8::Local<v8::Value> lok_clipboard_to_buffer(v8::Isolate* isolate,
+                                             const char* mime_type,
+                                             const char* stream,
+                                             size_t size) {
+  // allocate a new ArrayBuffer and copy the stream to the backing
+  // store
+  v8::Local<v8::ArrayBuffer> buffer = v8::ArrayBuffer::New(isolate, size);
+  std::memcpy(buffer->GetBackingStore()->Data(), stream, size);
+
+  v8::Local<v8::Name> names[2] = {gin::StringToV8(isolate, "mimeType"),
+                                  gin::StringToV8(isolate, "buffer")};
+  v8::Local<v8::Value> values[2] = {gin::StringToV8(isolate, mime_type),
+                                    gin::ConvertToV8(isolate, buffer)};
+
+  return v8::Object::New(isolate, v8::Null(isolate), names, values, 2);
+}
+
+v8::Local<v8::Value> lok_clipboard_to_string(v8::Isolate* isolate,
+                                             const char* mime_type,
+                                             const char* stream) {
+  v8::Local<v8::Name> names[2] = {gin::StringToV8(isolate, "mimeType"),
+                                  gin::StringToV8(isolate, "text")};
+  v8::Local<v8::Value> values[2] = {gin::StringToV8(isolate, mime_type),
+                                    gin::StringToV8(isolate, stream)};
+
+  return v8::Object::New(isolate, v8::Null(isolate), names, values, 2);
+}
+
+}  // namespace
+
 v8::Local<v8::Value> DocumentClient::GetClipboard(gin::Arguments* args) {
   std::vector<std::string> mime_types;
   std::vector<const char*> mime_c_str;
+  static constexpr std::string_view text_plain = "text/plain";
 
   if (args->GetNext(&mime_types)) {
     for (const std::string& mime_type : mime_types) {
+      // LOK explicitly converts all UTF-16 strings to UTF-8, however it still
+      // requests an encoding
+      if (mime_type == text_plain) {
+        mime_c_str.push_back("text/plain;charset=utf-8");
+        continue;
+      }
       // c_str() gaurantees that the string is null-terminated, data()
-      // does not
+      // does not, don't use data() or bad things will happen
       mime_c_str.push_back(mime_type.c_str());
     }
 
@@ -673,24 +638,30 @@ v8::Local<v8::Value> DocumentClient::GetClipboard(gin::Arguments* args) {
 
   for (size_t i = 0; i < out_count; ++i) {
     size_t buffer_size = out_sizes[i];
-    if (buffer_size <= 0)
+    if (buffer_size <= 0) {
+      std::ignore = result->Set(context, i, v8::Undefined(isolate_));
       continue;
-
-    // allocate a new ArrayBuffer and copy the stream to the backing
-    // store
-    v8::Local<v8::ArrayBuffer> buffer =
-        v8::ArrayBuffer::New(isolate, buffer_size);
-    std::memcpy(buffer->GetBackingStore()->Data(), out_streams[i], buffer_size);
-
-    v8::Local<v8::Name> names[2] = {gin::StringToV8(isolate, "mimeType"),
-                                    gin::StringToV8(isolate, "buffer")};
-    v8::Local<v8::Value> values[2] = {
-        gin::StringToV8(isolate, out_mime_types[i]),
-        gin::ConvertToV8(isolate, buffer)};
-
-    v8::Local<v8::Value> object =
-        v8::Object::New(isolate, v8::Null(isolate), names, values, 2);
-    std::ignore = result->Set(context, i, object);
+    }
+    static constexpr std::string_view text_prefix = "text/";
+    std::string_view sv_mime_type(out_mime_types[i]);
+    if (sv_mime_type.substr(0, text_prefix.length()) == text_prefix) {
+      if (sv_mime_type.substr(0, text_plain.length()) == text_plain) {
+        std::ignore =
+            result->Set(context, i,
+                        lok_clipboard_to_string(isolate_, text_plain.data(),
+                                                out_streams[i]));
+      } else {
+        std::ignore =
+            result->Set(context, i,
+                        lok_clipboard_to_string(isolate_, out_mime_types[i],
+                                                out_streams[i]));
+      }
+    } else {
+      std::ignore =
+          result->Set(context, i,
+                      lok_clipboard_to_buffer(isolate_, out_mime_types[i],
+                                              out_streams[i], out_sizes[i]));
+    }
 
     // free the clipboard item, can't use std::unique_ptr without a
     // wrapper class since it needs to be size aware
@@ -978,10 +949,6 @@ void DocumentClient::DocumentCallback(int type, std::string payload) {
       HandleStateChange(payload);
       ForwardEmit(type, payload);
       break;
-    case LOK_CALLBACK_UNO_COMMAND_RESULT:
-      HandleUnoCommandResult(payload);
-      ForwardEmit(type, payload);
-      break;
     default:
       ForwardEmit(type, payload);
       break;
@@ -989,6 +956,7 @@ void DocumentClient::DocumentCallback(int type, std::string payload) {
 }
 
 void DocumentClient::OnDestroyed() {
+
   delete this;
 }
 

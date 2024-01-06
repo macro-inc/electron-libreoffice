@@ -145,8 +145,6 @@ class DocumentClient : public gin::Wrappable<DocumentClient>,
   void HandleDocSizeChanged();
   void HandleInvalidate();
 
-  void OnClipboardChanged();
-
   void RefreshSize();
 
   void EmitReady(v8::Isolate* isolate, v8::Global<v8::Context> context);

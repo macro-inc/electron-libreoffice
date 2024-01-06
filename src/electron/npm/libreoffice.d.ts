@@ -51,10 +51,15 @@ interface HTMLLibreOfficeEmbed<Client = LibreOffice.DocumentClient>
 }
 
 declare namespace LibreOffice {
-  type ClipboardItem = {
-    mimeType: string;
-    buffer: ArrayBuffer;
-  };
+  type ClipboardItem =
+    | {
+        mimeType: 'text/plain' | 'text/html';
+        text: string;
+      }
+    | {
+        mimeType: 'image/png';
+        buffer: ArrayBuffer;
+      };
 
   /** Size in CSS pixels */
   type Size = {
@@ -109,7 +114,7 @@ declare namespace LibreOffice {
 
   interface DocumentEvents<
     Commands extends string | number = keyof UnoCommands
-    > {
+  > {
     document_size_changed: EventPayload<TwipsRect>;
     invalidate_visible_cursor: EventPayload<TwipsRect>;
     cursor_visible: EventPayload<boolean>;
@@ -117,6 +122,11 @@ declare namespace LibreOffice {
     ready: StateChangedValue[];
     state_changed: EventPayload<StateChangedValue>;
     context_menu: EventPayload<ContextMenu<Commands>>;
+    clipboard_changed:
+      | null
+      | EventPayload<null>
+      | EventPayload<{ sw: true }>
+      | EventPayload<{ mimeType: string }>;
 
     // TODO: document these types
     hyperlink_clicked: any;
@@ -133,7 +143,7 @@ declare namespace LibreOffice {
   type DocumentEventHandler<
     Events extends DocumentEvents = DocumentEvents,
     Event extends keyof Events = keyof Events
-    > = (arg: Events[Event]) => void;
+  > = (arg: Events[Event]) => void;
 
   export type NumberString<T extends number = number> = `${T}`;
 
@@ -156,10 +166,10 @@ declare namespace LibreOffice {
     '.uno:PageColor': string;
     '.uno:TrackedChangeAuthors': {
       authors: Array<{
-        index: number,
-        name: string
-      }>
-    }
+        index: number;
+        name: string;
+      }>;
+    };
   }
 
   interface DocumentClient<
@@ -167,7 +177,7 @@ declare namespace LibreOffice {
     Commands extends string | number = keyof UnoCommands,
     CommandMap extends { [K in Commands]?: any } = UnoCommands,
     GCV extends GetCommands = GetCommands
-    > {
+  > {
     /**
      * add an event listener
      * @param eventName - the name of the event
@@ -264,18 +274,17 @@ declare namespace LibreOffice {
     };
 
     /**
-     * gets the content on the clipboard for the current view as a series of
-     * binary streams
-     * @param mimeTypes - the array of mimeTypes corresponding to each item in the clipboard
-     * the mimeTypes should include the charset if you are going to pass them in for filtering the clipboard data ex.) text/plain;charset=utf-8
+     * gets the content of the clipboard for the current view
+     * @param mimeTypes - desired MIME types from the clipboard
      * @returns an array of clipboard items
      */
-    getClipboard(mimeTypes?: string[]): Array<ClipboardItem | undefined>;
+    getClipboard(
+      mimeTypes?: Array<ClipboardItem['mimeType']>
+    ): Array<ClipboardItem | undefined>;
 
     /**
-     * populates the clipboard for this view with multiple types of content
+     * populates the clipboard for the current view with multiple types of content
      * @param clipboardData - array of clipboard items used to populate the clipboard
-     * for setting the clipboard data you will NOT want to include the charset in the mimeType. ex.) text/plain
      * @returns whether the operation was successful
      */
     setClipboard(clipboardData: ClipboardItem[]): boolean;
@@ -430,14 +439,14 @@ declare namespace LibreOffice {
      *
      * In response to a `document_password` request event:
      * - a valid password will continue loading the document
-     * - an invalid password will result in another 'document_password' request event,  
-     * - a `null` password will abort loading the document.  
+     * - an invalid password will result in another 'document_password' request event,
+     * - a `null` password will abort loading the document.
      *
      * In response to `document_password_to_modify`:
      * - a valid password will continue loading the document
      * - an invalid password will result in another `document_password_to_modify` request
      * - a `null` password will continue loading the document in read-only mode
-    */
+     */
     // TODO: [MACRO-1899] fix setDocumentPassword in LOK, then re-enable
     // setDocumentPassword(url: string, password: string | null): Promise<void>;
 
