@@ -1,6 +1,6 @@
-## What is this?
+# Macro Open Source Project: Electron-LibreOffice
 
-This project embeds LibreOfficeKit into Electron as a Blink WebPlugin
+This is a public project that forks Electron to embed LibreOffice directly as an HTML element with a TypeScript API. 
 
 ## Setup
 
