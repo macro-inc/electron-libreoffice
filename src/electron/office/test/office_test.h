@@ -87,6 +87,7 @@ class PluginTest : public JSTest {
   std::unique_ptr<content::RenderFrameImpl> render_frame_;
 	bool visible_;
 	gfx::Rect rect_;
+	std::vector<base::FilePath> temp_files_to_clean_;
 };
 
 }  // namespace electron::office

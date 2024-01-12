@@ -6,6 +6,7 @@
 
 #include <memory>
 #include "base/at_exit.h"
+#include "base/check.h"
 #include "base/files/file_util.h"
 #include "base/run_loop.h"
 #include "gin/arguments.h"
@@ -20,8 +21,9 @@
 #include "office/promise.h"
 #include "office/test/fake_render_frame.h"
 #include "office/test/simulated_input.h"
-#include "v8-value.h"
 #include "v8/include/v8-exception.h"
+#include "v8/include/v8-primitive.h"
+#include "v8/include/v8-value.h"
 
 namespace blink {
 class WebCoalescedInputEvent {
@@ -289,6 +291,9 @@ void PluginTest::TearDown() {
     container_.reset();
   }
   JSTest::TearDown();
+  for (auto& path : temp_files_to_clean_) {
+    base::DeleteFile(path);
+  }
 }
 
 v8::Local<v8::ObjectTemplate> PluginTest::GetGlobalTemplate(
@@ -374,6 +379,25 @@ v8::Local<v8::ObjectTemplate> PluginTest::GetGlobalTemplate(
                    self_->plugin_->UpdateFocus(
                        focused, scripted ? blink::mojom::FocusType::kScript
                                          : blink::mojom::FocusType::kMouse);
+                 })
+      .SetMethod("canUndo",
+                 []() {
+                   DCHECK(self_);
+                   return self_->plugin_->CanUndo();
+                 })
+      .SetMethod("canRedo",
+                 []() {
+                   DCHECK(self_);
+                   return self_->plugin_->CanRedo();
+                 })
+      .SetMethod("tempFilePath",
+                 [](v8::Isolate* isolate) -> v8::Local<v8::Value> {
+                   DCHECK(self_);
+                   base::FilePath path;
+                   if (!base::CreateTemporaryFile(&path))
+                     return v8::Undefined(isolate);
+                   self_->temp_files_to_clean_.emplace_back(path);
+                   return gin::StringToV8(isolate, path.AsUTF8Unsafe());
                  })
       .Build();
 }
