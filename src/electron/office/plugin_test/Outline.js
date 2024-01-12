@@ -43,16 +43,19 @@ Header 1</h1>
   assert(outline);
   assert(JSON.stringify(outline) === JSON.stringify(outlineSnapshot));
 
-  x.gotoOutline(1);
+  assert(x.gotoOutline(1) != null);
 
   const xTxtDoc = x.as('text.XTextDocument');
   assert(getCurrentParagraphText(xTxtDoc) == outlineSnapshot.outline[1].text);
 
-  x.gotoOutline(2);
+  assert(x.gotoOutline(2) != null);
   assert(getCurrentParagraphText(xTxtDoc) == outlineSnapshot.outline[2].text);
 
-  x.gotoOutline(0);
+  assert(x.gotoOutline(0) != null);
   assert(getCurrentParagraphText(xTxtDoc) == outlineSnapshot.outline[0].text);
+
+  assert(x.gotoOutline(5) == null);
+  assert(x.gotoOutline(-5) == null);
 }
 
 testOutline();

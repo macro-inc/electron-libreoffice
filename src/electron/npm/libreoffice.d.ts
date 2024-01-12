@@ -313,7 +313,7 @@ declare namespace LibreOffice {
      */
     gotoOutline(id: number): {
       destRect: string;
-    };
+    } | undefined;
 
     /**
      * saves the document to memory
