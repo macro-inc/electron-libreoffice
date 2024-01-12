@@ -122,11 +122,8 @@ class DocumentClient : public gin::Wrappable<DocumentClient>,
   int GetNumberOfPages() const;
 
   // Editing State {
-  bool CanCopy();
   bool CanUndo();
   bool CanRedo();
-  bool CanEditText();
-  bool HasEditableText();
   // }
 
   std::string Path();
@@ -159,7 +156,6 @@ class DocumentClient : public gin::Wrappable<DocumentClient>,
   long document_width_in_twips_;
 
   std::vector<gfx::Rect> page_rects_;
-  std::unordered_map<std::string, std::string> uno_state_;
 
   // holds state changes until the document is mounted
   std::vector<std::string> state_change_buffer_;
@@ -174,6 +170,9 @@ class DocumentClient : public gin::Wrappable<DocumentClient>,
   std::unordered_map<int, std::vector<SafeV8Function>> event_listeners_;
   // used to track what has a registered observer
   std::unordered_set<int> event_types_registered_;
+
+  bool can_undo_ = false;
+  bool can_redo_ = false;
 
   raw_ptr<v8::Isolate> isolate_ = nullptr;
 

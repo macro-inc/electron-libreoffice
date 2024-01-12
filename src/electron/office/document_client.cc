@@ -13,7 +13,6 @@
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/process/memory.h"
-#include "base/task/thread_pool.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "gin/converter.h"
 #include "gin/dictionary.h"
@@ -213,28 +212,12 @@ int DocumentClient::GetNumberOfPages() const {
 //}
 
 // Editing State {
-bool DocumentClient::CanCopy() {
-  auto res = uno_state_.find(".uno:Copy");
-  return res != uno_state_.end() && res->second == "enabled";
-}
-
 bool DocumentClient::CanUndo() {
-  auto res = uno_state_.find(".uno:Undo");
-  return res != uno_state_.end() && res->second == "enabled";
+	return can_undo_;
 }
 
 bool DocumentClient::CanRedo() {
-  auto res = uno_state_.find(".uno:Redo");
-  return res != uno_state_.end() && res->second == "enabled";
-}
-
-// TODO: read only mode?
-bool DocumentClient::CanEditText() {
-  return true;
-}
-
-bool DocumentClient::HasEditableText() {
-  return true;
+	return can_redo_;
 }
 // }
 
@@ -266,16 +249,21 @@ base::WeakPtr<DocumentClient> DocumentClient::GetWeakPtr() {
 }
 
 void DocumentClient::HandleStateChange(const std::string& payload) {
-  std::pair<std::string, std::string> pair =
-      lok_callback::ParseStatusChange(payload);
-  if (!pair.first.empty()) {
-    uno_state_.insert(pair);
+	static constexpr std::string_view uno_undo = ".uno:Undo=";
+	static constexpr std::string_view uno_redo = ".uno:Redo=";
+	std::string_view sv = payload;
+  if (sv.substr(0, uno_undo.length()) == uno_undo) {
+		can_undo_ = sv.substr(uno_undo.length()) == "enabled";
+  }
+  if (sv.substr(0, uno_redo.length()) == uno_redo) {
+		can_redo_ = sv.substr(uno_redo.length()) == "enabled";
   }
 
   if (!is_ready_) {
     state_change_buffer_.emplace_back(payload);
   }
 }
+
 void DocumentClient::HandleDocSizeChanged() {
   RefreshSize();
 }
@@ -453,27 +441,15 @@ void DocumentClient::PostUnoCommand(const std::string& command,
   std::unique_ptr<char[]> json_buffer;
 
   bool notifyWhenFinished = false;
-  bool nonblocking = false;
   if (args->GetNext(&arguments) && !arguments->IsUndefined()) {
     json_buffer = jsonStringify(args->GetHolderCreationContext(), arguments);
     if (!json_buffer)
       return;
-    if (arguments->IsObject()) {
-      gin::Dictionary options(args->isolate(), arguments.As<v8::Object>());
-      options.Get("nonblocking", &nonblocking);
-    }
   }
 
   args->GetNext(&notifyWhenFinished);
 
-  if (nonblocking) {
-    base::ThreadPool::PostTask(
-        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
-        base::BindOnce(&DocumentClient::PostUnoCommandInternal, GetWeakPtr(),
-                       command, std::move(json_buffer), true));
-  } else {
-    PostUnoCommandInternal(command, std::move(json_buffer), notifyWhenFinished);
-  }
+  PostUnoCommandInternal(command, std::move(json_buffer), notifyWhenFinished);
 }
 
 void DocumentClient::PostUnoCommandInternal(const std::string& command,
@@ -956,7 +932,6 @@ void DocumentClient::DocumentCallback(int type, std::string payload) {
 }
 
 void DocumentClient::OnDestroyed() {
-
   delete this;
 }
 

@@ -156,6 +156,7 @@ declare namespace LibreOffice {
   interface UnoCommands {
     '.uno:SetPageColor': { ColorHex: UnoString };
     '.uno:FontColor': { FontColor: UnoLong };
+    '.uno:Highlight': { BackColor: UnoLong };
   }
 
   type CommandValueResult<R = { [name: string]: any }> = {
@@ -218,12 +219,14 @@ declare namespace LibreOffice {
      * posts a UNO command to the document
      * @param command - the uno command to be posted
      * @param args - arguments for the uno command
+     * @param notifyWhenFinished - whether an UNO command result event should be sent for the result
      */
     postUnoCommand<K extends Commands>(
       command: K,
       args?: K extends keyof NonNullable<CommandMap>
         ? NonNullable<CommandMap>[K]
-        : never
+        : never,
+      notifyWhenFinished?: boolean
     ): void;
 
     /**
@@ -254,24 +257,6 @@ declare namespace LibreOffice {
      * @param y - the vertical position in document coordinates
      */
     setTextSelection(type: number, x: number, y: number): void;
-
-    /**
-     * gets the currently selected text
-     * @param mimeType - the mime type for the selection
-     * @returns result[0] is the text selection result[1] is the used mime type
-     */
-    getTextSelection(mimeType: string): string[];
-
-    /**
-     * gets the type of the selected content and possibly its text
-     * @param mimeType - the mime type of the selection
-     * @returns the selection type, the text of the selection and the used mime type
-     */
-    getSelectionTypeAndText(mimeType: string): {
-      selectionType: number;
-      text: string;
-      usedMimeType: string;
-    };
 
     /**
      * gets the content of the clipboard for the current view
