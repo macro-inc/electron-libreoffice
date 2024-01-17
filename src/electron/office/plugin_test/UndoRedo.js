@@ -31,7 +31,7 @@ async function testUndoRedo() {
   const xTxtDoc = x.as('text.XTextDocument');
   assert(canUndo());
   assert(!canRedo());
-  sendKeyEvent(KeyEventType.Press, 'ctrl+z');
+  sendKeyEvent(KeyEventType.Press, 'mod+z');
   await idle();
   await redoPromise;
   assert(canRedo());

@@ -6,7 +6,7 @@ async function testKeyEvents() {
   await ready(x);
 
   updateFocus(true);
-  sendKeyEvent(KeyEventType.Press, 'ctrl+b');
+  sendKeyEvent(KeyEventType.Press, 'mod+b');
   await idle();
   sendKeyEvent(KeyEventType.Press, 'a');
   sendKeyEvent(KeyEventType.Press, 'b');

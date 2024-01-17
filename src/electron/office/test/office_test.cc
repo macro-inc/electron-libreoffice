@@ -8,6 +8,8 @@
 #include "base/at_exit.h"
 #include "base/check.h"
 #include "base/files/file_util.h"
+#include "base/guid.h"
+#include "base/notreached.h"
 #include "base/run_loop.h"
 #include "gin/arguments.h"
 #include "gin/converter.h"
@@ -15,6 +17,7 @@
 #include "gin/public/isolate_holder.h"
 #include "gin/try_catch.h"
 #include "gtest/gtest.h"
+#include "net/base/filename_util.h"
 #include "office/office_client.h"
 #include "office/office_instance.h"
 #include "office/office_web_plugin.h"
@@ -242,12 +245,12 @@ void PluginTest::SetUp() {
 			return readyPromise;
     };
 
-		globalThis.invalidate = function ready(doc) {
+		globalThis.invalidate = function invalidate(doc) {
 			let resolveInvalidate;
 			const readyPromise = new Promise((resolve) => {
 				resolveInvalidate = resolve;
 			});
-			doc.on('invalidate', () => {
+			doc.on('invalidate_tiles', () => {
 				resolveInvalidate();
 			});
 			return readyPromise;
@@ -390,14 +393,27 @@ v8::Local<v8::ObjectTemplate> PluginTest::GetGlobalTemplate(
                    DCHECK(self_);
                    return self_->plugin_->CanRedo();
                  })
-      .SetMethod("tempFilePath",
-                 [](v8::Isolate* isolate) -> v8::Local<v8::Value> {
-                   DCHECK(self_);
+      .SetMethod(
+          "tempFileURL",
+          [](v8::Isolate* isolate,
+             std::string extension) -> v8::Local<v8::Value> {
+            DCHECK(self_);
+            base::FilePath path;
+            if (!base::GetTempDir(&path)) {
+              NOTREACHED();
+            }
+            path = path.AppendASCII(
+                base::GUID::GenerateRandomV4().AsLowercaseString() + extension);
+            self_->temp_files_to_clean_.emplace_back(path);
+            GURL file_url = net::FilePathToFileURL(path);
+            return gin::StringToV8(isolate, file_url.spec());
+          })
+
+      .SetMethod("fileURLExists",
+                 [](std::string url) {
                    base::FilePath path;
-                   if (!base::CreateTemporaryFile(&path))
-                     return v8::Undefined(isolate);
-                   self_->temp_files_to_clean_.emplace_back(path);
-                   return gin::StringToV8(isolate, path.AsUTF8Unsafe());
+                   return net::FileURLToFilePath(GURL(url), &path) &&
+                          base::PathExists(path);
                  })
       .Build();
 }

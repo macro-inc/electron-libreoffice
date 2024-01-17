@@ -90,6 +90,7 @@ test("office_unittests") {
     "atomic_bitset_unittest.cc",
     "office_instance_unittest.cc",
     "office_client_unittest.cc",
+    "document_client_unittest.cc",
     # "lok_tilebuffer_unittest.cc",
     # "paint_manager_unittest.cc",
     "lok_callback_unittest.cc",

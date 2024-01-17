@@ -230,27 +230,6 @@ declare namespace LibreOffice {
     ): void;
 
     /**
-     * get the current parts name
-     * @param partId - the id of the part you are in
-     * @returns the parts name
-     */
-    getPartName(partId: number): string;
-
-    /**
-     * get the current parts hash
-     * @param partId - the id of the part you are in
-     * @returns the parts hash
-     */
-    getPartHash(partId: number): string;
-
-    /**
-     * posts a dialog event for the window with given id
-     * @param windowId - the id of the window to notify
-     * @param args - the arguments for the event
-     */
-    sendDialogEvent(windowId: number, args: { [name: string]: any }): void;
-
-    /**
      * sets the start or end of a text selection
      * @param type - the text selection type
      * @param x - the horizontal position in document coordinates
@@ -311,9 +290,11 @@ declare namespace LibreOffice {
      * @param id - the id of the node to go to
      * @returns the rect of the node where the cursor is brought to
      */
-    gotoOutline(id: number): {
-      destRect: string;
-    } | undefined;
+    gotoOutline(id: number):
+      | {
+          destRect: string;
+        }
+      | undefined;
 
     /**
      * saves the document to memory
@@ -324,78 +305,27 @@ declare namespace LibreOffice {
 
     /**
      * saves the document to memory
-     * Stores the document's persistent data to a URL and
-     * continues to be a representation of the old URL.
+     * Stores the document's persistent data to a URL and continues to be a representation of the old URL.
      *
      * @param url the location where to store the document
      * @param [format] the format to use while exporting, when omitted, then deducted from the URL's file extension
      * @param [filter] options for the export filter
      * @returns true if the save succeeded, false otherwise
      */
-    saveAs(url: string, format?: string, filter?: string): Promise<boolean>;
-
-    /**
-     * show/hide a single row/column header outline for Calc documents
-     * @param column - if we are dealingg with a column or row group
-     * @param level - the level to which the group belongs
-     * @param index - the group entry index
-     * @param hidden - the new group state (collapsed/expanded)
-     */
-    setOutlineState(
-      column: boolean,
-      level: number,
-      index: number,
-      hidden: boolean
-    ): void;
-
-    /**
-     * set the language tag of the window with the specified id
-     * @param id - a view ID
-     * @param language - Bcp47 languageTag, like en-US or so
-     */
-    setViewLanguage(id: number, language: string): void;
-
-    /**
-     * set a part's selection mode
-     * @param part - the part you want to select
-     * @param select - 0 to deselect, 1 to select, and 2 to toggle
-     */
-    selectPart(part: number, select: 0 | 1 | 2): void;
-
-    /**
-     * moves the selected pages/slides to a new position
-     * @param position - the new position where the selection should go
-     * @param duplicate - when true will copy instead of move
-     */
-    moveSelectedParts(position: number, duplicate: boolean): void;
-
-    /**
-     * for deleting many characters all at once
-     * @param windowId - the window id to post the input event to.
-     * If windowId is 0 the event is posted into the document
-     * @param before - the characters to be deleted before the cursor position
-     * @param after - the charactes to be deleted after teh cursor position
-     */
-    removeTextContext(windowId: number, before: number, after: number): void;
-
-    /**
-     * select the Calc function to be pasted into the formula input box
-     * @param functionName - the function name to be completed
-     */
-    completeFunction(functionName: string): void;
-
-    /**
-     * posts an event for the form field at the cursor position
-     * @param arguments - the arguments for the event
-     */
-    sendFormFieldEvent(arguments: string): void;
-
-    /**
-     * posts an event for the content control at the cursor position
-     * @param arguments - the arguments for the event
-     * @returns whether sending the event was successful
-     */
-    sendContentControlEvent(arguments: { [name: string]: any }): boolean;
+    saveAs(
+      url: string,
+      format?:
+        | 'doc'
+        | 'docm'
+        | 'docx'
+        | 'html'
+        | 'odt'
+        | 'ott'
+        | 'pdf'
+        | 'txt'
+        | 'png',
+      filter?: string
+    ): Promise<boolean>;
 
     /**
      * if the document is ready
@@ -451,6 +381,7 @@ declare namespace LibreOffice {
       buffer: ArrayBuffer
     ): Promise<C | undefined>;
 
-    api: typeof import('./lok_api');
+    /** gets the last error thrown by LOK */
+    getLastError(): string;
   }
 }

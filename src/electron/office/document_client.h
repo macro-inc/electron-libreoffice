@@ -36,6 +36,8 @@ class DocumentClient : public gin::Wrappable<DocumentClient>,
                        public DestroyedObserver {
  public:
   DocumentClient();
+  ~DocumentClient() override;
+
   explicit DocumentClient(DocumentHolderWithView holder);
 
   // disable copy
@@ -72,14 +74,7 @@ class DocumentClient : public gin::Wrappable<DocumentClient>,
   v8::Local<v8::Promise> SaveToMemory(v8::Isolate* isolate,
                                       gin::Arguments* args);
   v8::Local<v8::Promise> SaveAs(v8::Isolate* isolate, gin::Arguments* args);
-  std::vector<std::string> GetTextSelection(const std::string& mime_type,
-                                            gin::Arguments* args);
   void SetTextSelection(int n_type, int n_x, int n_y);
-  v8::Local<v8::Value> GetPartName(int n_part, gin::Arguments* args);
-  v8::Local<v8::Value> GetPartHash(int n_part, gin::Arguments* args);
-  void SendDialogEvent(uint64_t n_window_id, gin::Arguments* args);
-  v8::Local<v8::Value> GetSelectionTypeAndText(const std::string& mime_type,
-                                               gin::Arguments* args);
   v8::Local<v8::Value> GetClipboard(gin::Arguments* args);
   bool SetClipboard(std::vector<v8::Local<v8::Object>> clipboard_data,
                     gin::Arguments* args);
@@ -90,15 +85,6 @@ class DocumentClient : public gin::Wrappable<DocumentClient>,
   void ResetSelection();
   v8::Local<v8::Promise> GetCommandValues(const std::string& command,
                                           gin::Arguments* args);
-  void SetOutlineState(bool column, int level, int index, bool hidden);
-  void SetViewLanguage(int id, const std::string& language);
-  void SelectPart(int part, int select);
-  void MoveSelectedParts(int position, bool duplicate);
-  void RemoveTextContext(unsigned window_id, int before, int after);
-  void CompleteFunction(const std::string& function_name);
-  void SendFormFieldEvent(const std::string& arguments);
-  bool SendContentControlEvent(const v8::Local<v8::Object>& arguments,
-                               gin::Arguments* args);
   v8::Local<v8::Value> As(const std::string& type, v8::Isolate* isolate);
   // }
 
@@ -135,8 +121,6 @@ class DocumentClient : public gin::Wrappable<DocumentClient>,
   base::WeakPtr<DocumentClient> GetWeakPtr();
 
  private:
-  ~DocumentClient() override;
-
   void HandleStateChange(const std::string& payload);
   void HandleUnoCommandResult(const std::string& payload);
   void HandleDocSizeChanged();

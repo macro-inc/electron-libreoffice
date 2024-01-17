@@ -38,8 +38,13 @@ declare function sendKeyEvent(type: KeyEventType, key: string): void;
 declare function canUndo(): boolean;
 declare function canRedo(): boolean;
 
-/** resolves when the thread runner is idle */
+/** resolves when the thread runner is idle, allowing IO events to resolve first */
 declare function idle(): Promise<void>;
 
-// returns path to be used for a temporary file
-declare function tempFilePath(): string | undefined;
+/**
+  returns a URL to be used for a temporary file
+  @param extension - the extension for the temporary file name, ex: '.docx', '.pdf'
+*/
+declare function tempFileURL(extension: string): string;
+/** returns true if a file exists, false otherwise */
+declare function fileURLExists(): boolean;
