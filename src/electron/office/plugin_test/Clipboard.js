@@ -79,33 +79,33 @@ async function testClipboard() {
     buffer: testPng.buffer
   }]);
 
-  // // clipboard should contain the png
-  // const pngContent = x.getClipboard(['image/png']);
-  // assert(pngContent.length === 1);
-  // assert(pngContent[0].mimeType === 'image/png');
-  // /** @type ArrayBuffer */
-  // const buf = pngContent[0].buffer;
-  // assert(buf.byteLength === testPng.byteLength);
-  // const bufArray = new Uint8Array(buf);
-  // assert(bufArray.every((b, idx) => b == testPng[idx]));
+  // clipboard should contain the png
+  const pngContent = x.getClipboard(['image/png']);
+  assert(pngContent.length === 1);
+  assert(pngContent[0].mimeType === 'image/png');
+  /** @type ArrayBuffer */
+  const buf = pngContent[0].buffer;
+  assert(buf.byteLength === testPng.byteLength);
+  const bufArray = new Uint8Array(buf);
+  assert(bufArray.every((b, idx) => b == testPng[idx]));
 
-  // // pasting to the document and copying should result in the same
-  // x.setClipboard([{
-  //   mimeType: 'image/png',
-  //   buffer: testPng.buffer
-  // }]);
-  // sendKeyEvent(KeyEventType.Press, 'mod+v');
-  // sendKeyEvent(KeyEventType.Press, 'mod+a');
-  // sendKeyEvent(KeyEventType.Press, 'mod+c');
-  // await idle();
-  // const pngContent2 = x.getClipboard(['image/png']);
-  // assert(pngContent2.length === 1);
-  // assert(pngContent2[0].mimeType === 'image/png');
-  // /** @type ArrayBuffer */
-  // const buf2 = pngContent2[0].buffer;
-  // assert(buf2.byteLength === testPng.byteLength);
-  // const bufArray2 = new Uint8Array(buf2);
-  // assert(bufArray2.every((b, idx) => b == testPng[idx]));
+  // pasting to the document and copying should result in the same
+  x.setClipboard([{
+    mimeType: 'image/png',
+    buffer: testPng.buffer
+  }]);
+  sendKeyEvent(KeyEventType.Press, 'mod+v');
+  sendKeyEvent(KeyEventType.Press, 'mod+a');
+  sendKeyEvent(KeyEventType.Press, 'mod+c');
+  await idle();
+  const pngContent2 = x.getClipboard(['image/png']);
+  assert(pngContent2.length === 1);
+  assert(pngContent2[0].mimeType === 'image/png');
+  /** @type ArrayBuffer */
+  const buf2 = pngContent2[0].buffer;
+  assert(buf2.byteLength === testPng.byteLength);
+  const bufArray2 = new Uint8Array(buf2);
+  assert(bufArray2.every((b, idx) => b == testPng[idx]));
 }
 
 testClipboard();
