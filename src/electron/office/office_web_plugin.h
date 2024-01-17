@@ -89,7 +89,7 @@ class OfficeWebPlugin : public blink::WebPlugin,
       const blink::WebCoalescedInputEvent& event,
       ui::Cursor* cursor) override;
 
-	// constant
+  // constant
   bool SupportsKeyboardFocus() const override;
 
   // no-op
@@ -270,7 +270,7 @@ class OfficeWebPlugin : public blink::WebPlugin,
   ui::mojom::CursorType cursor_type_ = ui::mojom::CursorType::kPointer;
   bool has_focus_;
   std::string last_cursor_rect_;
-	base::TimeTicks last_css_cursor_time_ = base::TimeTicks();
+  base::TimeTicks last_css_cursor_time_ = base::TimeTicks();
   // }
 
   // owned by
@@ -294,6 +294,7 @@ class OfficeWebPlugin : public blink::WebPlugin,
   bool visible_ = true;
   bool disable_input_ = false;
   bool doomed_ = false;
+  bool registered_observers_ = false;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
   office::CancelFlagPtr paint_cancel_flag_;

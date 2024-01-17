@@ -12,8 +12,8 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/no_destructor.h"
 #include "base/memory/weak_ptr.h"
+#include "base/no_destructor.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -834,6 +834,10 @@ std::string OfficeWebPlugin::RenderDocument(
   }
 
   bool needs_reset = document_ && document_ != client->GetDocument();
+
+  if (registered_observers_ && document_) {
+    document_.RemoveDocumentObservers(this);
+  }
   if (needs_reset && document_client_.MaybeValid()) {
     document_client_->Unmount();
   }
@@ -905,6 +909,7 @@ std::string OfficeWebPlugin::RenderDocument(
   document_.AddDocumentObserver(LOK_CALLBACK_DOCUMENT_SIZE_CHANGED, this);
   document_.AddDocumentObserver(LOK_CALLBACK_INVALIDATE_TILES, this);
   document_.AddDocumentObserver(LOK_CALLBACK_INVALIDATE_VISIBLE_CURSOR, this);
+  registered_observers_ = true;
 
   if (needs_reset) {
     task_runner_->PostTask(
