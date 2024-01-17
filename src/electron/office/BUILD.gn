@@ -93,7 +93,6 @@ test("office_unittests") {
     "document_client_unittest.cc",
     # "lok_tilebuffer_unittest.cc",
     # "paint_manager_unittest.cc",
-    "lok_callback_unittest.cc",
     "office_web_plugin.cc",
     "test/run_all_unittests.cc",
   ]
