@@ -841,9 +841,7 @@ std::string OfficeWebPlugin::RenderDocument(
   if (needs_reset && document_client_.MaybeValid()) {
     document_client_->Unmount();
   }
-  bool needs_restore = !needs_reset && document_ &&
-                       document_ == client->GetDocument() &&
-                       maybe_restore_key.has_value();
+  bool needs_restore = !document_ && maybe_restore_key.has_value();
 
   document_ = client->GetDocument();
   document_client_ = client->GetWeakPtr();
@@ -924,6 +922,9 @@ std::string OfficeWebPlugin::RenderDocument(
         FROM_HERE, base::BindOnce(&OfficeWebPlugin::OnGeometryChanged,
                                   GetWeakPtr(), viewport_zoom_, device_scale_));
     paint_manager_->ResumePaint();
+    task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&OfficeWebPlugin::UpdateScroll, GetWeakPtr(),
+                                  scroll_y_position_));
   }
 
   return restore_key_.ToString();
