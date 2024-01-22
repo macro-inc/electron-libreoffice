@@ -48,3 +48,7 @@ declare function idle(): Promise<void>;
 declare function tempFileURL(extension: string): string;
 /** returns true if a file exists, false otherwise */
 declare function fileURLExists(): boolean;
+/** resolves when the plugin paints */
+declare function painted(): Promise<void>;
+/** destroyes the current embed and replaces it with a new one */
+declare function remountEmbed(): void;

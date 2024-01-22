@@ -6,6 +6,7 @@
 
 #include <memory>
 #include "base/at_exit.h"
+#include "base/bind.h"
 #include "base/check.h"
 #include "base/files/file_util.h"
 #include "base/guid.h"
@@ -292,6 +293,7 @@ void PluginTest::TearDown() {
     render_frame_.reset();
     plugin_ = nullptr;
     container_.reset();
+    container_painted_resolver_.Reset();
   }
   JSTest::TearDown();
   for (auto& path : temp_files_to_clean_) {
@@ -414,6 +416,41 @@ v8::Local<v8::ObjectTemplate> PluginTest::GetGlobalTemplate(
                    base::FilePath path;
                    return net::FileURLToFilePath(GURL(url), &path) &&
                           base::PathExists(path);
+                 })
+      .SetMethod("painted",
+                 [](v8::Isolate* isolate) {
+                   DCHECK(self_);
+                   v8::Local<v8::Promise::Resolver> resolver =
+                       v8::Promise::Resolver::New(isolate->GetCurrentContext())
+                           .ToLocalChecked();
+
+                   self_->plugin_->Container()->invalidated = base::BindOnce(
+                       [](v8::Global<v8::Promise::Resolver> resolver,
+                          v8::Isolate* isolate) {
+                         resolver.Get(isolate)
+                             ->Resolve(isolate->GetCurrentContext(),
+                                       v8::Undefined(isolate))
+                             .Check();
+                       },
+                       v8::Global<v8::Promise::Resolver>(isolate, resolver),
+                       isolate);
+
+                   return resolver->GetPromise();
+                 })
+      .SetMethod("remountEmbed",
+                 []() {
+                   DCHECK(self_);
+
+                   self_->plugin_->Destroy();
+                   blink::WebPluginParams dummy_params;
+                   self_->plugin_ = new OfficeWebPlugin(
+                       dummy_params, self_->render_frame_.get());
+                   self_->container_ =
+                       std::make_unique<blink::WebPluginContainer>();
+                   self_->plugin_->Initialize(self_->container_.get());
+                   self_->visible_ = true;
+                   self_->plugin_->UpdateGeometry(self_->rect_, self_->rect_,
+                                                  self_->rect_, true);
                  })
       .Build();
 }

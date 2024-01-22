@@ -23,7 +23,9 @@ std::string CSSCursor(blink::WebPluginContainer* container) {
 }
 
 void Invalidate(blink::WebPluginContainer* container) {
-  container->invalidate_count_++;
+  if (container->invalidated) {
+    std::move(container->invalidated).Run();
+  }
 }
 }  // namespace container
 
