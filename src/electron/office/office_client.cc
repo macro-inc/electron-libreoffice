@@ -116,15 +116,11 @@ void OfficeClient::RemoveFromContext(v8::Local<v8::Context> /*context*/) {
 
 OfficeClient::OfficeClient()
     : task_runner_(base::SequencedTaskRunnerHandle::Get()) {
-  auto* inst = OfficeInstance::Get();
-  if (inst)
-    inst->AddLoadObserver(this);
+  OfficeInstance::Get()->AddLoadObserver(this);
 }
 
 OfficeClient::~OfficeClient() {
-  auto* inst = OfficeInstance::Get();
-  if (inst)
-    inst->RemoveLoadObserver(this);
+  OfficeInstance::Get()->RemoveLoadObserver(this);
 };
 
 gin::ObjectTemplateBuilder OfficeClient::GetObjectTemplateBuilder(
@@ -145,6 +141,7 @@ gin::ObjectTemplateBuilder OfficeClient::GetObjectTemplateBuilder(
 			// TODO: [MACRO-1899] fix setDocumentPassword in LOK, then re-enable
       // .SetMethod("setDocumentPassword", &OfficeClient::SetDocumentPasswordAsync)
       .SetMethod("loadDocument", &OfficeClient::LoadDocumentAsync)
+			.SetMethod("getLastError", &OfficeClient::GetLastError)
       .SetMethod("loadDocumentFromArrayBuffer",
                  &OfficeClient::LoadDocumentFromArrayBuffer)
       .SetMethod("__handleBeforeUnload", &OfficeClient::HandleBeforeUnload);
@@ -159,6 +156,9 @@ lok::Office* OfficeClient::GetOffice() const {
 }
 
 std::string OfficeClient::GetLastError() {
+  if (!GetOffice()) {
+    return std::string();
+  }
   char* err = GetOffice()->getError();
   if (err == nullptr) {
     return std::string();
@@ -338,7 +338,7 @@ base::WeakPtr<OfficeClient> OfficeClient::GetWeakPtr() {
 // This is the only place where the OfficeInstance should be used directly
 void OfficeClient::HandleBeforeUnload() {
   auto* inst = OfficeInstance::Get();
-  if (inst)
+  if (inst->IsValid())
     inst->HandleClientDestroyed();
 }
 

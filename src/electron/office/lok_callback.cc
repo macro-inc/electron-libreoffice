@@ -287,61 +287,6 @@ bool IsTypeMultipleCSV(int type) {
   }
 }
 
-std::pair<std::string, std::string> ParseStatusChange(std::string payload) {
-  std::string_view sv(payload);
-  std::string_view::const_iterator target = sv.begin();
-  std::string_view::const_iterator end = sv.end();
-  if (target == end || *target == '{')
-    return std::make_pair(std::string(), std::string());
-
-  while (target < end && *target != '=')
-    ++target;
-
-  return std::make_pair(std::string(sv.begin(), target),
-                        std::string(target + 1, end));
-}
-
-bool IsUnoCommandResultSuccessful(const std::string_view name,
-                                  const std::string& payload) {
-  using namespace std::literals::string_view_literals;
-
-  std::string_view s(payload);
-  std::string_view::const_iterator target = s.begin();
-  std::string_view::const_iterator end = s.end();
-  constexpr std::string_view commandPreface = "\"commandName\":"sv;
-  auto n = s.find(commandPreface);
-  // fail if not a valid result
-  if (n == s.npos)
-    return false;
-
-  target += n + commandPreface.size();
-  while (target != end && (*target == ' ' || *target == '"'))
-    ++target;
-
-  // fail if command name doesn't match
-  s = std::string_view(target, std::distance(target, end));
-  if (s.substr(0, name.size()) != name)
-    return false;
-  target += name.size();
-
-  if (*target != '"')
-    return false;
-
-  s = std::string_view(target, std::distance(target, end));
-  constexpr std::string_view successPreface = "\"success\":"sv;
-  n = s.find(successPreface);
-
-  // fail if not a valid result
-  if (n == s.npos)
-    return false;
-  target += n + successPreface.size();
-
-  SkipWhitespace(target, end);
-  s = std::string_view(target, std::distance(target, end));
-  constexpr std::string_view s_true = "true"sv;
-  return s.substr(0, s_true.size()) == s_true;
-}
-
 v8::Local<v8::Value> ParseJSON(v8::Isolate* isolate,
                                v8::Local<v8::String> json) {
   if (json->Length() == 0)

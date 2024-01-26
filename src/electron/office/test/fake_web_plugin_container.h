@@ -5,7 +5,7 @@
 #pragma once
 
 #include <string>
-#include <atomic>
+#include "base/callback.h"
 
 namespace blink {
 class WebPluginContainer {
@@ -14,6 +14,6 @@ public:
 	~WebPluginContainer();
 	float device_scale_factor_ = 1.0f;
 	std::string css_cursor_ = "default";
-	std::atomic<int> invalidate_count_ = 0;
+	base::OnceClosure invalidated;
 };
 }

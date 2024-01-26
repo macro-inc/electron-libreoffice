@@ -53,6 +53,7 @@ class OfficeClient : public gin::Wrappable<OfficeClient>,
   lok::Office* GetOffice() const;
   v8::Local<v8::Value> GetHandle(v8::Isolate* isolate);
   void Unset();
+  void HandleBeforeUnload();
 
  protected:
   // Exposed to v8 {
@@ -68,7 +69,6 @@ class OfficeClient : public gin::Wrappable<OfficeClient>,
   v8::Local<v8::Promise> LoadDocumentFromArrayBuffer(
       v8::Isolate* isolate,
       v8::Local<v8::ArrayBuffer> array_buffer);
-  void HandleBeforeUnload();
   // }
 
  private:

@@ -1,7 +1,3 @@
-async function prepareDoc() {
-  return promise;
-}
-
 async function testClipboard() {
   const x = await loadEmptyDoc();
   assert(x != null);
@@ -36,7 +32,7 @@ async function testClipboard() {
   assert(rects.length === 1);
 
   // select all
-  sendKeyEvent(KeyEventType.Press, 'ctrl+a');
+  sendKeyEvent(KeyEventType.Press, 'mod+a');
   await idle();
 
   // the current selection should be 'hello world'
@@ -49,7 +45,7 @@ async function testClipboard() {
   assert(xViewCursor.getString() === testString);
 
   // clipboard event should fire
-  sendKeyEvent(KeyEventType.Press, 'ctrl+c');
+  sendKeyEvent(KeyEventType.Press, 'mod+c');
   await idle();
   await clipChangePromise;
   assert(clipChanged);
@@ -65,7 +61,7 @@ async function testClipboard() {
   );
 
   // clear the document
-  sendKeyEvent(KeyEventType.Press, 'ctrl+a');
+  sendKeyEvent(KeyEventType.Press, 'mod+a');
   sendKeyEvent(KeyEventType.Press, 'backspace');
   await idle();
 
@@ -98,9 +94,9 @@ async function testClipboard() {
     mimeType: 'image/png',
     buffer: testPng.buffer
   }]);
-  sendKeyEvent(KeyEventType.Press, 'ctrl+v');
-  sendKeyEvent(KeyEventType.Press, 'ctrl+a');
-  sendKeyEvent(KeyEventType.Press, 'ctrl+c');
+  sendKeyEvent(KeyEventType.Press, 'mod+v');
+  sendKeyEvent(KeyEventType.Press, 'mod+a');
+  sendKeyEvent(KeyEventType.Press, 'mod+c');
   await idle();
   const pngContent2 = x.getClipboard(['image/png']);
   assert(pngContent2.length === 1);

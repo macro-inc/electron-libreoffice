@@ -14,6 +14,16 @@ async function testDocumentClientOnOffEmit() {
   docClient.off('ready', callback);
   docClient.emit('ready', []);
   assert(!fired);
+
+  // unknown event types should warn, but still function
+  docClient.on('invalid_event', callback);
+  docClient.emit('invalid_event', []);
+  assert(fired);
+
+  fired = false;
+  docClient.off('invalid_event', callback);
+  docClient.emit('invalid_event', []);
+  assert(!fired);
 }
 
 testDocumentClientOnOffEmit();

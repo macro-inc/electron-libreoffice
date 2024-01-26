@@ -13,7 +13,6 @@
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/process/memory.h"
-#include "base/task/thread_pool.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "gin/converter.h"
 #include "gin/dictionary.h"
@@ -128,28 +127,13 @@ gin::ObjectTemplateBuilder DocumentClient::GetObjectTemplateBuilder(
       .SetMethod("gotoOutline", &DocumentClient::GotoOutline)
       .SetMethod("saveToMemory", &DocumentClient::SaveToMemory)
       .SetMethod("saveAs", &DocumentClient::SaveAs)
-      .SetMethod("getTextSelection", &DocumentClient::GetTextSelection)
       .SetMethod("setTextSelection", &DocumentClient::SetTextSelection)
-      .SetMethod("sendDialogEvent", &DocumentClient::SendDialogEvent)
-      .SetMethod("getPartName", &DocumentClient::GetPartName)
-      .SetMethod("getPartHash", &DocumentClient::GetPartHash)
-      .SetMethod("getSelectionTypeAndText",
-                 &DocumentClient::GetSelectionTypeAndText)
       .SetMethod("getClipboard", &DocumentClient::GetClipboard)
       .SetMethod("setClipboard", &DocumentClient::SetClipboard)
       .SetMethod("paste", &DocumentClient::Paste)
       .SetMethod("setGraphicSelection", &DocumentClient::SetGraphicSelection)
       .SetMethod("resetSelection", &DocumentClient::ResetSelection)
       .SetMethod("getCommandValues", &DocumentClient::GetCommandValues)
-      .SetMethod("setOutlineState", &DocumentClient::SetOutlineState)
-      .SetMethod("setViewLanguage", &DocumentClient::SetViewLanguage)
-      .SetMethod("selectPart", &DocumentClient::SelectPart)
-      .SetMethod("moveSelectedParts", &DocumentClient::MoveSelectedParts)
-      .SetMethod("removeTextContext", &DocumentClient::RemoveTextContext)
-      .SetMethod("completeFunction", &DocumentClient::CompleteFunction)
-      .SetMethod("sendFormFieldEvent", &DocumentClient::SendFormFieldEvent)
-      .SetMethod("sendContentControlEvent",
-                 &DocumentClient::SendContentControlEvent)
       .SetMethod("as", &DocumentClient::As)
       .SetMethod("newView", &DocumentClient::NewView)
       .SetProperty("isReady", &DocumentClient::IsReady)
@@ -213,28 +197,12 @@ int DocumentClient::GetNumberOfPages() const {
 //}
 
 // Editing State {
-bool DocumentClient::CanCopy() {
-  auto res = uno_state_.find(".uno:Copy");
-  return res != uno_state_.end() && res->second == "enabled";
-}
-
 bool DocumentClient::CanUndo() {
-  auto res = uno_state_.find(".uno:Undo");
-  return res != uno_state_.end() && res->second == "enabled";
+	return can_undo_;
 }
 
 bool DocumentClient::CanRedo() {
-  auto res = uno_state_.find(".uno:Redo");
-  return res != uno_state_.end() && res->second == "enabled";
-}
-
-// TODO: read only mode?
-bool DocumentClient::CanEditText() {
-  return true;
-}
-
-bool DocumentClient::HasEditableText() {
-  return true;
+	return can_redo_;
 }
 // }
 
@@ -266,16 +234,21 @@ base::WeakPtr<DocumentClient> DocumentClient::GetWeakPtr() {
 }
 
 void DocumentClient::HandleStateChange(const std::string& payload) {
-  std::pair<std::string, std::string> pair =
-      lok_callback::ParseStatusChange(payload);
-  if (!pair.first.empty()) {
-    uno_state_.insert(pair);
+	static constexpr std::string_view uno_undo = ".uno:Undo=";
+	static constexpr std::string_view uno_redo = ".uno:Redo=";
+	std::string_view sv = payload;
+  if (sv.substr(0, uno_undo.length()) == uno_undo) {
+		can_undo_ = sv.substr(uno_undo.length()) == "enabled";
+  }
+  if (sv.substr(0, uno_redo.length()) == uno_redo) {
+		can_redo_ = sv.substr(uno_redo.length()) == "enabled";
   }
 
   if (!is_ready_) {
     state_change_buffer_.emplace_back(payload);
   }
 }
+
 void DocumentClient::HandleDocSizeChanged() {
   RefreshSize();
 }
@@ -453,27 +426,15 @@ void DocumentClient::PostUnoCommand(const std::string& command,
   std::unique_ptr<char[]> json_buffer;
 
   bool notifyWhenFinished = false;
-  bool nonblocking = false;
   if (args->GetNext(&arguments) && !arguments->IsUndefined()) {
     json_buffer = jsonStringify(args->GetHolderCreationContext(), arguments);
     if (!json_buffer)
       return;
-    if (arguments->IsObject()) {
-      gin::Dictionary options(args->isolate(), arguments.As<v8::Object>());
-      options.Get("nonblocking", &nonblocking);
-    }
   }
 
   args->GetNext(&notifyWhenFinished);
 
-  if (nonblocking) {
-    base::ThreadPool::PostTask(
-        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
-        base::BindOnce(&DocumentClient::PostUnoCommandInternal, GetWeakPtr(),
-                       command, std::move(json_buffer), true));
-  } else {
-    PostUnoCommandInternal(command, std::move(json_buffer), notifyWhenFinished);
-  }
+  PostUnoCommandInternal(command, std::move(json_buffer), notifyWhenFinished);
 }
 
 void DocumentClient::PostUnoCommandInternal(const std::string& command,
@@ -483,78 +444,8 @@ void DocumentClient::PostUnoCommandInternal(const std::string& command,
                                    notifyWhenFinished);
 }
 
-std::vector<std::string> DocumentClient::GetTextSelection(
-    const std::string& mime_type,
-    gin::Arguments* args) {
-  char* used_mime_type;
-
-  LokStrPtr text_selection(
-      document_holder_->getTextSelection(mime_type.c_str(), &used_mime_type));
-
-  LokStrPtr u_used_mime_type(used_mime_type);
-
-  return {text_selection.get(), u_used_mime_type.get()};
-}
-
 void DocumentClient::SetTextSelection(int n_type, int n_x, int n_y) {
   document_holder_->setTextSelection(n_type, n_x, n_y);
-}
-
-v8::Local<v8::Value> DocumentClient::GetPartName(int n_part,
-                                                 gin::Arguments* args) {
-  LokStrPtr part_name(document_holder_->getPartName(n_part));
-  if (!part_name)
-    return v8::Undefined(args->isolate());
-
-  return gin::StringToV8(args->isolate(), part_name.get());
-}
-
-v8::Local<v8::Value> DocumentClient::GetPartHash(int n_part,
-                                                 gin::Arguments* args) {
-  LokStrPtr part_hash(document_holder_->getPartHash(n_part));
-  if (!part_hash)
-    return v8::Undefined(args->isolate());
-
-  return gin::StringToV8(args->isolate(), part_hash.get());
-}
-
-void DocumentClient::SendDialogEvent(uint64_t n_window_id,
-                                     gin::Arguments* args) {
-  v8::Local<v8::Value> arguments;
-
-  if (!args->GetNext(&arguments))
-    return;
-  auto json = jsonStringify(args->GetHolderCreationContext(), arguments);
-  if (!json)
-    return;
-
-  document_holder_->sendDialogEvent(n_window_id, json.get());
-}
-
-v8::Local<v8::Value> DocumentClient::GetSelectionTypeAndText(
-    const std::string& mime_type,
-    gin::Arguments* args) {
-  char* used_mime_type;
-  char* p_text_char;
-
-  int selection_type = document_holder_->getSelectionTypeAndText(
-      mime_type.c_str(), &p_text_char, &used_mime_type);
-
-  // to safely de-allocate the strings
-  LokStrPtr a(used_mime_type), b(p_text_char);
-
-  v8::Isolate* isolate = args->isolate();
-  if (!p_text_char || !used_mime_type)
-    return v8::Undefined(isolate);
-
-  v8::Local<v8::Name> names[3] = {gin::StringToV8(isolate, "selectionType"),
-                                  gin::StringToV8(isolate, "text"),
-                                  gin::StringToV8(isolate, "usedMimeType")};
-  v8::Local<v8::Value> values[3] = {gin::StringToV8(isolate, p_text_char),
-                                    gin::ConvertToV8(isolate, selection_type),
-                                    gin::StringToV8(isolate, used_mime_type)};
-
-  return v8::Object::New(isolate, v8::Null(isolate), names, values, 2);
 }
 
 namespace {
@@ -770,51 +661,6 @@ v8::Local<v8::Promise> DocumentClient::GetCommandValues(
   return handle;
 }
 
-void DocumentClient::SetOutlineState(bool column,
-                                     int level,
-                                     int index,
-                                     bool hidden) {
-  document_holder_->setOutlineState(column, level, index, hidden);
-}
-
-void DocumentClient::SetViewLanguage(int id, const std::string& language) {
-  document_holder_->setViewLanguage(id, language.c_str());
-}
-
-void DocumentClient::SelectPart(int part, int select) {
-  document_holder_->selectPart(part, select);
-}
-
-void DocumentClient::MoveSelectedParts(int position, bool duplicate) {
-  document_holder_->moveSelectedParts(position, duplicate);
-}
-
-void DocumentClient::RemoveTextContext(unsigned window_id,
-                                       int before,
-                                       int after) {
-  document_holder_->removeTextContext(window_id, before, after);
-}
-
-void DocumentClient::CompleteFunction(const std::string& function_name) {
-  document_holder_->completeFunction(function_name.c_str());
-}
-
-void DocumentClient::SendFormFieldEvent(const std::string& arguments) {
-  document_holder_->sendFormFieldEvent(arguments.c_str());
-}
-
-bool DocumentClient::SendContentControlEvent(
-    const v8::Local<v8::Object>& arguments,
-    gin::Arguments* args) {
-  std::unique_ptr<char[]> json_buffer =
-      jsonStringify(args->GetHolderCreationContext(), arguments);
-  if (!json_buffer)
-    return false;
-  document_holder_->sendContentControlEvent(json_buffer.get());
-
-  return true;
-}
-
 v8::Local<v8::Value> DocumentClient::As(const std::string& type,
                                         v8::Isolate* isolate) {
   void* component = document_holder_->getXComponent();
@@ -956,7 +802,6 @@ void DocumentClient::DocumentCallback(int type, std::string payload) {
 }
 
 void DocumentClient::OnDestroyed() {
-
   delete this;
 }
 
