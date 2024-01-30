@@ -194,7 +194,6 @@ void ElectronRenderFrameObserver::WillReleaseScriptContext(
 }
 
 void ElectronRenderFrameObserver::OnDestruct() {
-  office::OfficeInstance::Unset();
   delete this;
 }
 
