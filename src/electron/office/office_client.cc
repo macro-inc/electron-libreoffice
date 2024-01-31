@@ -8,6 +8,7 @@
 #include <string>
 
 #include "LibreOfficeKit/LibreOfficeKit.hxx"
+#include "base/atomic_ref_count.h"
 #include "base/bind.h"
 #include "base/callback_forward.h"
 #include "base/location.h"
@@ -55,6 +56,9 @@ v8::Local<v8::Value> OfficeClient::GetHandle(v8::Isolate* isolate) {
   return self_.Get(isolate);
 }
 
+// static
+base::AtomicRefCount g_client_counter{0};
+
 // instance
 namespace {
 static void GetOfficeHandle(v8::Local<v8::Name> name,
@@ -74,8 +78,9 @@ static void GetOfficeHandle(v8::Local<v8::Name> name,
   v8::MicrotasksScope microtasks_scope(
       isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
 
-  DCHECK(lazy_tls->Get());
-  info.GetReturnValue().Set(lazy_tls->Get()->GetHandle(isolate));
+	if (lazy_tls->Get()) {
+		info.GetReturnValue().Set(lazy_tls->Get()->GetHandle(isolate));
+	}
 }
 }  // namespace
 
@@ -93,6 +98,7 @@ void OfficeClient::InstallToContext(v8::Local<v8::Context> context) {
   }
   client->self_.Reset(isolate, wrapper);
   lazy_tls->Set(std::move(client));
+	g_client_counter.Increment();
 
   context->Global()
       ->SetAccessor(
@@ -112,6 +118,10 @@ void OfficeClient::RemoveFromContext(v8::Local<v8::Context> /*context*/) {
   if (lazy_tls->Get())
     lazy_tls->Get()->Unset();
   lazy_tls->Set(nullptr);
+
+	if (!g_client_counter.Decrement()) {
+		OfficeInstance::Unset();
+	}
 }
 
 OfficeClient::OfficeClient()
