@@ -1,4 +1,4 @@
-name: Manual Trigger for Publish
+name: Manual Release
 
 on:
   workflow_dispatch:
@@ -7,10 +7,28 @@ on:
         description: 'Version'
         required: true
         default: 'v20.3.0-rc'
+      build_macos:
+        description: 'Build macOS'
+        required: false
+        type: boolean
 
 jobs:
+  build_release_mac:
+    name: Build for Mac ${{ matrix.name }}
+    if: ${{ github.event.inputs.build_macos }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: arm64
+            runner: macro-arm1
+    uses: ./.github/workflows/build_mac.yml
+    with:
+      version: ${{ github.event.inputs.version }}
+      runner_label: ${{ matrix.runner }}
   generate_sha:
     name: Generate SHA
+    needs: [build_release_mac]
     uses: ./.github/workflows/generate-sha.yml
     with:
       version: ${{ github.event.inputs.version }}
