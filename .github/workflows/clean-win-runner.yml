@@ -1,0 +1,47 @@
+name: Clean Windows Runner
+on:
+  workflow_dispatch:
+
+jobs:
+  start_runner:
+    name: Start EC2 Runner
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup AWS
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.EC2_RUNNER_AWS_ID }}
+          aws-secret-access-key: ${{ secrets.EC2_RUNNER_AWS_SECRET }}
+          aws-region: us-east-1
+      - name: Start
+        run: aws ec2 start-instances --instance-ids ${{ secrets.WINDOWS_RUNNER_INSTANCE_ID }}
+      - name: Wait
+        run: aws ec2 wait instance-status-ok --instance-ids ${{ secrets.WINDOWS_RUNNER_INSTANCE_ID }}
+  clean:
+    runs-on:
+      - self-hosted
+      - macro-windows
+    steps:
+      - name: Clean
+        run: |
+          cd ..
+          rm -rf electron-libreoffice
+  stop_runner:
+    name: Stop EC2 Runner
+    needs: [clean]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup AWS-CLI
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.EC2_RUNNER_AWS_ID }}
+          aws-secret-access-key: ${{ secrets.EC2_RUNNER_AWS_SECRET }}
+          aws-region: us-east-1
+      - name: Stop Runner
+        run: aws ec2 stop-instances --instance-ids ${{ secrets.WINDOWS_RUNNER_INSTANCE_ID }}
+      - name: Wait for Runner to be stopped
+        run: aws ec2 wait instance-stopped --instance-ids ${{ secrets.WINDOWS_RUNNER_INSTANCE_ID }}
+      - name: Fail the workflow if test failed
+        if: ${{ needs.clean.outputs.succeeded != 'true' }}
+        run: |
+          false
