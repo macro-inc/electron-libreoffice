@@ -114,29 +114,32 @@ jobs:
           echo "deps_hash=$(cat .depshash-platformless)" >> $GITHUB_OUTPUT
       - name: Retrieve cache (base)
         id: cache-src-base
-        uses: actions/cache@v3
+        uses: actions/cache/restore@v3
         with:
           path: |
             base.tzstd
             dawn-angle.tzstd
             thirdparty.tzstd
           key: src-${{ steps.deps_hash.outputs.deps_hash }}-base
+          enableCrossOsArchive: true
       - name: Retrieve cache (linux)
         if: ${{ runner.os == 'Linux' }}
         id: cache-src-linux
-        uses: actions/cache@v3
+        uses: actions/cache/restore@v3
         with:
           path: |
             linux.tzstd
           key: src-${{ steps.deps_hash.outputs.deps_hash }}-linux
+          enableCrossOsArchive: true
       - name: Retrieve cache (windows)
         if: ${{ runner.os == 'Windows' }}
         id: cache-src-windows
-        uses: actions/cache@v3
+        uses: actions/cache/restore@v3
         with:
           path: |
             windows.tzstd
           key: src-${{ steps.deps_hash.outputs.deps_hash }}-windows
+          enableCrossOsArchive: true
       - name: Extract cache
         run: |
           cd "${{ inputs.working_dir }}"
