@@ -56,9 +56,6 @@ v8::Local<v8::Value> OfficeClient::GetHandle(v8::Isolate* isolate) {
   return self_.Get(isolate);
 }
 
-// static
-base::AtomicRefCount g_client_counter{0};
-
 // instance
 namespace {
 static void GetOfficeHandle(v8::Local<v8::Name> name,
@@ -98,7 +95,6 @@ void OfficeClient::InstallToContext(v8::Local<v8::Context> context) {
   }
   client->self_.Reset(isolate, wrapper);
   lazy_tls->Set(std::move(client));
-	g_client_counter.Increment();
 
   context->Global()
       ->SetAccessor(
@@ -118,10 +114,6 @@ void OfficeClient::RemoveFromContext(v8::Local<v8::Context> /*context*/) {
   if (lazy_tls->Get())
     lazy_tls->Get()->Unset();
   lazy_tls->Set(nullptr);
-
-	if (!g_client_counter.Decrement()) {
-		OfficeInstance::Unset();
-	}
 }
 
 OfficeClient::OfficeClient()
