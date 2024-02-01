@@ -23,6 +23,7 @@ jobs:
       - macro-windows
     steps:
       - name: Clean
+        shell: bash
         run: |
           cd ..
           rm -rf electron-libreoffice
