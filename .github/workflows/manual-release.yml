@@ -37,19 +37,19 @@ jobs:
       EC2_RUNNER_AWS_ID: ${{ secrets.EC2_RUNNER_AWS_ID }}
       EC2_RUNNER_AWS_SECRET: ${{ secrets.EC2_RUNNER_AWS_SECRET }}
       instance_id: ${{ secrets[matrix.runner] }}
-  build_release_mac:
-    name: Build for Mac ${{ matrix.name }}
-    if: ${{ github.event.inputs.build_macos }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: arm64
-            runner: macro-arm1
-    uses: ./.github/workflows/build_mac.yml
-    with:
-      version: ${{ github.event.inputs.version }}
-      runner_label: ${{ matrix.runner }}
+  # build_release_mac:
+  #   name: Build for Mac ${{ matrix.name }}
+  #   if: ${{ github.event.inputs.build_macos }}
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       include:
+  #         - name: arm64
+  #           runner: macro-arm1
+  #   uses: ./.github/workflows/build_mac.yml
+  #   with:
+  #     version: ${{ github.event.inputs.version }}
+  #     runner_label: ${{ matrix.runner }}
   generate_sha:
     name: Generate SHA
     needs: [build_release]
