@@ -22,11 +22,18 @@ jobs:
       - self-hosted
       - macro-windows
     steps:
+      - name: Check Disk Space
+        shell: pwsh
+        run: |
+          Get-PSDrive C | ForEach-Object { Write-Output "Remaining space: $($_.Free / 1GB) GB" }
       - name: Clean
         shell: bash
         run: |
-          cd ..
-          rm -rf electron-libreoffice
+          rm -rf ./*
+      - name: Check Disk Space
+        shell: pwsh
+        run: |
+          Get-PSDrive C | ForEach-Object { Write-Output "Remaining space: $($_.Free / 1GB) GB" }
   stop_runner:
     name: Stop EC2 Runner
     needs: [clean]
