@@ -6,29 +6,53 @@ on:
       version:
         description: 'Version'
         required: true
-        default: 'v20.3.0-rc'
+        default: '20.3.0-rc'
       build_macos:
         description: 'Build macOS'
         required: false
         type: boolean
+      build_windows:
+        description: 'Build Windows'
+        required: false
+        type: boolean
 
 jobs:
-  build_release_mac:
-    name: Build for Mac ${{ matrix.name }}
-    if: ${{ github.event.inputs.build_macos }}
+  build_release:
+    if: ${{ github.event.inputs.build_windows }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: arm64
-            runner: macro-arm1
-    uses: ./.github/workflows/build_mac.yml
+          - name: Windows x64
+            os: macro-windows
+            runner: WINDOWS_RUNNER_INSTANCE_ID
+            working_dir: /r/el
+    name: Build for ${{ matrix.name }}
+    uses: ./.github/workflows/build.yml
     with:
+      runner_label: ${{ matrix.os }}
+      working_dir: ${{ matrix.working_dir }}
       version: ${{ github.event.inputs.version }}
-      runner_label: ${{ matrix.runner }}
+    secrets:
+      EC2_RUNNER_AWS_ID: ${{ secrets.EC2_RUNNER_AWS_ID }}
+      EC2_RUNNER_AWS_SECRET: ${{ secrets.EC2_RUNNER_AWS_SECRET }}
+      instance_id: ${{ secrets[matrix.runner] }}
+  # build_release_mac:
+  #   name: Build for Mac ${{ matrix.name }}
+  #   if: ${{ github.event.inputs.build_macos }}
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       include:
+  #         - name: arm64
+  #           runner: macro-arm1
+  #   uses: ./.github/workflows/build_mac.yml
+  #   with:
+  #     version: ${{ github.event.inputs.version }}
+  #     runner_label: ${{ matrix.runner }}
   generate_sha:
     name: Generate SHA
-    needs: [build_release_mac]
+    needs: [build_release]
     uses: ./.github/workflows/generate-sha.yml
     with:
       version: ${{ github.event.inputs.version }}

@@ -77,27 +77,33 @@ jobs:
           echo "deps_hash=$(cat .depshash-platformless)" >> $GITHUB_OUTPUT
       - name: Retrieve cache (base)
         id: cache-src-base
-        uses: actions/cache@v3
+        uses: actions/cache/restore@v3
         with:
           path: |
             base.tzstd
             dawn-angle.tzstd
             thirdparty.tzstd
           key: src-${{ steps.deps_hash.outputs.deps_hash }}-base
+          lookup-only: true
+          enableCrossOsArchive: true
       - name: Retrieve cache (linux)
         id: cache-src-linux
-        uses: actions/cache@v3
+        uses: actions/cache/restore@v3
         with:
           path: |
             linux.tzstd
           key: src-${{ steps.deps_hash.outputs.deps_hash }}-linux
+          lookup-only: true
+          enableCrossOsArchive: true
       - name: Retrieve cache (windows)
         id: cache-src-windows
-        uses: actions/cache@v3
+        uses: actions/cache/restore@v3
         with:
           path: |
             windows.tzstd
           key: src-${{ steps.deps_hash.outputs.deps_hash }}-windows
+          lookup-only: true
+          enableCrossOsArchive: true
       - name: Check cache
         id: check_cache
         run: |
@@ -120,6 +126,32 @@ jobs:
         run: |
           sudo umount /r || true
           sudo rm -rf /r || true
+      - name: Save cache (base)
+        uses: actions/cache/save@v3
+        if: ${{ steps.cache-src-base.outputs.cache-hit != 'true' }}
+        with:
+          path: |
+            base.tzstd
+            dawn-angle.tzstd
+            thirdparty.tzstd
+          key: src-${{ steps.deps_hash.outputs.deps_hash }}-base
+          enableCrossOsArchive: true
+      - name: Retrieve cache (linux)
+        uses: actions/cache/save@v3
+        if: ${{ steps.cache-src-linux.outputs.cache-hit != 'true' }}
+        with:
+          path: |
+            linux.tzstd
+          key: src-${{ steps.deps_hash.outputs.deps_hash }}-linux
+          enableCrossOsArchive: true
+      - name: Retrieve cache (windows)
+        uses: actions/cache/save@v3
+        if: ${{ steps.cache-src-windows.outputs.cache-hit != 'true' }}
+        with:
+          path: |
+            windows.tzstd
+          key: src-${{ steps.deps_hash.outputs.deps_hash }}-windows
+          enableCrossOsArchive: true
       - name: The job has succeeded
         if: ${{ success() }}
         id: check
