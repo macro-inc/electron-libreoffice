@@ -44,13 +44,11 @@ jobs:
           echo C:\Program Files\Git\usr\bin>>"%GITHUB_PATH%"
       - name: Turn off line ending conversion in git
         run: |
-          cd ${{ inputs.working_dir }}
           git config --global core.autocrlf false
           git config --global core.eol lf
       - name: Fix git on Windows
         if: ${{ runner.os == 'Windows' }}
         run: |
-          cd ${{ inputs.working_dir }}
           git config --global core.symlinks false
           git config --global core.longpaths true
       - name: Checkout
