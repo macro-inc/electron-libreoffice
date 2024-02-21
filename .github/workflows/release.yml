@@ -19,10 +19,6 @@ jobs:
     uses: ./.github/workflows/fetch.yml
     with:
       runner_label: macro-linux
-    secrets:
-      EC2_RUNNER_AWS_ID: ${{ secrets.EC2_RUNNER_AWS_ID }}
-      EC2_RUNNER_AWS_SECRET: ${{ secrets.EC2_RUNNER_AWS_SECRET }}
-      instance_id: ${{ secrets.LINUX_RUNNER_INSTANCE_ID }}
   build_release:
     needs: [check_version, fetch]
     if: ${{ needs.check_version.outputs.should_run != 'false' }}
@@ -44,10 +40,6 @@ jobs:
       runner_label: ${{ matrix.os }}
       working_dir: ${{ matrix.working_dir }}
       version: ${{ needs.check_version.outputs.version }}
-    secrets:
-      EC2_RUNNER_AWS_ID: ${{ secrets.EC2_RUNNER_AWS_ID }}
-      EC2_RUNNER_AWS_SECRET: ${{ secrets.EC2_RUNNER_AWS_SECRET }}
-      instance_id: ${{ secrets[matrix.runner] }}
   build_release_mac:
     name: Build for Mac ${{ matrix.name }}
     if: ${{ needs.check_version.outputs.should_run != 'false' }}
