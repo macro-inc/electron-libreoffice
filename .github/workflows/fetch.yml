@@ -25,7 +25,6 @@ jobs:
     steps:
       - name: Turn off line ending conversion in git
         run: |
-          cd el
           git config --global core.autocrlf false
           git config --global core.eol lf
       - name: Checkout
