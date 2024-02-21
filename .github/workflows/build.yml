@@ -12,13 +12,6 @@ on:
         required: false
         default: '/r/el'
         type: string
-    secrets:
-      EC2_RUNNER_AWS_ID:
-        required: true
-      EC2_RUNNER_AWS_SECRET:
-        required: true
-      instance_id:
-        required: true
 jobs:
   build:
     needs: [start_runner]
