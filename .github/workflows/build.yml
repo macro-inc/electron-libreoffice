@@ -14,7 +14,6 @@ on:
         type: string
 jobs:
   build:
-    needs: [start_runner]
     continue-on-error: true # Required to stop the EC2 runner
     name: Build
     runs-on:
