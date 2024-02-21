@@ -10,18 +10,10 @@ on:
         type: string
       working_dir:
         required: false
-        default: '/r/el'
+        default: 'el'
         type: string
-    secrets:
-      EC2_RUNNER_AWS_ID:
-        required: true
-      EC2_RUNNER_AWS_SECRET:
-        required: true
-      instance_id:
-        required: true
 jobs:
   build:
-    needs: [start_runner]
     continue-on-error: true # Required to stop the EC2 runner
     name: Build
     runs-on:
@@ -50,40 +42,13 @@ jobs:
         run: |
           echo "Adding GNU tar to PATH"
           echo C:\Program Files\Git\usr\bin>>"%GITHUB_PATH%"
-      - name: Windows - Create RAM disk
-        if: ${{ runner.os == 'Windows' }}
-        shell: cmd
-        run: |
-          imdisk.exe -a -o awe -s 128G -m R: -p "/fs:ntfs /q /y"
-          cd /d R:
-      - name: Linux - Create RAM disk
-        if: ${{ runner.os == 'Linux' }}
-        run: |
-          sudo umount /r || true
-          sudo rm -rf /r || true
-          sudo mkdir /r
-          sudo mount -t tmpfs -o size=128g tmpfs /r
-      - name: Linux - Setup working dir
-        if: ${{ runner.os == 'Linux' }}
-        working-directory: /
-        run: |
-          UID_GID="$(id -u):$(id -g)"
-          sudo mkdir ${{ inputs.working_dir }}
-          sudo chown $UID_GID ${{ inputs.working_dir }}
-      - name: Windows - Setup working dir
-        working-directory: C:\
-        if: ${{ runner.os == 'Windows' }}
-        run: |
-          mkdir ${{ inputs.working_dir }}
       - name: Turn off line ending conversion in git
         run: |
-          cd ${{ inputs.working_dir }}
           git config --global core.autocrlf false
           git config --global core.eol lf
       - name: Fix git on Windows
         if: ${{ runner.os == 'Windows' }}
         run: |
-          cd ${{ inputs.working_dir }}
           git config --global core.symlinks false
           git config --global core.longpaths true
       - name: Checkout

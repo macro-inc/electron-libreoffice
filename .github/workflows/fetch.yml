@@ -5,31 +5,9 @@ on:
       runner_label:
         required: true
         type: string
-    secrets:
-      EC2_RUNNER_AWS_ID:
-        required: true
-      EC2_RUNNER_AWS_SECRET:
-        required: true
-      instance_id:
-        required: true
 
 jobs:
-  start_runner:
-    name: Start EC2 Runner
-    runs-on: ubuntu-latest
-    steps:
-      - name: Setup AWS
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.EC2_RUNNER_AWS_ID }}
-          aws-secret-access-key: ${{ secrets.EC2_RUNNER_AWS_SECRET }}
-          aws-region: us-east-1
-      - name: Start
-        run: aws ec2 start-instances --instance-ids ${{ secrets.instance_id }}
-      - name: Wait
-        run: aws ec2 wait instance-status-ok --instance-ids ${{ secrets.instance_id }}
   fetch:
-    needs: [start_runner]
     continue-on-error: true # Required to stop the EC2 runner
     name: All Platforms
     runs-on:
@@ -45,34 +23,19 @@ jobs:
       GOMA_START_COMPILER_PROXY: true
       GOMA_FALLBACK_ON_AUTH_FAILURE: true
     steps:
-      - name: Linux - Create RAM disk
-        if: ${{ runner.os == 'Linux' }}
-        run: |
-          sudo umount /r || true
-          sudo rm -rf /r || true
-          sudo mkdir /r
-          sudo mount -t tmpfs -o size=200g tmpfs /r
-      - name: Linux - Setup working dir
-        if: ${{ runner.os == 'Linux' }}
-        working-directory: /
-        run: |
-          UID_GID="$(id -u):$(id -g)"
-          sudo mkdir /r/el
-          sudo chown $UID_GID /r/el
       - name: Turn off line ending conversion in git
         run: |
-          cd /r/el
           git config --global core.autocrlf false
           git config --global core.eol lf
       - name: Checkout
         run: |
-          git -c protocol.version=2 clone --depth=1 https://${{ github.token }}@github.com/${{ github.repository }} /r/el
-          cd /r/el
+          git -c protocol.version=2 clone --depth=1 https://${{ github.token }}@github.com/${{ github.repository }} el
+          cd el
           git config --local gc.auto 0
       - name: Generate deps hash
         id: deps_hash
         run: |
-          cd /r/el/src/electron
+          cd el/src/electron
           node script/generate-deps-hash.js
           echo "deps_hash=$(cat .depshash-platformless)" >> $GITHUB_OUTPUT
       - name: Retrieve cache (base)
@@ -118,7 +81,7 @@ jobs:
         run: |
           sudo apt update
           sudo apt-get install --only-upgrade curl libcurl3-gnutls libcurl4
-          cd /r/el
+          cd el
           scripts/prepare-cross-sync-tar.sh
           cp -rf *.tzstd "$GITHUB_WORKSPACE"
       - name: Linux - Remove RAM disk
@@ -156,22 +119,3 @@ jobs:
         if: ${{ success() }}
         id: check
         run: echo "check=true" >> $GITHUB_OUTPUT
-  stop_runner:
-    name: Stop EC2 Runner
-    needs: [fetch]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Setup AWS-CLI
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.EC2_RUNNER_AWS_ID }}
-          aws-secret-access-key: ${{ secrets.EC2_RUNNER_AWS_SECRET }}
-          aws-region: us-east-1
-      - name: Stop Runner
-        run: aws ec2 stop-instances --instance-ids ${{ secrets.instance_id }}
-      - name: Wait for Runner to be stopped
-        run: aws ec2 wait instance-stopped --instance-ids ${{ secrets.instance_id }}
-      - name: Fail the workflow if test failed
-        if: ${{ needs.fetch.outputs.succeeded != 'true' }}
-        run: |
-          false
