@@ -10,7 +10,7 @@ on:
         type: string
       working_dir:
         required: false
-        default: '/r/el'
+        default: 'el'
         type: string
 jobs:
   build:
@@ -42,31 +42,6 @@ jobs:
         run: |
           echo "Adding GNU tar to PATH"
           echo C:\Program Files\Git\usr\bin>>"%GITHUB_PATH%"
-      - name: Windows - Create RAM disk
-        if: ${{ runner.os == 'Windows' }}
-        shell: cmd
-        run: |
-          imdisk.exe -a -o awe -s 128G -m R: -p "/fs:ntfs /q /y"
-          cd /d R:
-      - name: Linux - Create RAM disk
-        if: ${{ runner.os == 'Linux' }}
-        run: |
-          sudo umount /r || true
-          sudo rm -rf /r || true
-          sudo mkdir /r
-          sudo mount -t tmpfs -o size=128g tmpfs /r
-      - name: Linux - Setup working dir
-        if: ${{ runner.os == 'Linux' }}
-        working-directory: /
-        run: |
-          UID_GID="$(id -u):$(id -g)"
-          sudo mkdir ${{ inputs.working_dir }}
-          sudo chown $UID_GID ${{ inputs.working_dir }}
-      - name: Windows - Setup working dir
-        working-directory: C:\
-        if: ${{ runner.os == 'Windows' }}
-        run: |
-          mkdir ${{ inputs.working_dir }}
       - name: Turn off line ending conversion in git
         run: |
           cd ${{ inputs.working_dir }}
