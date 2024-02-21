@@ -19,22 +19,7 @@ on:
         required: true
       instance_id:
         required: true
-
 jobs:
-  start_runner:
-    name: Start EC2 Runner
-    runs-on: ubuntu-latest
-    steps:
-      - name: Setup AWS
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.EC2_RUNNER_AWS_ID }}
-          aws-secret-access-key: ${{ secrets.EC2_RUNNER_AWS_SECRET }}
-          aws-region: us-east-1
-      - name: Start
-        run: aws ec2 start-instances --instance-ids ${{ secrets.instance_id }}
-      - name: Wait
-        run: aws ec2 wait instance-status-ok --instance-ids ${{ secrets.instance_id }}
   build:
     needs: [start_runner]
     continue-on-error: true # Required to stop the EC2 runner
@@ -268,26 +253,3 @@ jobs:
           body: |
             This is an automated release built from the `main` branch.
             For changes, please review the commit log.
-      - name: The job has succeeded
-        if: ${{ success() }}
-        id: check
-        run: echo "check=true" >> $GITHUB_OUTPUT
-  stop_runner:
-    name: Stop EC2 Runner
-    needs: [build]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Setup AWS-CLI
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.EC2_RUNNER_AWS_ID }}
-          aws-secret-access-key: ${{ secrets.EC2_RUNNER_AWS_SECRET }}
-          aws-region: us-east-1
-      - name: Stop Runner
-        run: aws ec2 stop-instances --instance-ids ${{ secrets.instance_id }}
-      - name: Wait for Runner to be stopped
-        run: aws ec2 wait instance-stopped --instance-ids ${{ secrets.instance_id }}
-      - name: Fail the workflow if test failed
-        if: ${{ needs.build.outputs.succeeded != 'true' }}
-        run: |
-          false
