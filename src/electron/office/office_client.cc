@@ -81,6 +81,8 @@ static void GetOfficeHandle(v8::Local<v8::Name> name,
 }
 }  // namespace
 
+base::AtomicRefCount g_client_counter{0};
+
 // static
 void OfficeClient::InstallToContext(v8::Local<v8::Context> context) {
   v8::Context::Scope context_scope(context);
@@ -102,6 +104,7 @@ void OfficeClient::InstallToContext(v8::Local<v8::Context> context) {
           GetOfficeHandle, nullptr, v8::MaybeLocal<v8::Value>(),
           v8::AccessControl::ALL_CAN_READ, v8::PropertyAttribute::ReadOnly)
       .Check();
+	g_client_counter.Increment();
 }
 
 void OfficeClient::Unset() {
@@ -111,9 +114,11 @@ void OfficeClient::Unset() {
 
 // static
 void OfficeClient::RemoveFromContext(v8::Local<v8::Context> /*context*/) {
-  if (lazy_tls->Get())
-    lazy_tls->Get()->Unset();
-  lazy_tls->Set(nullptr);
+	if (!g_client_counter.Decrement()) {
+		if (lazy_tls->Get())
+			lazy_tls->Get()->Unset();
+		lazy_tls->Set(nullptr);
+	}
 }
 
 OfficeClient::OfficeClient()

@@ -156,13 +156,17 @@ function insertTable() {
     Col: { value: 3, type: 'long' },
   });
 }
+let winhandle;
 function iframewin() {
   const url = 'https://github.com/coparse-inc/electron-libreoffice';
-  const winhandle = window.open('about:blank', 'bug_dialog', 'nodeIntegration=no');
+  winhandle = window.open('about:blank', 'bug_dialog', 'nodeIntegration=no');
   winhandle.focus();
   const iFrameStyle =
     'position:fixed; top:0; left:0; bottom:0; right:0; width:100%; height:100%; border:none; margin:0; padding:0; overflow:hidden; z-index:999999;';
   winhandle.document.write(
     `<iframe src="${url}" style="${iFrameStyle}"}></iframe>`
   );
+}
+function closeiframewin() {
+  winhandle.close();
 }
