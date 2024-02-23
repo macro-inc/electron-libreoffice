@@ -112,11 +112,10 @@ jobs:
               tar --zstd --overwrite -xf "$EL_WORKSPACE/windows.tzstd"
               ;;
           esac
-      - name: Linux - Install node.js v16
-        if: ${{ runner.os == 'Linux' }}
-        run: |
-          curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
-          sudo apt-get install -y nodejs
+      - name: Setup Node v16
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16
       - name: Linux - Install zip
         if: ${{ runner.os == 'Linux' }}
         run: |

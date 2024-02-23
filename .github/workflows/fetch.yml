@@ -72,11 +72,10 @@ jobs:
         id: check_cache
         run: |
           echo "build_cache=${{ steps.cache-src-base.outputs.cache-hit != 'true' || steps.cache-src-linux.outputs.cache-hit != 'true' || steps.cache-src-windows.outputs.cache-hit != 'true' }}" >> $GITHUB_OUTPUT
-      - name: Install node.js v16
-        if: ${{ runner.os == 'Linux' }}
-        run: |
-          curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
-          sudo apt-get install -y nodejs
+      - name: Setup Node v16
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16
       - name: Create tarballs for all platforms
         if: ${{ runner.os == 'Linux' && steps.check_cache.outputs.build_cache == 'true' }}
         run: |
