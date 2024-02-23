@@ -53,6 +53,7 @@ jobs:
           git config --global core.longpaths true
       - name: Checkout
         run: |
+          rm -rf ${{ inputs.working_dir }}
           git -c protocol.version=2 clone --depth=1 --branch=${{ github.ref_name }} --single-branch https://${{ github.token }}@github.com/${{ github.repository }} '${{ inputs.working_dir }}'
           cd ${{ inputs.working_dir }}
           git config --local gc.auto 0

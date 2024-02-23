@@ -29,6 +29,7 @@ jobs:
           git config --global core.eol lf
       - name: Checkout
         run: |
+          rm -rf el
           git -c protocol.version=2 clone --depth=1 https://${{ github.token }}@github.com/${{ github.repository }} el
           cd el
           git config --local gc.auto 0
