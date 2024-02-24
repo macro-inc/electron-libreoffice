@@ -142,8 +142,8 @@ jobs:
       - name: Windows - Fix Clang toolchain
         if: ${{ runner.os == 'Windows' }}
         run: |
-          Set-Location R:\el
-          $env:PATH = 'R:\el\src\third_party\depot_tools;' + $env:PATH
+          cd el
+          $env:PATH = "$(Get-Location)\src\third_party\depot_tools;" + $env:PATH
           & cmd /c call src\third_party\depot_tools\cipd_bin_setup.bat
           & cmd /c call src\third_party\depot_tools\bootstrap\win_tools.bat
           & cmd /c call src\third_party\depot_tools\vpython3.bat src\tools\clang\scripts\update.py
